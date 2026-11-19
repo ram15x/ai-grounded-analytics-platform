@@ -1,0 +1,148 @@
+# Semantic layer: the single place where business terms are defined.
+# Source relation: analytics.sales_lines (one row per invoice line). Line types are
+# assigned by the warehouse loader (see docs/DATA_PROFILE.md):
+#   sale         positive quantity and price on a normal invoice
+#   cancellation negative quantity on a C-prefixed invoice
+#   discount     stock code D with a positive price (negative quantity)
+#   adjustment   everything else (zero/negative price, stray negative quantity, ...)
+# Adjustments are excluded from every metric below.
+version: 1
+
+source:
+  relation: analytics.sales_lines
+  alias: l
+
+dimensions:
+  month:
+    column: l.invoice_month
+    type: date
+    description: Calendar month of the invoice (first day of month)
+    synonyms: [monthly, by month]
+  day:
+    column: l.invoice_date
+    type: date
+    description: Invoice date
+    synonyms: [daily, by day, date]
+  country:
+    column: l.country
+    type: text
+    description: Country recorded on the invoice
+    synonyms: [market, by country]
+  stock_code:
+    column: l.stock_code
+    type: text
+    description: Product code (upper-cased)
+    synonyms: [product code, sku, product]
+  product_kind:
+    column: l.product_kind
+    type: text
+    description: merchandise or non_merchandise (postage, fees, manual lines)
+    synonyms: [product type]
+  customer_id:
+    column: l.customer_id
+    type: text
+    description: Customer number; NULL when the source row had no CustomerID
+    synonyms: [customer, client]
+
+metrics:
+  gross_revenue:
+    kind: simple
+    description: Value of sale lines, including postage and fees; before cancellations and discounts
+    expr: "COALESCE(SUM(l.line_amount) FILTER (WHERE l.line_type = 'sale'), 0)"
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [gross sales, revenue before cancellations, sales value]
+    allowed_dimensions: [month, day, country, stock_code, product_kind, customer_id]
+
+  cancelled_revenue:
+    kind: simple
+    description: Value of cancelled lines (C-prefixed invoices), reported as a positive number
+    expr: "COALESCE(-SUM(l.line_amount) FILTER (WHERE l.line_type = 'cancellation'), 0)"
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [cancellations, cancelled sales, cancelled value, returns]
+    allowed_dimensions: [month, day, country, stock_code, product_kind, customer_id]
+
+  discount_amount:
+    kind: simple
+    description: Value of discount lines (stock code D), reported as a positive number
+    expr: "COALESCE(-SUM(l.line_amount) FILTER (WHERE l.line_type = 'discount'), 0)"
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [discounts, discount value]
+    allowed_dimensions: [month, day, country, customer_id]
+
+  net_revenue:
+    kind: simple
+    description: Sales plus cancellations and discounts (equals gross - cancelled - discounts)
+    expr: "COALESCE(SUM(l.line_amount) FILTER (WHERE l.line_type IN ('sale', 'cancellation', 'discount')), 0)"
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [revenue, net sales, sales, turnover, total revenue]
+    allowed_dimensions: [month, day, country, stock_code, product_kind, customer_id]
+
+  units_sold:
+    kind: simple
+    description: Quantity on merchandise sale lines (postage, fees and manual lines excluded)
+    expr: "COALESCE(SUM(l.quantity) FILTER (WHERE l.line_type = 'sale' AND l.product_kind = 'merchandise'), 0)"
+    unit: count
+    decimals: 0
+    synonyms: [units, quantity sold, items sold, volume]
+    allowed_dimensions: [month, day, country, stock_code, customer_id]
+
+  order_count:
+    kind: simple
+    description: Number of distinct invoices that contain at least one sale line
+    expr: "COUNT(DISTINCT l.invoice_no) FILTER (WHERE l.line_type = 'sale')"
+    unit: count
+    decimals: 0
+    synonyms: [orders, number of orders, invoices, number of invoices]
+    allowed_dimensions: [month, day, country, stock_code, product_kind, customer_id]
+
+  active_customers:
+    kind: simple
+    description: Distinct identified customers with at least one sale line; rows without CustomerID are not counted
+    expr: "COUNT(DISTINCT l.customer_id) FILTER (WHERE l.line_type = 'sale' AND l.customer_id IS NOT NULL)"
+    unit: count
+    decimals: 0
+    synonyms: [customers, buyers, unique customers, number of customers]
+    allowed_dimensions: [month, day, country, stock_code, product_kind]
+
+  identified_gross_revenue:
+    kind: simple
+    description: Gross revenue from sale lines that have a CustomerID (numerator of revenue_per_customer)
+    expr: "COALESCE(SUM(l.line_amount) FILTER (WHERE l.line_type = 'sale' AND l.customer_id IS NOT NULL), 0)"
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [identified revenue, revenue from identified customers]
+    allowed_dimensions: [month, day, country, stock_code, product_kind, customer_id]
+
+  aov:
+    kind: ratio
+    description: Average order value, gross revenue divided by order count
+    numerator: gross_revenue
+    denominator: order_count
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [average order value, average order size, revenue per order, basket size]
+    allowed_dimensions: [month, day, country, customer_id]
+
+  revenue_per_customer:
+    kind: ratio
+    description: Identified gross revenue divided by active customers
+    numerator: identified_gross_revenue
+    denominator: active_customers
+    unit: currency:GBP
+    decimals: 2
+    synonyms: [average revenue per customer, arpc, customer value, spend per customer]
+    allowed_dimensions: [month, day, country]
+
+  cancellation_rate:
+    kind: ratio
+    description: Cancelled revenue as a fraction of gross revenue (0.10 means 10 percent)
+    numerator: cancelled_revenue
+    denominator: gross_revenue
+    unit: ratio
+    decimals: 4
+    synonyms: [cancel rate, return rate, share of revenue cancelled]
+    allowed_dimensions: [month, day, country, stock_code, product_kind]

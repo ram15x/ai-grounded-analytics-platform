@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+# secrets and local config: keys live in environment variables only
+.env
+.env.*
+*.key
+*.pem
+# local data and artifacts
+data/
+*.duckdb
+*.parquet

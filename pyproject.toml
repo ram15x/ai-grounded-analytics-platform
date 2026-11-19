@@ -7,11 +7,22 @@ name = "verified-analyst"
 version = "0.0.0"
 description = "AI analyst that verifies every number it states. Phase 1a: design and skeleton only."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+    "psycopg[binary]>=3.2",
+    "sqlglot>=25",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "pre-commit>=3"]
+
+[project.scripts]
+va = "verified_analyst.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/verified_analyst"]
@@ -27,3 +38,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["db: needs a Postgres server (set VA_TEST_DATABASE_URL); skipped otherwise"]

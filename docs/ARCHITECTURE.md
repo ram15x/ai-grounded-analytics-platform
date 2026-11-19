@@ -93,11 +93,14 @@ This is the core of the product. The old synthetic checker is not reused; only t
 | `VERIFIED` | Matches a result cell (within displayed precision) and label binds. |
 | `VERIFIED_DERIVED` | Recomputed by the verifier from cited cells. |
 | `VERIFIED_QUOTE` | Present in the cited passage. Says nothing about the passage being true. |
+| `DERIVATION_MISMATCH` | A `derived` claim does not recompute from its cited cells within displayed precision (also: wrong arity, division by zero, a direction word that contradicts the sign). |
 | `METRIC_MISMATCH` | Claim names a defined metric but the executed query disagrees with the metric definition or its canonical recomputation. |
 | `UNSUPPORTED` | No provenance, or provenance does not contain the number. |
 | `AMBIGUOUS` | Could not classify the expression, or multiple candidate cells fit. |
 
 Policy: if any number is not in a `VERIFIED*` state, the answer's header status becomes "partially verified" and the bad numbers are highlighted. The system may make at most N regeneration attempts (default 2) with the failure reasons fed back, then shows the best attempt with flags. It never edits a number itself.
+
+**Phase 1b notes (as built).** Claim kinds are `cell`, `derived`, `passage`, `parameter` (a chosen number that appears as a SQL literal, such as `LIMIT 5`) and `row_count`. Derived ops implemented: sum, difference, ratio, percent_change, percent_of, mean, min, max, count (`rank` is not implemented). An extracted number the extractor marks ambiguous is always `AMBIGUOUS`; a claim cannot resolve it. A literal argument to a derived claim must itself appear in the prose. "About" claims are held to the same rounding check as exact ones. Label binding and the definition check apply to `cell` claims; the cells inside `derived` claims are only checked for existence.
 
 ### 4.2 YAML semantic layer
 

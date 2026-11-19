@@ -1,0 +1,116 @@
+{
+  "question": "Which countries earn the most, and how concentrated is revenue?",
+  "prose": "The United Kingdom led with \u00a310,368.54 of net revenue, ahead of EIRE at \u00a33,374.20. The UK is 59.6% of the \u00a317,845.25 total. These are the top 3 countries.",
+  "queries": [
+    {
+      "id": "q_top",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count"
+        ],
+        "dimensions": [
+          "country"
+        ],
+        "order_by": [
+          {
+            "by": "net_revenue",
+            "desc": true
+          }
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "id": "q_total",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count",
+          "aov"
+        ]
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "c1",
+      "text": "\u00a310,368.54",
+      "value": "10368.54",
+      "unit": "currency",
+      "label": "net revenue",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_top",
+        "column": "net_revenue",
+        "row_key": {
+          "country": "United Kingdom"
+        }
+      }
+    },
+    {
+      "id": "c2",
+      "text": "\u00a33,374.20",
+      "value": "3374.20",
+      "unit": "currency",
+      "label": "net revenue",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_top",
+        "column": "net_revenue",
+        "row_key": {
+          "country": "EIRE"
+        }
+      }
+    },
+    {
+      "id": "c3",
+      "text": "59.6%",
+      "value": "59.6",
+      "unit": "percent",
+      "label": "share of net revenue",
+      "provenance": {
+        "kind": "derived",
+        "op": "percent_of",
+        "args": [
+          {
+            "kind": "cell",
+            "query_id": "q_top",
+            "column": "net_revenue",
+            "row_key": {
+              "country": "United Kingdom"
+            }
+          },
+          {
+            "kind": "cell",
+            "query_id": "q_total",
+            "column": "net_revenue"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c4",
+      "text": "\u00a317,845.25",
+      "value": "17845.25",
+      "unit": "currency",
+      "label": "net revenue",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_total",
+        "column": "net_revenue"
+      }
+    },
+    {
+      "id": "c5",
+      "text": "3",
+      "value": "3",
+      "unit": "count",
+      "label": "countries shown",
+      "provenance": {
+        "kind": "parameter",
+        "query_id": "q_top"
+      }
+    }
+  ]
+}

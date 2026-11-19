@@ -1,0 +1,52 @@
+{
+  "question": "Which countries earn the most, and how concentrated is revenue?",
+  "prose": "The United Kingdom had 76 units of net revenue.",
+  "queries": [
+    {
+      "id": "q_top",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count"
+        ],
+        "dimensions": [
+          "country"
+        ],
+        "order_by": [
+          {
+            "by": "net_revenue",
+            "desc": true
+          }
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "id": "q_total",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count",
+          "aov"
+        ]
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "c1",
+      "text": "76",
+      "value": "76",
+      "unit": "count",
+      "label": "net revenue",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_top",
+        "column": "order_count",
+        "row_key": {
+          "country": "United Kingdom"
+        }
+      }
+    }
+  ]
+}

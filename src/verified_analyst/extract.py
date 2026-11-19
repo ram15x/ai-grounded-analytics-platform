@@ -290,6 +290,23 @@ DEN = {"half": 2, "halves": 2, "third": 3, "thirds": 3, "quarter": 4, "quarters"
 NUMW = {"a": 1, "an": 1, **{k: v for k, v in UNITS.items() if 1 <= v <= 10}}
 
 
+_HALF_FOLLOWERS = re.compile(
+    r"^\s+(?:the|a|an|as|that|those|these|its|their|our|your|his|her|of)\b", re.IGNORECASE
+)
+_HALF_PRECEDERS = re.compile(
+    r"\b(?:first|second|last|this|next|previous|other|fiscal|calendar|full|h)\s*$", re.IGNORECASE
+)
+
+
+def _bare_half_is_claim(text: str, s: int, e: int, m: re.Match[str]) -> bool:
+    """'half of', 'half the total' are quantities; 'first half', 'half-year' are not."""
+    if _HALF_PRECEDERS.search(text[max(0, s - 12) : s]):
+        return False
+    if m.group("of"):
+        return True
+    return bool(_HALF_FOLLOWERS.match(text[e:]))
+
+
 def _word_fraction_pass(text: str, claims: _Claims, items: list[ExtractedNumber]) -> None:
     for m in WORD_FRACTION_RE.finditer(text):
         s, e = m.span()
@@ -297,7 +314,7 @@ def _word_fraction_pass(text: str, claims: _Claims, items: list[ExtractedNumber]
         num_word = (m.group("num") or "").lower()
         if not claims.free(s, e):
             continue
-        if not num_word and not (den_word in ("half", "halves") and m.group("of")):
+        if not num_word and not (den_word == "half" and _bare_half_is_claim(text, s, e, m)):
             continue  # "the third largest", "last quarter", "first half" are not claims
         num = NUMW[num_word] if num_word else 1
         den = DEN[den_word]

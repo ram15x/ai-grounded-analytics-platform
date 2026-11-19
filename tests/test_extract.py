@@ -182,6 +182,10 @@ CASES = [
     ("two thirds", [ok("two thirds", "0.6666666666666666666666666667", kind="fraction")]),
     ("three quarters", [ok("three quarters", "0.75", kind="fraction")]),
     ("last quarter", []),
+    ("That is half the total.", [ok("half", "0.5", kind="fraction")]),
+    ("the second half of the year", []),
+    ("half-year results", []),
+    ("first half", []),
     ("the third largest", []),
     ("first half", []),
     # ---- qualifiers --------------------------------------------------------------------------

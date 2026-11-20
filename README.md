@@ -19,7 +19,7 @@ An AI analyst for business teams. Ask a question in plain English about company 
 | Mutation tests | Implemented as unit tests (see note below) |
 | CLI: `va load`, `va profile`, `va verify answer.json` | Implemented; sample answers in `examples/` |
 | Driver-claim verification | Design only, [ADR-0007](docs/adr/0007-driver-claim-verification.md). Not implemented. |
-| Pre-commit config and GitHub Actions CI | **Not in this repo.** Add `.pre-commit-config.yaml` and `.github/workflows/ci.yml` by hand. |
+| Pre-commit config and GitHub Actions CI (lint, format, tests with a Postgres service, Python 3.11 and 3.12) | Files added. CI has not run on GitHub yet; nothing is pushed. |
 | SQL agent, document RAG, router, orchestration, approvals, scheduled reports | Does not exist |
 | API, auth, web UI, deployment, observability | Does not exist |
 | Evals and benchmark scores | Does not exist. **No accuracy figure is claimed.** |

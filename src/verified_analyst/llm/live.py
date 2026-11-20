@@ -126,6 +126,44 @@ class AuthStop(Exception):
         self.status = status
 
 
+MAX_CONSECUTIVE_FAILURES = 5  # consecutive failed requests (not 401/403) before the probe stops
+MODEL_GONE_PHRASES = (
+    "not found",
+    "no longer available",
+    "does not exist",
+    "no endpoints found",
+    "model_not_found",
+    "is not supported",
+)
+
+
+def is_model_gone(status: int | None, body: bytes) -> bool:
+    """An HTTP 404 whose body says the model is not found / no longer available. A 404 whose
+    body says nothing of the kind is not matched (it counts as an ordinary failure)."""
+    if status != 404:
+        return False
+    text = body[:4000].decode("utf-8", errors="replace").lower()
+    return any(p in text for p in MODEL_GONE_PHRASES)
+
+
+class ProviderUnavailable(Exception):
+    """MAX_CONSECUTIVE_FAILURES requests in a row failed (timeout, network error, or non-2xx
+    other than 401/403). The probe stops: the provider is not usable right now."""
+
+    def __init__(self, statuses: list[str], any_success: bool):
+        self.statuses = statuses
+        self.any_success = any_success
+        super().__init__(f"{len(statuses)} consecutive failed requests ({', '.join(statuses)})")
+
+
+class ModelGone(Exception):
+    """A 404 saying the model is not found or no longer available. Stops on the first one."""
+
+    def __init__(self, body: str):
+        super().__init__("HTTP 404: model not found / no longer available")
+        self.body = body
+
+
 @dataclass
 class HttpEvent:
     seq: int
@@ -152,6 +190,17 @@ class CountingTransport:
         self.max_requests = min(max_requests, HARD_MAX_REQUESTS)
         self.clock = clock
         self.events: list[HttpEvent] = []
+        # True while a request that is MEANT to fail with a model-not-found 404 is in flight
+        # (the quota check's invalid-model step). It neither stops the probe nor counts toward
+        # the consecutive-failure streak.
+        self.expect_model_404 = False
+        self._streak: list[str] = []
+        self._any_success = False
+
+    def _failed(self, label: str) -> None:
+        self._streak.append(label)
+        if len(self._streak) >= MAX_CONSECUTIVE_FAILURES:
+            raise ProviderUnavailable(list(self._streak), self._any_success)
 
     @property
     def count(self) -> int:
@@ -167,6 +216,10 @@ class CountingTransport:
         except (TransportTimeout, TransportError) as exc:
             kind = "timeout" if isinstance(exc, TransportTimeout) else "network"
             self.events.append(HttpEvent(seq, None, kind, (self.clock() - start) * 1000))
+            try:
+                self._failed(kind)
+            except ProviderUnavailable as stop:
+                raise stop from exc
             raise
         self.events.append(
             HttpEvent(
@@ -180,6 +233,15 @@ class CountingTransport:
         )
         if resp.status in (401, 403):
             raise AuthStop(resp.status)
+        if self.expect_model_404 and is_model_gone(resp.status, resp.body):
+            return resp
+        if is_model_gone(resp.status, resp.body):
+            raise ModelGone(self.events[-1].error_body or "")
+        if 200 <= resp.status < 300:
+            self._streak.clear()
+            self._any_success = True
+        else:
+            self._failed(str(resp.status))
         return resp
 
 
@@ -397,10 +459,13 @@ def quota_check(
     ):
         before = counting.count
         outcome = "ok"
+        counting.expect_model_404 = label == "invalid_model"
         try:
             provider.complete(good, mid, timeout)
         except ProviderError as exc:
             outcome = exc.kind
+        finally:
+            counting.expect_model_404 = False
         ev = counting.events[before] if counting.count > before else None
         steps.append(
             {
@@ -622,6 +687,11 @@ def render_report(rep: dict[str, Any]) -> str:
         f"requests/minute {h['bucket']['requests_per_minute'] or 'not set'}); waits up to "
         f"{h['bucket']['max_wait_s']:g} s for a bucket. reasoning_effort sent: "
         f"{h['reasoning_effort_sent'] or 'no (not configured)'}.",
+        *(
+            ["", f"**{st['reason']}**"]
+            if st.get("kind") in ("provider_unavailable", "model_gone", "auth")
+            else []
+        ),
         "",
         "## Run",
         f"- stopped: {st['reason']}; questions completed (n={st['questions_completed']})"
@@ -704,6 +774,27 @@ def render_report(rep: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def early_stop(exc: Exception) -> tuple[str, str]:
+    """The stop line and kind for a provider-unavailable or model-gone stop."""
+    if isinstance(exc, ModelGone):
+        body = exc.body or "(empty body)"
+        return (
+            "STOPPED on the first HTTP 404 saying the model is not found or no longer "
+            f"available: the configured model ID is probably wrong or retired. Provider said: "
+            f"{body}",
+            "model_gone",
+        )
+    assert isinstance(exc, ProviderUnavailable)
+    if not exc.any_success:
+        head = "STOPPED: provider unavailable, nothing measured"
+    else:
+        head = (
+            "STOPPED: provider unavailable; the numbers below cover only what was measured "
+            "before it stopped"
+        )
+    return f"{head} ({exc})", "provider_unavailable"
+
+
 def run_probe(
     settings: RouterSettings,
     opts: ProbeOptions,
@@ -739,6 +830,7 @@ def run_probe(
     cut: list[str] = []
     quota: dict[str, Any] | None = None
     stop = "all questions run"
+    stop_kind: str | None = None
     used_tokens = 0
     try:
         if opts.quota_check:
@@ -762,6 +854,11 @@ def run_probe(
                 cut.append(q)
                 stop = "request cap reached mid-question"
                 break
+            except (ProviderUnavailable, ModelGone) as exc:
+                runs.append(run)
+                cut.append(q)
+                stop, stop_kind = early_stop(exc)
+                break
             runs.append(run)
             used_tokens += run.tokens_used
             if res.outcome == "abstain" and res.reason == "budget":
@@ -771,11 +868,20 @@ def run_probe(
             completed.append(res)
     except AuthStop as exc:
         stop = f"STOPPED on first auth error ({exc})"
+        stop_kind = "auth"
+    except (ProviderUnavailable, ModelGone) as exc:
+        stop, stop_kind = early_stop(exc)
     except RequestCapReached:
         stop = "request cap reached"
     rep = build_report(opts, s, layer, runs, completed, cut, counting, stop, quota, started)
+    rep["stop"]["kind"] = stop_kind
     md = render_report(rep)
-    out: dict[str, Any] = {"report": rep, "markdown": md, "stopped_on_auth": "auth error" in stop}
+    out: dict[str, Any] = {
+        "report": rep,
+        "markdown": md,
+        "stopped_on_auth": stop_kind == "auth",
+        "stopped_early": stop_kind in ("provider_unavailable", "model_gone"),
+    }
     out.update(write_outputs(opts, rep, md, cassette, ctx, env))
     return out
 

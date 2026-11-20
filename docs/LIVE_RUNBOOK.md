@@ -107,6 +107,19 @@ as a request against the cap). If that is also rejected, the question goes throu
 step, and the report's accounting lists `json_rejected` under errors by provider. Whether the retry
 helps is not yet measured; look at `by status` and `json_rejected` counts in the next run.
 
+## Early stops
+
+The probe stops on its own in three cases, and says so in a bold line at the top of the report:
+
+- First HTTP 401 or 403: exit code 3.
+- Five requests in a row fail (a timeout, a network error, or any non-2xx other than 401/403;
+  429s and 5xx count): exit code 4. If no request had succeeded the line reads "provider
+  unavailable, nothing measured"; otherwise it says the numbers cover only what was measured
+  before the stop. A success resets the count. Five is a choice, not a measured value.
+- First HTTP 404 whose body says the model is "not found", "does not exist" or "no longer
+  available": exit code 4. The provider's text (redacted, cut at 300 characters) is in the line.
+  The quota check's deliberate invalid-model step is exempt from this and from the count.
+
 ## Abstains in the report
 
 For every question that abstained, the report has an "Abstains (raw)" section. It shows the reason

@@ -17,7 +17,9 @@ from verified_analyst.llm.cassette import read_entries
 from verified_analyst.llm.live import (
     AuthStop,
     CountingTransport,
+    ModelGone,
     ProbeOptions,
+    ProviderUnavailable,
     RequestCapReached,
     list_provider_models,
     load_probe_questions,
@@ -265,6 +267,97 @@ def test_counting_transport_keeps_error_bodies_only_for_non_2xx():
     assert t.events[0].error_body is None
     assert "json_validate_failed" in t.events[1].error_body and key not in t.events[1].error_body
     assert t.events[2].error_body == ""
+
+
+# ---- early stops: consecutive failures, model not found ----
+
+
+def _scripted(*items):
+    it = iter(items)
+
+    def inner(*a):
+        x = next(it)
+        if isinstance(x, BaseException):
+            raise x
+        return x
+
+    return inner
+
+
+def test_five_consecutive_non_auth_failures_stop_the_probe():
+    fails = [
+        HttpResponse(503, b"{}"),
+        TIMEOUT,
+        HttpResponse(429, b""),
+        TIMEOUT,
+        HttpResponse(500, b""),
+    ]
+    t = CountingTransport(_scripted(*fails), max_requests=20)
+    seen = 0
+    with pytest.raises(ProviderUnavailable) as exc:
+        for _ in fails:
+            seen += 1
+            try:
+                t("u", {}, b"", 1)
+            except type(TIMEOUT):
+                continue
+    assert seen == 5 and t.count == 5
+    assert exc.value.statuses == ["503", "timeout", "429", "timeout", "500"]
+    assert exc.value.any_success is False
+
+
+def test_four_failures_then_a_success_do_not_stop_and_reset_the_streak():
+    items = [HttpResponse(503, b"")] * 4 + [HttpResponse(200, b"{}")] + [HttpResponse(503, b"")] * 4
+    t = CountingTransport(_scripted(*items), max_requests=20)
+    for _ in items:
+        t("u", {}, b"", 1)  # never raises: no run of 5
+    assert t.count == 9
+
+
+def test_a_streak_after_a_success_says_it_had_measured_something():
+    items = [HttpResponse(200, b"{}")] + [HttpResponse(503, b"")] * 5
+    t = CountingTransport(_scripted(*items), max_requests=20)
+    t("u", {}, b"", 1)
+    with pytest.raises(ProviderUnavailable) as exc:
+        for _ in range(5):
+            t("u", {}, b"", 1)
+    assert exc.value.any_success is True
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_auth_errors_are_not_counted_as_the_failure_streak(code):
+    t = CountingTransport(lambda *a: HttpResponse(code, b"{}"), max_requests=5)
+    with pytest.raises(AuthStop):
+        t("u", {}, b"", 1)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'{"error": {"message": "models/gemini-x is not found for API version v1beta"}}',
+        b'{"error": {"message": "This model is no longer available to new users."}}',
+        b'{"error": {"code": "model_not_found", "message": "The model `x` does not exist"}}',
+    ],
+)
+def test_the_first_model_not_found_404_stops(body):
+    t = CountingTransport(lambda *a: HttpResponse(404, body), max_requests=5, env=KEYS)
+    with pytest.raises(ModelGone) as exc:
+        t("u", {}, b"", 1)
+    assert t.count == 1 and exc.value.body
+
+
+def test_a_404_that_does_not_say_model_is_an_ordinary_failure():
+    t = CountingTransport(lambda *a: HttpResponse(404, b"{}"), max_requests=5)
+    t("u", {}, b"", 1)  # does not raise
+    assert t.count == 1
+
+
+def test_a_deliberate_invalid_model_404_neither_stops_nor_counts():
+    body = b'{"error": {"code": "model_not_found", "message": "does not exist"}}'
+    t = CountingTransport(lambda *a: HttpResponse(404, body), max_requests=5)
+    t.expect_model_404 = True
+    t("u", {}, b"", 1)
+    assert t.count == 1 and t._streak == []
 
 
 # ------------------------------------------------------------ probe settings
@@ -782,3 +875,53 @@ def test_the_catalogue_text_holds_names_units_and_dimensions_only():
     cat = json.loads(catalogue_text(load_semantic_layer()))
     assert set(cat) == {"metrics", "dimensions"}
     assert all(set(m) == {"unit", "dimensions"} for m in cat["metrics"].values())
+
+
+@pytest.mark.db
+def test_five_failures_in_a_row_stop_with_nothing_measured(env, tmp_path):
+    m = Model(statuses=[status(503)] * 20)
+    out = probe(env, m, tmp_path, qs=load_probe_questions()[:3], max_requests=30)
+    rep = out["report"]
+    assert "provider unavailable, nothing measured" in rep["stop"]["reason"]
+    assert rep["stop"]["kind"] == "provider_unavailable" and out["stopped_early"]
+    # question 1 used 4 attempts (abstained: provider_error); the 5th failure stopped question 2
+    assert rep["stop"]["questions_completed"] == 1 and rep["questions"][0]["outcome"] == "abstain"
+    assert len(m.requests) == 5 and len(rep["stop"]["cut"]) == 1
+    assert rep["http"]["by_status"] == {"503": 5}
+    assert "**STOPPED: provider unavailable, nothing measured" in out["markdown"]
+
+
+@pytest.mark.db
+def test_a_model_not_found_404_stops_on_the_first(env, tmp_path):
+    body = b'{"error": {"message": "models/x is not found for API version v1beta"}}'
+    m = Model(statuses=[status(404, body=body)])
+    out = probe(env, m, tmp_path, qs=load_probe_questions()[:3])
+    rep = out["report"]
+    assert len(m.requests) == 1 and rep["stop"]["kind"] == "model_gone"
+    assert "not found or no longer available" in rep["stop"]["reason"]
+    assert "models/x is not found" in rep["stop"]["reason"]
+
+
+@pytest.mark.db
+def test_the_quota_checks_invalid_model_step_does_not_stop_the_probe(env, tmp_path):
+    seq = iter([200, 404, 200])
+    gone = b'{"error": {"code": "model_not_found", "message": "The model does not exist"}}'
+
+    def transport(url, headers, body, timeout):
+        code = next(seq, 200)
+        return HttpResponse(200, ok_openai().body, {}) if code == 200 else HttpResponse(404, gone)
+
+    out = probe(env, transport, tmp_path, qs=[], quota_check=True, record=False)
+    assert out["report"]["stop"]["kind"] is None
+    assert [s["step"] for s in out["report"]["quota_check"]["steps"]][1] == "invalid_model"
+
+
+@pytest.mark.db
+def test_probe_cli_exits_4_when_the_provider_is_unavailable(env, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("VA_READONLY_DATABASE_URL", env[1])
+    for k, v in KEYS.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(live, "urllib_transport", Model(statuses=[status(503)] * 20))
+    code = main(["live", "probe", "--provider", "groq", "--model", "x",
+                 "--out-dir", str(tmp_path / "cli")])  # fmt: skip
+    assert code == 4 and "provider unavailable, nothing measured" in capsys.readouterr().out

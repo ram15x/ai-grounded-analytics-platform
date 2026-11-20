@@ -257,7 +257,7 @@ def cmd_live_probe(args: argparse.Namespace) -> int:
             f"check ok: {c['check_ok']}; internal payloads skipped: {c['skipped_internal']}"
         )
         print("Review the cassette files before committing anything. Nothing was committed.")
-    return 3 if out["stopped_on_auth"] else 0
+    return 3 if out["stopped_on_auth"] else 4 if out["stopped_early"] else 0
 
 
 def _request_cap(text: str) -> int:

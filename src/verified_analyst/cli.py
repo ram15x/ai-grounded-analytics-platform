@@ -21,6 +21,8 @@ from .claims import AnswerDoc, TemplateAnswer
 from .compiler import CompileError, compile_query
 from .config import ConfigError, admin_database_url, readonly_database_url
 from .guard import GuardError, QueryTimeout, execute_guarded
+from .llm.live import redact
+from .llm.types import LLMError
 from .semantic import SemanticError, load_semantic_layer
 from .template import TemplateReport, is_template_doc, verify_template
 from .verifier import ExecutedQuery, Report, verify_answer
@@ -196,6 +198,68 @@ def cmd_cassettes_check(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def cmd_live_models(args: argparse.Namespace) -> int:
+    from .llm import live  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    settings = load_router_settings()
+    names = args.provider or [
+        n for n, p in settings.providers.items() if p.kind != "fake" and p.hosted
+    ]
+    unknown = [n for n in names if n not in settings.providers]
+    if unknown:
+        raise ConfigError(f"unknown provider(s): {', '.join(unknown)}")
+    results = [live.list_provider_models(settings, n, os.environ) for n in names]
+    text = (
+        json.dumps(results, indent=2, sort_keys=True)
+        if args.json
+        else live.render_models(results, show_all=args.all)
+    )
+    print(live.redact(text, os.environ))
+    any_key = any(r["key_present"] for r in results)
+    return 0 if any_key and not any(r["error"] for r in results) else 1
+
+
+def cmd_live_probe(args: argparse.Namespace) -> int:
+    from .llm import live  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    settings = load_router_settings()
+    layer = load_semantic_layer()
+    url = readonly_database_url()
+    opts = live.ProbeOptions(
+        provider=args.provider,
+        model=args.model,
+        out_dir=Path(args.out_dir)
+        if args.out_dir
+        else live.default_out_dir(args.provider, args.model),
+        max_requests=args.max_requests,
+        token_cap=args.token_cap,
+        max_tokens=args.max_tokens,
+        quota_check=args.quota_check,
+        record=not args.no_record,
+    )
+    out = live.run_probe(
+        settings,
+        opts,
+        layer=layer,
+        readonly_url=url,
+        questions=live.load_probe_questions(),
+        known_values=catalogue(layer, url),
+        env=os.environ,
+    )
+    print(live.redact(out["markdown"], os.environ))
+    print(f"files written to: {out['out_dir']}")
+    if out["cassette"]:
+        c = out["cassette"]
+        print(
+            f"cassettes: {c['entries']} entries in {c['dir']}; key scan: {c['key_scan']}; "
+            f"check ok: {c['check_ok']}; internal payloads skipped: {c['skipped_internal']}"
+        )
+        print("Review the cassette files before committing anything. Nothing was committed.")
+    return 3 if out["stopped_on_auth"] else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="va", description="Verified Analyst (deterministic core)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -226,6 +290,25 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--warehouse-hash", default=None, help="else computed from the database")
     cc.add_argument("--json", action="store_true")
     cc.set_defaults(fn=cmd_cassettes_check)
+    lv = sub.add_parser("live", help="first real provider calls (needs keys in the environment)")
+    lv_sub = lv.add_subparsers(dest="live_cmd", required=True)
+    lm = lv_sub.add_parser("models", help="list the model IDs available to each key")
+    lm.add_argument("--provider", action="append", help="groq, gemini or openrouter (repeatable)")
+    lm.add_argument(
+        "--all", action="store_true", help="print every OpenRouter model, not only free"
+    )
+    lm.add_argument("--json", action="store_true")
+    lm.set_defaults(fn=cmd_live_models)
+    lp = lv_sub.add_parser("probe", help="fixed battery against ONE model, public data only")
+    lp.add_argument("--provider", required=True)
+    lp.add_argument("--model", required=True)
+    lp.add_argument("--out-dir", help="default data/live_runs/<time>_<provider>_<model>")
+    lp.add_argument("--max-requests", type=int, default=25, help="at most 25")
+    lp.add_argument("--token-cap", type=int, default=None, help="lowers the config cap only")
+    lp.add_argument("--max-tokens", type=int, default=None, help="completion allowance per call")
+    lp.add_argument("--quota-check", action="store_true", help="3 extra requests, see the report")
+    lp.add_argument("--no-record", action="store_true", help="do not record cassettes")
+    lp.set_defaults(fn=cmd_live_probe)
     return p
 
 
@@ -233,8 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)
-    except ConfigError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except (ConfigError, LLMError) as exc:
+        print(f"error: {redact(str(exc), os.environ)}", file=sys.stderr)
         return 2
     except psycopg.Error as exc:
         first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__

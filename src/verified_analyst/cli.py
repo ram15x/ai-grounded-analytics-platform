@@ -18,9 +18,10 @@ from pathlib import Path
 import psycopg
 from pydantic import ValidationError
 
-from .claims import AnswerDoc, TemplateAnswer
+from .claims import AnswerDoc, PassageRef, TemplateAnswer
 from .compiler import CompileError, compile_query
-from .config import ConfigError, admin_database_url, readonly_database_url
+from .config import ConfigError, admin_database_url, connect_kwargs, readonly_database_url
+from .documents.store import DocumentError
 from .guard import GuardError, QueryTimeout, execute_guarded
 from .llm.live import redact
 from .llm.types import LLMError
@@ -75,7 +76,21 @@ def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
         return verify_template(layer, tdoc, executed, shadow, known)
     assert doc is not None
     executed = {q.id: _execute(layer, readonly_url, q) for q in doc.queries}
-    return verify_answer(layer, doc, executed, shadow, known)
+    return verify_answer(layer, doc, executed, shadow, known, _stored_passages(doc, readonly_url))
+
+
+def _stored_passages(doc: AnswerDoc, readonly_url: str) -> dict[str, str]:
+    """Passage text comes from the document store, never from the answer file."""
+    from .documents.store import resolve_passages  # noqa: PLC0415
+
+    if doc.passages:
+        print(
+            f"note: ignored {len(doc.passages)} passage text(s) written in the answer file; "
+            "cited passages are read from the document store",
+            file=sys.stderr,
+        )
+    ids = [c.provenance.passage_id for c in doc.claims if isinstance(c.provenance, PassageRef)]
+    return resolve_passages(readonly_url, ids) if ids else {}
 
 
 def render(report: Report | TemplateReport) -> str:
@@ -91,6 +106,63 @@ def render(report: Report | TemplateReport) -> str:
         lines.append(f"  dropped claims (text not in prose): {', '.join(report.dropped_claims)}")
     lines.append(f"  excluded (not claims): {len(report.excluded)}")
     return "\n".join(lines)
+
+
+def cmd_docs_ingest(args: argparse.Namespace) -> int:
+    from .documents.store import ingest, read_document  # noqa: PLC0415
+    from .warehouse.load import READONLY_ROLE_DEFAULT  # noqa: PLC0415
+
+    files: list[Path] = []
+    for item in args.paths:
+        p = Path(item)
+        files += sorted([*p.glob("*.md"), *p.glob("*.txt")]) if p.is_dir() else [p]
+    if not files:
+        print("error: no .md or .txt files found", file=sys.stderr)
+        return 2
+    docs = [(f, *read_document(f)) for f in files]  # every file is checked before connecting
+    admin_url = admin_database_url()
+    role = args.reader_role or READONLY_ROLE_DEFAULT
+    with psycopg.connect(admin_url, **connect_kwargs(admin_url)) as conn:
+        for f, key, title, text in docs:
+            r = ingest(conn, key, title, f.name, text, args.max_chars, reader_role=role)
+            state = "stored" if r.changed else "unchanged"
+            print(f"{state:<9} {r.doc_key} ({r.chunks} chunks)")
+    return 0
+
+
+def cmd_docs_search(args: argparse.Namespace) -> int:
+    from .documents.store import search  # noqa: PLC0415
+
+    hits = search(readonly_database_url(), args.query, args.k, args.config, args.mode)
+    if args.json:
+        print(json.dumps([h.__dict__ for h in hits], indent=2, ensure_ascii=False))
+        return 0
+    for h in hits:
+        print(f"{h.score:6.3f}  {h.passage_id}  [{h.char_start}:{h.char_end}] {h.title}")
+        print(f"        {h.text[:160]!r}")
+    if not hits:
+        print("no passage matched")
+    return 0
+
+
+DEV_DOC_QUESTIONS = Path(__file__).resolve().parents[2] / "eval" / "doc_questions" / "dev.yaml"
+
+
+def cmd_docs_eval(args: argparse.Namespace) -> int:
+    from .documents.metrics import Retrieved, evaluate, load_questions  # noqa: PLC0415
+    from .documents.store import all_chunks, search  # noqa: PLC0415
+
+    url = readonly_database_url()
+    questions = load_questions(DEV_DOC_QUESTIONS)  # dev questions only; there is no option
+    corpus = [Retrieved(k, t) for k, _, t in all_chunks(url)]
+
+    def run(query: str, k: int) -> list[Retrieved]:
+        return [Retrieved(h.doc_key, h.text) for h in search(url, query, k, args.config, args.mode)]
+
+    out = evaluate(run, questions, corpus)
+    out["config"] = {"ts_config": args.config, "mode": args.mode}
+    print(json.dumps(out, indent=2))
+    return 0 if not out["unreachable_anchors"] else 1
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -296,6 +368,24 @@ def build_parser() -> argparse.ArgumentParser:
         "profile-db", help="metric totals from the loaded warehouse, with/without duplicates"
     )
     pd_.set_defaults(fn=cmd_profile_db)
+    dc = sub.add_parser("docs", help="documents: ingest, keyword search, retrieval metrics")
+    dc_sub = dc.add_subparsers(dest="docs_cmd", required=True)
+    di = dc_sub.add_parser("ingest", help="store .md/.txt files (or folders of them)")
+    di.add_argument("paths", nargs="+")
+    di.add_argument("--max-chars", type=int, default=800, help="largest chunk, in characters")
+    di.add_argument("--reader-role", default=None, help="read-only role to grant access to")
+    di.set_defaults(fn=cmd_docs_ingest)
+    ds = dc_sub.add_parser("search", help="keyword search; prints passage ids and spans")
+    ds.add_argument("query")
+    ds.add_argument("-k", type=int, default=5)
+    ds.add_argument("--config", choices=["english", "simple"], default="english")
+    ds.add_argument("--mode", choices=["any", "all"], default="any")
+    ds.add_argument("--json", action="store_true")
+    ds.set_defaults(fn=cmd_docs_search)
+    de = dc_sub.add_parser("eval", help="retrieval metrics on the dev questions")
+    de.add_argument("--config", choices=["english", "simple"], default="english")
+    de.add_argument("--mode", choices=["any", "all"], default="any")
+    de.set_defaults(fn=cmd_docs_eval)
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(
@@ -336,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)
-    except (ConfigError, LLMError) as exc:
+    except (ConfigError, LLMError, DocumentError) as exc:
         print(f"error: {redact(str(exc), os.environ)}", file=sys.stderr)
         return 2
     except psycopg.Error as exc:

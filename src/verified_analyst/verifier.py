@@ -514,6 +514,10 @@ def verify_answer(
     executed: dict[str, ExecutedQuery],
     shadow: ShadowFn | None = None,
     known_values: dict[str, set[str]] | None = None,
+    passages: dict[str, str] | None = None,
 ) -> Report:
-    passages = {p.id: p.text for p in doc.passages}
+    """`passages` overrides the passage texts written in the answer file. `va verify` always passes
+    the texts it read from the document store, so a model cannot cite words it wrote itself."""
+    if passages is None:
+        passages = {p.id: p.text for p in doc.passages}
     return Verifier(layer, executed, passages, shadow, known_values).verify(doc.prose, doc.claims)

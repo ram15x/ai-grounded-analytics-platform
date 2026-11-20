@@ -2,7 +2,7 @@
 
 An AI analyst for business teams. Ask a question in plain English about company data and documents. The planned answer shows the SQL used, the source passages, and a verdict for every number. Numbers are checked by deterministic code before display; unsupported claims are flagged, never guessed. Scheduled reports go out only after an approval step.
 
-**Current status: Phase 1c-1 (router and cassettes, no live calls). The deterministic core exists (warehouse loader, semantic layer, metric compiler, SQL guard, number extractor, verifier, CLI). There is no LLM, no agent, no UI, and no accuracy figure is claimed.**
+**Current status: Phase 1c-2 tooling (`va live models` / `va live probe`, built but not yet run; no real provider has been called). The deterministic core exists (warehouse loader, semantic layer, metric compiler, SQL guard, number extractor, verifier, CLI). There is no LLM, no agent, no UI, and no accuracy figure is claimed.**
 
 ## Status
 

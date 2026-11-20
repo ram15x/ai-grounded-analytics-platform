@@ -87,6 +87,17 @@ assumption about provider behaviour is listed in docs/PHASE_1C1_ASSUMPTIONS.md. 
 `route` node and the local-model tier, routing of METRIC_MISMATCH back to the planner, the free-form
 SQL fallback, `va eval`.
 
+### Phase 1c-2 tooling (built, not yet run)
+
+`va live models` and `va live probe` (`llm/live.py`, runbook in docs/LIVE_RUNBOOK.md) are the only
+code meant to reach a real provider, and only when the owner runs them with keys in the
+environment. The probe is pinned to one provider and one model, refuses datasets not tagged public,
+sends at most 25 HTTP requests (retries included), stops on the first 401/403, and records
+cassettes only from its own live calls, to `data/live_runs/` (git-ignored) for review before any
+commit. Its report gives raw rates, each with n and a Wilson interval, and no ranking or accuracy
+claim. Nothing has been run yet; docs/PHASE_1C1_ASSUMPTIONS.md has a status column that stays
+STILL UNKNOWN until real output is pasted back.
+
 ## c. Gold set
 
 - **Labelling: the gold questions and their rules are author-written** (by the project author, not

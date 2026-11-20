@@ -252,21 +252,59 @@ def test_api_reranker_no_key_and_placeholder():
     assert ei.value.kind == "config"
 
 
-def test_cross_encoder_uses_injected_model_and_checks_scores():
-    class M:
-        def predict(self, pairs):
-            return [float(len(b)) for _, b in pairs]
+def test_cross_encoder_uses_injected_library_notice_once_and_checks_scores():
+    notes, loads = [], []
 
-    s = RerankerSettings(kind="cross_encoder", hosted=False, model="m")
-    r = CrossEncoderReranker("c", s, lambda name: M())
-    assert r.score("q", ["a", "bbb"]) == [1.0, 3.0]
+    class M:
+        def rerank(self, query, docs):
+            return iter(float(len(d)) for d in docs)
+
+    def lib(model, cache_dir):
+        loads.append((model, cache_dir))
+        return M()
+
+    s = RerankerSettings(kind="cross_encoder", hosted=False, model="m", cache_dir="/tmp/c")
+    r = CrossEncoderReranker("c", s, lib, notes.append)
+    assert not loads and not notes
+    assert r.score("q", ["a", "bbb"]) == [1.0, 3.0] and r.score("q", ["cc"]) == [2.0]
+    assert loads == [("m", "/tmp/c")] and len(notes) == 1 and "download" in notes[0]
 
     class Bad:
-        def predict(self, pairs):
-            return [float("nan")] * len(pairs)
+        def rerank(self, query, docs):
+            return [float("nan")] * len(docs)
 
     with pytest.raises(EmbeddingError):
-        CrossEncoderReranker("c", s, lambda name: Bad()).score("q", ["a"])
+        CrossEncoderReranker("c", s, lambda m, c: Bad(), lambda x: None).score("q", ["a"])
+
+    def boom(m, c):
+        raise OSError("offline")
+
+    with pytest.raises(EmbeddingError) as ei:
+        CrossEncoderReranker("c", s, boom, lambda x: None).score("q", ["a"])
+    assert ei.value.kind == "load_failed"
+
+
+def test_cross_encoder_without_fastembed_is_a_config_error(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "fastembed", None)
+    monkeypatch.setitem(sys.modules, "fastembed.rerank", None)
+    monkeypatch.setitem(sys.modules, "fastembed.rerank.cross_encoder", None)
+    s = RerankerSettings(kind="cross_encoder", hosted=False, model="m")
+    with pytest.raises(EmbeddingError) as ei:
+        CrossEncoderReranker("c", s, notice=lambda x: None).score("q", ["a"])
+    assert ei.value.kind == "config" and '".[local]"' in str(ei.value)
+
+
+def test_hosted_and_local_rerankers_share_one_interface():
+    from verified_analyst.documents.rerank import build_reranker
+
+    hosted = build_reranker("h", rr(), {"K": KEY}, Rec(body={}))
+    local = build_reranker("l", RerankerSettings(kind="cross_encoder", hosted=False, model="m"), {})
+    fake = build_reranker("f", RerankerSettings(kind="fake", hosted=False), {})
+    for r in (hosted, local, fake):
+        assert callable(r.score) and isinstance(r.depth, int) and isinstance(r.hosted, bool)
+    assert (hosted.hosted, local.hosted, fake.hosted) == (True, False, False)
 
 
 def test_fake_reranker_prefers_overlap():

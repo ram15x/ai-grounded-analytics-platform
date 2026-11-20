@@ -75,3 +75,10 @@ def test_the_local_dependency_is_an_optional_extra_not_a_core_one():
     core = " ".join(meta["project"]["dependencies"]).lower()
     assert "fastembed" not in core and "sentence-transformers" not in core
     assert any("fastembed" in d for d in meta["project"]["optional-dependencies"]["local"])
+
+
+def test_local_rerankers_are_registered_as_not_hosted_cross_encoders():
+    s = load_retrieval_settings()
+    local = {n: r for n, r in s.rerankers.items() if r.kind == "cross_encoder"}
+    assert set(local) == {"local_minilm_l6_cross_encoder", "local_bge_reranker_base"}
+    assert all(not r.hosted for r in local.values())

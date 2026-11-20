@@ -96,12 +96,21 @@ rerankers:
     min_interval_s: 0.7  # stays under the 100 requests per minute free limit
     model: jina-reranker-v2-base-multilingual
     depth: 20
-  # A local cross-encoder through the optional `sentence-transformers` package (pip install
-  # sentence-transformers; downloads the model on first use). The model name is UNVERIFIED.
-  local_bge_reranker_v2_m3:
+  # Local cross-encoders on this computer's CPU through fastembed's cross-encoder support
+  # (pip install -e ".[local]"). Whether fastembed has this feature, which model names it lists,
+  # and the sizes below are ALL from memory and UNVERIFIED. The first use may download files (a
+  # notice is printed first); nothing downloads unless you run the probe command.
+  # A small MS MARCO MiniLM cross-encoder, roughly 90 MB (UNVERIFIED).
+  local_minilm_l6_cross_encoder:
     kind: cross_encoder
     hosted: false
-    model: BAAI/bge-reranker-v2-m3
+    model: Xenova/ms-marco-MiniLM-L-6-v2
+    depth: 20
+  # A larger one, roughly 1 GB (UNVERIFIED), slower on CPU.
+  local_bge_reranker_base:
+    kind: cross_encoder
+    hosted: false
+    model: BAAI/bge-reranker-base
     depth: 20
   fake_overlap:
     kind: fake

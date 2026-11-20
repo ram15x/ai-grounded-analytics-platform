@@ -398,3 +398,21 @@ def test_a_rejection_recorded_with_empty_text_replays_as_a_schema_failure(env, t
                         run=play.new_run("p"), known_values=known)  # fmt: skip
     assert out1.outcome == out2.outcome == "verified"
     assert [a.status for a in out2.attempts] == ["schema_failure", "verified"]
+
+
+def test_abstain_detail_separates_the_planner_from_the_pipeline(env):
+    out, _, _ = go({"plan": [{"abstain": "forecast"}]}, env)
+    assert out.abstain_detail == {
+        "source": "planner",
+        "reason": "forecast",
+        "last_model_step": "plan",
+        "planner_reply": '{"abstain": "forecast"}',
+    }
+    assert out.as_dict()["abstain_detail"]["source"] == "planner"
+    out, _, _ = go({"plan": [PLAN]}, env, token_cap=1500)  # budget stops it before compose
+    assert out.outcome == "abstain" and out.reason == "budget"
+    assert (
+        out.abstain_detail["source"] == "pipeline" and out.abstain_detail["planner_reply"] is None
+    )
+    ok, _, _ = go({"plan": [PLAN], "compose": [GOOD]}, env)
+    assert ok.abstain_detail is None

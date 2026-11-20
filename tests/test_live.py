@@ -344,7 +344,11 @@ pytestmark_db = pytest.mark.db
 class Model:
     """A scripted 'model' behind the mocked HTTP layer. It answers by reading the prompt."""
 
-    def __init__(self, *, typed_digit_first=False, bad_json_plans=0, statuses=None, headers=None):
+    def __init__(
+        self, *, typed_digit_first=False, bad_json_plans=0, statuses=None, headers=None,
+        abstain_plans=(),
+    ):  # fmt: skip
+        self.abstain_plans = dict(abstain_plans)  # question text -> abstain reason
         self.requests: list[dict] = []
         self.typed_digit_first = typed_digit_first
         self.bad_json_plans = bad_json_plans
@@ -368,7 +372,10 @@ class Model:
                 text = "sorry, here is your plan"
             else:
                 question = re.search(r"Question: (.*)", user).group(1).strip()
-                text = json.dumps({"metric_query": PLANS[question]})
+                if question in self.abstain_plans:
+                    text = json.dumps({"abstain": self.abstain_plans[question]})
+                else:
+                    text = json.dumps({"metric_query": PLANS[question]})
         else:
             text = json.dumps(self.compose(user, repair="Problems:" in user))
         resp = ok_openai(text, 120, 40)
@@ -725,3 +732,53 @@ def test_the_request_cap_stops_a_question_between_a_rejection_retry_and_its_repa
     assert out["report"]["http"]["requests_sent"] == 3  # plan, compose, its one retry; no fourth
     assert "request cap" in out["report"]["stop"]["reason"]
     assert out["report"]["accounting"]["by_provider"]["groq"]["errors"] == {"json_rejected": 2}
+
+
+@pytest.mark.db
+def test_every_abstain_prints_the_planners_words_and_the_catalogue_in_the_prompt(env, tmp_path):
+    qs = load_probe_questions()[:3]
+    m = Model(abstain_plans={qs[1]: "ambiguous"})
+    out = probe(env, m, tmp_path, qs=qs)
+    ab = out["report"]["abstains"]
+    assert len(ab["items"]) == 1
+    it = ab["items"][0]
+    assert (it["question"], it["reason"], it["source"]) == (qs[1], "ambiguous", "planner")
+    assert json.loads(it["planner_reply"]) == {"abstain": "ambiguous"}
+    # the catalogue listed is exactly the one the model was sent
+    plan_prompts = [r["body"]["messages"][-1]["content"] for r in m.requests]
+    sent = next(p for p in plan_prompts if qs[1] in p)
+    layer = env[0]
+    assert set(ab["catalogue_metrics"]) == set(layer.metrics) and len(ab["catalogue_metrics"]) > 5
+    assert ab["catalogue_dimensions"] == sorted(layer.dimensions)
+    assert json.dumps(ab["catalogue"], sort_keys=True) in sent
+    md = out["markdown"]
+    assert "## Abstains (raw)" in md and "reason code 'ambiguous'" in md
+    assert "the planner replied" in md and all(n in md for n in ab["catalogue_metrics"])
+    assert ab["plan_prompt_id"] == "plan.v0" and "plan_failures" in out["report"]["questions"][0]
+
+
+@pytest.mark.db
+def test_a_non_planner_abstain_says_so_and_names_the_last_model_step(env, tmp_path):
+    qs = load_probe_questions()[:1]
+    m = Model(statuses=[None, status(400, body=b"{}")])  # plan ok, then a plain 400 on compose
+    out = probe(env, m, tmp_path, qs=qs)
+    it = out["report"]["abstains"]["items"][0]
+    assert (it["reason"], it["source"], it["planner_reply"]) == ("provider_error", "pipeline", None)
+    assert it["last_model_step"] == "plan"
+    assert "not the planner; last model step: plan" in out["markdown"]
+
+
+@pytest.mark.db
+def test_a_run_with_no_abstain_has_no_abstain_section(env, tmp_path):
+    out = probe(env, Model(), tmp_path, qs=load_probe_questions()[:1])
+    assert out["report"]["abstains"]["items"] == []
+    assert "## Abstains" not in out["markdown"]
+
+
+def test_the_catalogue_text_holds_names_units_and_dimensions_only():
+    """The report says the prompt has no definitions or synonyms. Guard that statement."""
+    from verified_analyst.llm.prompts import catalogue_text
+
+    cat = json.loads(catalogue_text(load_semantic_layer()))
+    assert set(cat) == {"metrics", "dimensions"}
+    assert all(set(m) == {"unit", "dimensions"} for m in cat["metrics"].values())

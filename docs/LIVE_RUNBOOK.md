@@ -107,6 +107,15 @@ as a request against the cap). If that is also rejected, the question goes throu
 step, and the report's accounting lists `json_rejected` under errors by provider. Whether the retry
 helps is not yet measured; look at `by status` and `json_rejected` counts in the next run.
 
+## Abstains in the report
+
+For every question that abstained, the report has an "Abstains (raw)" section. It shows the reason
+code, whether the planner chose it (and its raw reply, cut at 300 characters) or the pipeline did, and
+the catalogue that was in the plan prompt. That catalogue has metric names, units and allowed
+dimensions only, no definitions or synonyms, so a question that depends on a definition (for example
+"merchandise only") can be abstained as ambiguous for lack of one. That is a reading of the prompt,
+not something any run has shown yet.
+
 ## What the report is and is not
 
 Raw numbers for one model with n and a Wilson interval each. "Every number verified" means the numbers

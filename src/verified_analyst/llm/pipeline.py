@@ -39,6 +39,7 @@ from .types import (
 
 QUERY_ID = "q1"
 MAX_REPAIRS = 2
+ABSTAIN_TEXT_CHARS = 300
 
 
 @dataclass
@@ -66,6 +67,8 @@ class QuestionRun:
     events: list[dict[str, Any]] = field(default_factory=list)
     run: RunContext | None = None
     verification: dict[str, Any] | None = None
+    # for an abstain: who abstained and with what words (see run_question)
+    abstain_detail: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +79,7 @@ class QuestionRun:
             "restatement": self.restatement,
             "plan_failures": self.plan_failures,
             "repairs_used": self.repairs_used,
+            "abstain_detail": self.abstain_detail,
             "attempts": [
                 {
                     "kind": a.kind,
@@ -180,8 +184,17 @@ def run_question(
     def shadow(q: MetricQuery) -> ExecutedQuery:
         return _execute(layer, readonly_url, q)
 
-    def abstain(reason: str) -> QuestionRun:
+    def abstain(reason: str, planner_text: str | None = None) -> QuestionRun:
+        """`planner_text` is given only when the planner itself chose to abstain: the raw reply
+        (cut), so a report can show the model's own words next to the reason code."""
         result.outcome, result.reason = "abstain", reason
+        last = result.events[-1]["step"] if result.events else None
+        result.abstain_detail = {
+            "source": "planner" if planner_text is not None else "pipeline",
+            "reason": reason,
+            "last_model_step": last,
+            "planner_reply": None if planner_text is None else planner_text[:ABSTAIN_TEXT_CHARS],
+        }
         return result
 
     def call(req) -> LLMResponse | QuestionRun:
@@ -219,7 +232,7 @@ def run_question(
                 err = None
             if plan is not None and plan.abstain:
                 ev["abstained"] = True
-                return abstain(plan.abstain)
+                return abstain(plan.abstain, planner_text=got.text)
             if plan is not None:
                 try:
                     mq = plan.metric_query

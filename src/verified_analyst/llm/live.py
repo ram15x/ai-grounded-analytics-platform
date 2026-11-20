@@ -31,10 +31,11 @@ from .cassette import (
     layer_hash,
     scan_for_secrets,
     schema_hash,
+    sha256_text,
     warehouse_content_hash,
 )
 from .pipeline import QuestionRun, run_question
-from .prompts import prompt_hashes
+from .prompts import catalogue_text, plan_request, prompt_hashes
 from .providers import PLACEHOLDER_PREFIX, build_one
 from .router import Router
 from .settings import RouterSettings
@@ -576,10 +577,33 @@ def build_report(
                 "plan_failures": r.plan_failures,
                 "attempt_statuses": [a.status for a in r.attempts],
                 "model_responses": len(r.events),
+                "abstain_detail": r.abstain_detail,
             }
             for r in completed
         ],
+        "abstains": abstain_section(layer, completed),
         "quota_check": quota,
+    }
+
+
+def abstain_section(layer: SemanticLayer, completed: list[QuestionRun]) -> dict[str, Any]:
+    """Every abstain with the words behind it, and what the plan prompt's catalogue held. The
+    catalogue text is exactly what `plan_request` puts in the prompt (names, units, allowed
+    dimensions; no definitions or synonyms), so it is the same for every question."""
+    text = catalogue_text(layer)
+    cat = json.loads(text)
+    items = [
+        {"question": r.question, "reason": r.reason, **(r.abstain_detail or {})}
+        for r in completed
+        if r.outcome == "abstain"
+    ]
+    return {
+        "plan_prompt_id": plan_request(layer, "x").prompt_id,
+        "catalogue_sha256": sha256_text(text),
+        "catalogue_metrics": sorted(cat["metrics"]),
+        "catalogue_dimensions": cat["dimensions"],
+        "catalogue": cat,
+        "items": items,
     }
 
 
@@ -651,6 +675,26 @@ def render_report(rep: dict[str, Any]) -> str:
         f"attempts {q['attempt_statuses']}"
         for q in rep["questions"]
     ]
+    ab = rep["abstains"]
+    if ab["items"]:
+        lines += [
+            "",
+            "## Abstains (raw)",
+            f"The plan prompt ({ab['plan_prompt_id']}) holds a catalogue of metric names, units "
+            "and allowed dimensions only, no definitions or synonyms; it is the same for every "
+            f"question (sha256 {ab['catalogue_sha256'][:12]}).",
+            f"- catalogue metrics in the prompt ({len(ab['catalogue_metrics'])}): "
+            + ", ".join(ab["catalogue_metrics"]),
+            f"- catalogue dimensions in the prompt ({len(ab['catalogue_dimensions'])}): "
+            + ", ".join(ab["catalogue_dimensions"]),
+        ]
+        for it in ab["items"]:
+            who = (
+                f"the planner replied {it['planner_reply']!r}"
+                if it.get("source") == "planner"
+                else f"not the planner; last model step: {it.get('last_model_step')}"
+            )
+            lines.append(f"- {it['question']}: reason code {it['reason']!r}; {who}")
     qc = rep["quota_check"]
     if qc:
         lines += ["", "## Does a failed request use quota? (raw)"]

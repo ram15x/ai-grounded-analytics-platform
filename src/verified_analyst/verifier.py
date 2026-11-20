@@ -150,7 +150,9 @@ class Verifier:
         self._spans: list[tuple[int, int]] = []
         self.layer = layer
         self.queries = queries
-        self.passages = passages or {}
+        # None means there is no passage store at all: a passage claim is then UNSUPPORTED
+        # (no_passage_store). An empty dict is a store that holds none of the cited passages.
+        self.passages = passages
         self.shadow = shadow
 
     # ------------------------------------------------------------------ public
@@ -462,6 +464,8 @@ class Verifier:
     # ---- passages and parameters
 
     def _passage(self, item: ExtractedNumber, ref: PassageRef) -> str:
+        if self.passages is None:
+            raise _Fail(UNSUPPORTED, "no_passage_store")
         text = self.passages.get(ref.passage_id)
         if text is None:
             raise _Fail(UNSUPPORTED, "unknown_passage", ref.passage_id)
@@ -515,9 +519,13 @@ def verify_answer(
     shadow: ShadowFn | None = None,
     known_values: dict[str, set[str]] | None = None,
     passages: dict[str, str] | None = None,
+    *,
+    trust_passages_written_in_the_answer_file: bool = False,
 ) -> Report:
-    """`passages` overrides the passage texts written in the answer file. `va verify` always passes
-    the texts it read from the document store, so a model cannot cite words it wrote itself."""
-    if passages is None:
+    """`passages` is the text read from a document store, by id. Without it (None) every passage
+    claim is UNSUPPORTED (no_passage_store): the passage text written in the answer file is never
+    used, because a model that writes both the passage and the claim would verify against its own
+    words. Only a test that says so, with the keyword argument, may use the answer file's text."""
+    if trust_passages_written_in_the_answer_file:
         passages = {p.id: p.text for p in doc.passages}
     return Verifier(layer, executed, passages, shadow, known_values).verify(doc.prose, doc.claims)

@@ -79,8 +79,8 @@ def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
     return verify_answer(layer, doc, executed, shadow, known, _stored_passages(doc, readonly_url))
 
 
-def _stored_passages(doc: AnswerDoc, readonly_url: str) -> dict[str, str]:
-    """Passage text comes from the document store, never from the answer file."""
+def _stored_passages(doc: AnswerDoc, readonly_url: str) -> dict[str, str] | None:
+    """Passage text comes from the document store, never from the answer file. None: no store."""
     from .documents.store import resolve_passages  # noqa: PLC0415
 
     if doc.passages:
@@ -90,7 +90,12 @@ def _stored_passages(doc: AnswerDoc, readonly_url: str) -> dict[str, str]:
             file=sys.stderr,
         )
     ids = [c.provenance.passage_id for c in doc.claims if isinstance(c.provenance, PassageRef)]
-    return resolve_passages(readonly_url, ids) if ids else {}
+    if not ids:
+        return {}
+    try:
+        return resolve_passages(readonly_url, ids)
+    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+        return None  # no `docs` schema (or not readable): passage claims are UNSUPPORTED
 
 
 def render(report: Report | TemplateReport) -> str:

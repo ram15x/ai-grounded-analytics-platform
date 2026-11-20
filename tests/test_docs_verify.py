@@ -120,3 +120,15 @@ def test_the_cli_exit_code_follows_the_stored_verdict(warehouse, stored, tmp_pat
         tmp_path, pid, _span(text, "£4.95"), "The courier charge is £5.95.", "5.95", "£5.95"
     )
     assert main(["verify", str(bad)]) == 1
+
+
+def test_without_a_docs_schema_a_passage_claim_is_unsupported_not_an_error(
+    warehouse_factory, raw_fixture, tmp_path
+):
+    """A database that has never had documents ingested has no `docs` schema at all."""
+    wh = warehouse_factory(raw_fixture)
+    path = _answer(
+        tmp_path, "any-doc#0." + "a" * 10, [0, 5], "The charge is £4.95.", "4.95", "£4.95"
+    )
+    r = run_verify(path, wh.readonly_url)
+    assert [(v.verdict, v.reason) for v in r.verdicts] == [("UNSUPPORTED", "no_passage_store")]

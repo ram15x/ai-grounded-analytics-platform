@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from verified_analyst.claims import AnswerDoc, Claim, QuerySpec
 from verified_analyst.compiler import MetricQuery, compile_query
 from verified_analyst.semantic import load_semantic_layer
-from verified_analyst.verifier import ExecutedQuery, Verifier
+from verified_analyst.verifier import ExecutedQuery, Verifier, verify_answer
 
 LAYER = load_semantic_layer()
 D = Decimal
@@ -156,6 +156,67 @@ def test_passage_number_absent():
         ps,
     )
     assert verdicts(r) == ["UNSUPPORTED"]
+
+
+# ---- a passage must come from a store; the answer file's own passage text is never used
+
+FORGED = "The board expects revenue of about £2.5 million next year."
+PASSAGE_CLAIM = {
+    "id": "c",
+    "text": "£2.5 million",
+    "value": "2500000",
+    "unit": "currency",
+    "label": "expected revenue",
+    "provenance": {"kind": "passage", "passage_id": "p1", "span": [0, 55]},
+}
+
+
+def _answer_with_forged_passage():
+    return AnswerDoc.model_validate(
+        {
+            "prose": "The board expects £2.5 million.",
+            "passages": [{"id": "p1", "text": FORGED}],
+            "claims": [PASSAGE_CLAIM],
+        }
+    )
+
+
+def test_verify_answer_without_a_store_rejects_a_model_written_passage():
+    r = verify_answer(LAYER, _answer_with_forged_passage(), {})
+    assert [(v.verdict, v.reason) for v in r.verdicts] == [("UNSUPPORTED", "no_passage_store")]
+    assert r.status != "verified"
+
+
+def test_a_store_that_lacks_the_passage_is_a_different_reason():
+    r = verify_answer(LAYER, _answer_with_forged_passage(), {}, passages={})
+    assert [(v.verdict, v.reason) for v in r.verdicts] == [("UNSUPPORTED", "unknown_passage")]
+
+
+def test_the_store_text_wins_over_the_answer_file_text():
+    store = {"p1": "The board expects revenue of about £9.9 million next year."}
+    r = verify_answer(LAYER, _answer_with_forged_passage(), {}, passages=store)
+    assert [(v.verdict, v.reason) for v in r.verdicts] == [
+        ("UNSUPPORTED", "number_not_in_cited_span")
+    ]
+
+
+def test_a_test_may_opt_in_to_the_answer_file_text_only_by_name():
+    r = verify_answer(
+        LAYER,
+        _answer_with_forged_passage(),
+        {},
+        trust_passages_written_in_the_answer_file=True,
+    )
+    assert [v.verdict for v in r.verdicts] == ["VERIFIED_QUOTE"]
+    with pytest.raises(TypeError):  # not available positionally
+        verify_answer(LAYER, _answer_with_forged_passage(), {}, None, None, None, True)
+
+
+def test_a_verifier_built_without_passages_has_no_store():
+    r = Verifier(LAYER, {}).verify(
+        "The board expects £2.5 million.", [Claim.model_validate(PASSAGE_CLAIM)]
+    )
+    assert [(v.verdict, v.reason) for v in r.verdicts] == [("UNSUPPORTED", "no_passage_store")]
 
 
 def test_row_count_and_parameter(q1):

@@ -80,25 +80,23 @@ questions:
 - id: T1-05
   tier: T1
   author_written: true
-  question: How many units were sold in total?
+  question: How many merchandise units were sold in total (postage, fees and manual lines excluded)?
   rules:
   - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
   - Money is Quantity x UnitPrice in GBP, as recorded.
   - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
   - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
     ''D''.'
-  - Units sold = sum of Quantity over ALL sale rows, whatever the stock code (postage, fees and manual
-    lines included).
-  gold_fn: units_sold
+  - 'Merchandise only (owner decision 2026-11-20): count rows whose stock code is 5 digits plus up
+    to 3 letters. Postage, fees and manual lines are excluded.'
+  - Units sold = sum of Quantity over those sale rows.
+  gold_fn: merchandise_units_sold
   unit: count
   decimals: 0
   expressible_as_metric_query: true
   metric_query:
     metrics:
     - units_sold
-  declared_rule_difference: Author's plain reading counts units on every sale row. The semantic layer
-    counts merchandise stock codes only. Expected to differ if the file has sale rows with non-merchandise
-    codes; owner to decide which rule is right.
 - id: T1-06
   tier: T1
   author_written: true

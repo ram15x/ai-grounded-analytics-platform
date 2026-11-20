@@ -46,6 +46,7 @@ HAND_CHECKS = [
     ("discount_amount", D("2")),
     ("net_revenue", D("22")),  # 27 - 3 - 2
     ("units_sold", D("9")),  # 2 + 1 (postage counts) + 4 + 2
+    ("merchandise_units_sold", D("8")),  # units_sold minus the 1 postage unit
     ("order_count", D("2")),  # invoices 1001 and 1002
     ("active_customers", D("1")),  # customer 1; the blank is not counted
     ("average_order_value", D("13.5")),
@@ -141,7 +142,9 @@ def test_run_script_writes_values_with_hash(tmp_path):
 
 
 @pytest.mark.db
-def test_compare_on_synthetic_fixture_flags_only_the_declared_difference(warehouse, tmp_path):
+def test_compare_on_synthetic_fixture_finds_no_difference_after_the_t1_05_decision(
+    warehouse, tmp_path
+):
     from verified_analyst.semantic import load_semantic_layer
 
     spec = importlib.util.spec_from_file_location("compare_gold", ROOT / "eval" / "compare_gold.py")
@@ -152,8 +155,7 @@ def test_compare_on_synthetic_fixture_flags_only_the_declared_difference(warehou
             "values": {q["id"]: str(t1.GOLD_FUNCTIONS[q["gold_fn"]](raw)) for q in QS}}  # fmt: skip
     rows = mod.compare(QS, gold, load_semantic_layer(), warehouse.readonly_url)
     diffs = [r for r in rows if r["status"] == "DIFF"]
-    assert [r["id"] for r in diffs] == ["T1-05"]
-    assert diffs[0]["classification"].startswith("intended rule difference")
+    assert diffs == []
     assert sum(r["status"] == "not_expressible" for r in rows) == 4
     text = mod.render(rows, gold, "pending")
     assert "SYNTHETIC FIXTURE" in text and "author-written" in text

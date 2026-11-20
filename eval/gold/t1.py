@@ -89,6 +89,12 @@ def units_sold(d: pd.DataFrame) -> Decimal:
     return Decimal(int(d.loc[_masks(d)["sale"], "qty"].sum()))
 
 
+def merchandise_units_sold(d: pd.DataFrame) -> Decimal:
+    """Units on merchandise sale rows (postage, fees and manual lines excluded)."""
+    sale = d[_masks(d)["sale"] & d["code"].map(lambda c: bool(MERCH.match(c)))]
+    return Decimal(int(sale["qty"].sum()))
+
+
 def order_count(d: pd.DataFrame) -> Decimal:
     return Decimal(int(d.loc[_masks(d)["sale"], "invoice"].nunique()))
 
@@ -138,6 +144,7 @@ GOLD_FUNCTIONS = {
     f.__name__: f
     for f in (
         gross_revenue, cancelled_revenue, discount_amount, net_revenue, units_sold, order_count,
+        merchandise_units_sold,
         active_customers, average_order_value, revenue_per_customer, cancellation_rate,
         merchandise_gross_revenue, sale_line_count, distinct_products_sold,
         cancelled_invoice_count, identified_net_revenue,

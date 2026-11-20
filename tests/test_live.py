@@ -25,6 +25,7 @@ from verified_analyst.llm.live import (
     redact,
     render_models,
     run_probe,
+    safe_error_body,
     wilson,
 )
 from verified_analyst.llm.transport import HttpResponse
@@ -239,6 +240,33 @@ def test_counting_transport_records_timeouts():
     assert t.events[0].status is None and t.events[0].error == "timeout"
 
 
+def test_safe_error_body_redacts_collapses_and_truncates():
+    key = KEYS["GROQ_API_KEY"]
+    body = f'{{"error": {{"message": "bad\\n  json for {key}", "auth": "Bearer {key}"}}}}'.encode()
+    out = safe_error_body(body, KEYS)
+    assert key not in out and "Bearer <redacted>" in out and "  " not in out
+    long = safe_error_body(b"x" * 1000, KEYS)
+    assert long.startswith("x" * 300) and "truncated, 1000 chars" in long and len(long) < 340
+    assert safe_error_body(b"\xff\xfe broken", KEYS)  # undecodable bytes do not raise
+
+
+def test_counting_transport_keeps_error_bodies_only_for_non_2xx():
+    key = KEYS["GROQ_API_KEY"]
+    answers = iter(
+        [
+            HttpResponse(200, b'{"fine": true}'),
+            HttpResponse(400, f'{{"error": {{"message": "json_validate_failed {key}"}}}}'.encode()),
+            HttpResponse(429, b""),
+        ]
+    )
+    t = CountingTransport(lambda *a: next(answers), max_requests=5, env=KEYS)
+    for _ in range(3):
+        t("u", {}, b"", 1)
+    assert t.events[0].error_body is None
+    assert "json_validate_failed" in t.events[1].error_body and key not in t.events[1].error_body
+    assert t.events[2].error_body == ""
+
+
 # ------------------------------------------------------------ probe settings
 
 
@@ -394,6 +422,27 @@ def test_probe_runs_ten_questions_in_twenty_requests_and_records_cassettes(env, 
     assert all(
         v not in (tmp_path / "run" / "cassettes" / "calls.jsonl").read_text() for v in KEYS.values()
     )
+
+
+@pytest.mark.db
+def test_probe_report_shows_redacted_truncated_error_bodies(env, tmp_path):
+    key = KEYS["GROQ_API_KEY"]
+    msg = f"json_validate_failed for {key} " + "z" * 600
+    bad = status(400, body=json.dumps({"error": {"message": msg}}).encode())
+    out = probe(env, Model(statuses=[None, bad]), tmp_path, qs=load_probe_questions()[:1])
+    bodies = out["report"]["http"]["error_bodies"]
+    assert [b["status"] for b in bodies] == [400] and bodies[0]["seq"] == 2
+    assert "json_validate_failed" in bodies[0]["body"] and "truncated" in bodies[0]["body"]
+    assert "non-2xx response bodies" in out["markdown"] and "HTTP 400" in out["markdown"]
+    for f in ("report.md", "report.json"):
+        assert key not in (tmp_path / "run" / f).read_text()
+
+
+@pytest.mark.db
+def test_a_clean_probe_reports_no_error_bodies(env, tmp_path):
+    out = probe(env, Model(), tmp_path, qs=load_probe_questions()[:1])
+    assert out["report"]["http"]["error_bodies"] == []
+    assert "non-2xx response bodies: none" in out["markdown"]
 
 
 @pytest.mark.db

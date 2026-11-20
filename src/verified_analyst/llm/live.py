@@ -50,6 +50,7 @@ from .transport import (
 from .types import PUBLIC, LLMRequest, ProviderError, SensitivityRefusal
 
 HARD_MAX_REQUESTS = 25
+ERROR_BODY_CHARS = 300
 _sleep: Callable[[float], None] = time.sleep  # tests replace this
 
 
@@ -64,6 +65,18 @@ def redact(text: str, env: Mapping[str, str]) -> str:
     for v in secret_values(env):
         text = text.replace(v, "<redacted>")
     return text
+
+
+_BEARER = re.compile(r"(?i)bearer\s+\S+")
+
+
+def safe_error_body(body: bytes, env: Mapping[str, str], limit: int = ERROR_BODY_CHARS) -> str:
+    """A provider's error body made safe to print and store: decoded leniently, whitespace
+    collapsed, any key value from the environment and any `Bearer ...` text replaced, and cut to
+    `limit` characters. The request is never included, only what the provider sent back."""
+    text = " ".join(body.decode("utf-8", errors="replace").split())
+    text = redact(_BEARER.sub("Bearer <redacted>", text), env)
+    return text if len(text) <= limit else text[:limit] + f"... [truncated, {len(text)} chars]"
 
 
 # ---------------------------------------------------------------- statistics
@@ -117,6 +130,7 @@ class HttpEvent:
     error: str | None
     latency_ms: float
     rate_headers: dict[str, str] = field(default_factory=dict)
+    error_body: str | None = None  # redacted, truncated; only for a non-2xx response
 
 
 class CountingTransport:
@@ -128,8 +142,10 @@ class CountingTransport:
         inner: Transport,
         max_requests: int,
         clock: Callable[[], float] = time.perf_counter,
+        env: Mapping[str, str] | None = None,
     ):
         self.inner = inner
+        self.env: Mapping[str, str] = env or {}
         self.max_requests = min(max_requests, HARD_MAX_REQUESTS)
         self.clock = clock
         self.events: list[HttpEvent] = []
@@ -151,7 +167,12 @@ class CountingTransport:
             raise
         self.events.append(
             HttpEvent(
-                seq, resp.status, None, (self.clock() - start) * 1000, rate_headers(resp.headers)
+                seq,
+                resp.status,
+                None,
+                (self.clock() - start) * 1000,
+                rate_headers(resp.headers),
+                None if 200 <= resp.status < 300 else safe_error_body(resp.body, self.env),
             )
         )
         if resp.status in (401, 403):
@@ -379,6 +400,7 @@ def quota_check(
                 "outcome": outcome,
                 "http_status": ev.status if ev else None,
                 "rate_headers": ev.rate_headers if ev else {},
+                "error_body": ev.error_body if ev else None,
             }
         )
     rem = [
@@ -518,6 +540,11 @@ def build_report(
             "requests_sent": counting.count,
             "by_status": by_status,
             "retry_after_headers": retry_after,
+            "error_bodies": [
+                {"seq": e.seq, "status": e.status, "body": e.error_body}
+                for e in counting.events
+                if e.error_body is not None
+            ],
             "latency_ms_p50_http200": percentile(lat, 50),
             "latency_ms_p95_http200": percentile(lat, 95),
             "latency_n": len(lat),
@@ -557,6 +584,18 @@ def render_report(rep: dict[str, Any]) -> str:
         + (f"; cut by a cap: {', '.join(st['cut'])}" if st["cut"] else ""),
         f"- HTTP requests sent: {ht['requests_sent']}; by status: {ht['by_status']}",
         f"- retry-after headers: {ht['retry_after_headers'] or 'none seen'}",
+        *(
+            [
+                "- non-2xx response bodies (provider text only; redacted; cut at "
+                f"{ERROR_BODY_CHARS} chars):"
+            ]
+            + [
+                f"  - request {b['seq']}, HTTP {b['status']}: {b['body'] or '(empty body)'}"
+                for b in ht.get("error_bodies", [])
+            ]
+            if ht.get("error_bodies")
+            else ["- non-2xx response bodies: none"]
+        ),
         f"- HTTP-200 latency, request to response: p50 {f(ht['latency_ms_p50_http200'])} ms, "
         f"p95 {f(ht['latency_ms_p95_http200'])} ms (n={ht['latency_n']})",
         "",
@@ -622,7 +661,7 @@ def run_probe(
     cfg = s.providers[opts.provider]
     if not env.get(cfg.env_key or ""):
         raise ConfigError(f"environment variable {cfg.env_key} is not set")
-    counting = CountingTransport(inner_transport or urllib_transport, s.probe.max_requests)
+    counting = CountingTransport(inner_transport or urllib_transport, s.probe.max_requests, env=env)
     provider = build_one(s, opts.provider, transport=counting, env=env)
     cassette: Cassette | None = None
     ctx: CassetteContext | None = None

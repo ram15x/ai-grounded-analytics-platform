@@ -10,6 +10,7 @@ Not built yet (PHASE_1C.md section a): routing a METRIC_MISMATCH verdict back to
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -60,6 +61,8 @@ class QuestionRun:
     attempts: list[Attempt] = field(default_factory=list)
     plan_failures: int = 0
     repairs_used: int = 0
+    # one entry per model response: step, json_ok, schema_ok, and step-specific flags
+    events: list[dict[str, Any]] = field(default_factory=list)
     run: RunContext | None = None
     verification: dict[str, Any] | None = None
 
@@ -119,6 +122,16 @@ def _json(text: str) -> Any:
     return json.loads(text)
 
 
+TYPED_DIGIT_CODES = {"digit_outside_placeholder", "digits_in_unrecognised_form", "non_ascii_digit"}
+
+
+def typed_digit(rep: TemplateReport) -> bool:
+    """True if the model put a digit or number outside a placeholder (placeholder adherence)."""
+    if any(i.code in TYPED_DIGIT_CODES for i in rep.issues):
+        return True
+    return any(v.reason == "number_outside_placeholder" for v in rep.report.verdicts)
+
+
 def _problems(report: TemplateReport) -> list[str]:
     out = [f"{i.code}: {i.detail}" for i in report.issues]
     for v in report.report.verdicts:
@@ -136,6 +149,7 @@ def run_question(
     run: RunContext,
     known_values: dict[str, set[str]] | None = None,
     max_repairs: int = MAX_REPAIRS,
+    max_tokens: int | None = None,
 ) -> QuestionRun:
     result = QuestionRun(question, "abstain", run=run)
     dataset = layer.source.relation
@@ -153,6 +167,8 @@ def run_question(
         return result
 
     def call(req) -> LLMResponse | QuestionRun:
+        if max_tokens:
+            req = dataclasses.replace(req, max_tokens=max_tokens)
         try:
             return router.call(req, run)
         except BudgetExceeded:
@@ -167,21 +183,32 @@ def run_question(
             got = call(plan_request(layer, question, plan_error))
             if isinstance(got, QuestionRun):
                 return got
+            ev: dict[str, Any] = {
+                "step": "plan", "json_ok": False, "schema_ok": False,
+                "abstained": False, "exec_ok": None,
+            }  # fmt: skip
+            result.events.append(ev)
             try:
-                plan = PlanOutput.model_validate(_json(got.text))
+                raw = _json(got.text)
+                ev["json_ok"] = True
+                plan = PlanOutput.model_validate(raw)
+                ev["schema_ok"] = True
             except (ValueError, ValidationError) as exc:
                 plan, err = None, f"plan is not valid ({str(exc).splitlines()[0][:200]})"
             else:
                 err = None
             if plan is not None and plan.abstain:
+                ev["abstained"] = True
                 return abstain(plan.abstain)
             if plan is not None:
                 try:
                     mq = plan.metric_query
                     executed = {QUERY_ID: _execute(layer, readonly_url, mq)}
                     result.restatement = restate(layer, mq)
+                    ev["exec_ok"] = True
                 except (CompileError, GuardError, QueryTimeout) as exc:
                     mq, err = None, f"{type(exc).__name__}: {str(exc)[:200]}"
+                    ev["exec_ok"] = False
             if err is not None:
                 result.plan_failures += 1
                 result.repairs_used += 1
@@ -204,8 +231,14 @@ def run_question(
         if isinstance(got, QuestionRun):
             return got
         previous = got.text
+        cev: dict[str, Any] = {
+            "step": kind, "json_ok": False, "schema_ok": False, "typed_digit": None,
+        }  # fmt: skip
+        result.events.append(cev)
         try:
-            out = ComposeOutput.model_validate(_json(got.text))
+            raw = _json(got.text)
+            cev["json_ok"] = True
+            out = ComposeOutput.model_validate(raw)
             answer = TemplateAnswer(
                 question=question,
                 template=out.template,
@@ -216,9 +249,11 @@ def run_question(
             problems = [f"schema_failure: {str(exc).splitlines()[0][:200]}"]
             result.attempts.append(Attempt(kind, "schema_failure", problems=problems))
         else:
+            cev["schema_ok"] = True
             rep = verify_template(layer, answer, executed, shadow, known_values)
             nums = rep.report.verdicts
             n_good = sum(v.verdict in GOOD for v in nums)
+            cev["typed_digit"] = typed_digit(rep)
             status, probs = rep.status, _problems(rep)
             if status == "verified" and n_good == 0:
                 # a vacuous pass: the text states no figure from the result, so nothing was

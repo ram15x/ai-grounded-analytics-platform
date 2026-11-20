@@ -88,8 +88,11 @@ def ingest(
     raw_text: str,
     max_chars: int = DEFAULT_MAX_CHARS,
     reader_role: str | None = None,
+    sensitivity: str = "internal",
 ) -> IngestResult:
     """Store one document and its chunks in one transaction. Same text and size: no change."""
+    if sensitivity not in ("public", "internal"):
+        raise DocumentError("sensitivity must be 'public' or 'internal'")
     if not DOC_KEY.match(doc_key):
         raise DocumentError("doc_key must be lowercase letters, digits, '-' or '_' (1-64 chars)")
     text = normalize_text(raw_text)
@@ -98,17 +101,17 @@ def ingest(
     with conn.transaction():
         _ensure_schema(conn)
         row = conn.execute(
-            "SELECT content_sha256 FROM docs.documents WHERE doc_key = %s", (doc_key,)
+            "SELECT content_sha256, sensitivity FROM docs.documents WHERE doc_key = %s", (doc_key,)
         ).fetchone()
         same_chunks = row is not None and row[0] == digest and _same_layout(conn, doc_key, spans)
         if not same_chunks:
             conn.execute(
-                "INSERT INTO docs.documents (doc_key, title, source, content_sha256, text) "
-                "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (doc_key) DO UPDATE SET "
+                "INSERT INTO docs.documents (doc_key, title, source, content_sha256, text, "
+                "sensitivity) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (doc_key) DO UPDATE SET "
                 "title = EXCLUDED.title, source = EXCLUDED.source, "
                 "content_sha256 = EXCLUDED.content_sha256, text = EXCLUDED.text, "
-                "ingested_at = now()",
-                (doc_key, title, source, digest, text),
+                "sensitivity = EXCLUDED.sensitivity, ingested_at = now()",
+                (doc_key, title, source, digest, text, sensitivity),
             )
             conn.execute("DELETE FROM docs.chunks WHERE doc_key = %s", (doc_key,))
             with conn.cursor() as cur:
@@ -127,9 +130,15 @@ def ingest(
                         for i, s in enumerate(spans)
                     ],
                 )
+        sens_changed = row is not None and row[1] != sensitivity
+        if same_chunks and sens_changed:
+            conn.execute(
+                "UPDATE docs.documents SET sensitivity = %s WHERE doc_key = %s",
+                (sensitivity, doc_key),
+            )
         if reader_role:
             _grant_reader(conn, reader_role)
-    return IngestResult(doc_key, len(spans), not same_chunks)
+    return IngestResult(doc_key, len(spans), not same_chunks or sens_changed)
 
 
 def key_from_filename(name: str) -> str:

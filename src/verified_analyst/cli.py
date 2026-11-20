@@ -129,7 +129,16 @@ def cmd_docs_ingest(args: argparse.Namespace) -> int:
     role = args.reader_role or READONLY_ROLE_DEFAULT
     with psycopg.connect(admin_url, **connect_kwargs(admin_url)) as conn:
         for f, key, title, text in docs:
-            r = ingest(conn, key, title, f.name, text, args.max_chars, reader_role=role)
+            r = ingest(
+                conn,
+                key,
+                title,
+                f.name,
+                text,
+                args.max_chars,
+                reader_role=role,
+                sensitivity=args.sensitivity,
+            )
             state = "stored" if r.changed else "unchanged"
             print(f"{state:<9} {r.doc_key} ({r.chunks} chunks)")
     return 0
@@ -379,6 +388,12 @@ def build_parser() -> argparse.ArgumentParser:
     di.add_argument("paths", nargs="+")
     di.add_argument("--max-chars", type=int, default=800, help="largest chunk, in characters")
     di.add_argument("--reader-role", default=None, help="read-only role to grant access to")
+    di.add_argument(
+        "--sensitivity",
+        choices=["public", "internal"],
+        default="internal",
+        help="only public documents may be sent to a hosted model (default: internal)",
+    )
     di.set_defaults(fn=cmd_docs_ingest)
     ds = dc_sub.add_parser("search", help="keyword search; prints passage ids and spans")
     ds.add_argument("query")

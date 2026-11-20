@@ -175,10 +175,35 @@ def docs_db():
         setup_readonly_role(conn, role, password, dbname)
         for path in sorted((Path(__file__).parent.parent / "corpus" / "synthetic").glob("*.md")):
             key, title, text = read_document(path)
-            ingest(conn, key, title, path.name, text, reader_role=role)
+            ingest(conn, key, title, path.name, text, reader_role=role, sensitivity="public")
     yield DocsDb(admin_url, make_conninfo(base, dbname=dbname, user=role, password=password), role)
     with psycopg.connect(admin_url, autocommit=True) as c:
         c.execute(f'DROP OWNED BY "{role}"')
     with psycopg.connect(base, autocommit=True) as admin:
         admin.execute(f'DROP DATABASE "{dbname}" WITH (FORCE)')
         admin.execute(f'DROP ROLE "{role}"')
+
+
+@pytest.fixture(scope="session")
+def vector_db(docs_db):
+    """docs_db with the pgvector tables and fake embeddings for every chunk (model id fake:256).
+
+    Skipped, with the reason, on a Postgres that has no pgvector (for example plain postgres:16)."""
+    from verified_analyst.documents.embed import FakeEmbedder
+    from verified_analyst.documents.vectorstore import (
+        ensure_vector_schema,
+        pending_chunks,
+        store_embeddings,
+    )
+
+    with psycopg.connect(docs_db.admin_url) as conn:
+        have = conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'vector'"
+        ).fetchone()
+        if not have:
+            pytest.skip("pgvector is not installed in this Postgres (use the pgvector image)")
+        ensure_vector_schema(conn, docs_db.role)
+        emb = FakeEmbedder()
+        todo = pending_chunks(conn, emb.model_id)
+        store_embeddings(conn, emb.model_id, todo, emb.embed([c.text for c in todo], "document"))
+    return docs_db

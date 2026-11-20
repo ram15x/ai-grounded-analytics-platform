@@ -25,3 +25,13 @@ CREATE TABLE IF NOT EXISTS docs.chunks (
 
 CREATE INDEX IF NOT EXISTS chunks_tsv_english ON docs.chunks USING gin (tsv_english);
 CREATE INDEX IF NOT EXISTS chunks_tsv_simple ON docs.chunks USING gin (tsv_simple);
+
+-- Sensitivity gates what may be sent to a hosted model. Fail closed: the default is internal.
+ALTER TABLE docs.documents ADD COLUMN IF NOT EXISTS sensitivity text NOT NULL DEFAULT 'internal';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'documents_sensitivity_check') THEN
+        ALTER TABLE docs.documents ADD CONSTRAINT documents_sensitivity_check
+            CHECK (sensitivity IN ('public', 'internal'));
+    END IF;
+END $$;

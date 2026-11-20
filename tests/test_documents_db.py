@@ -86,6 +86,22 @@ def test_a_failed_ingest_leaves_nothing_behind(docs_db):
         )
 
 
+def test_sensitivity_defaults_to_internal_and_can_be_raised_without_new_chunks(docs_db):
+    key = "sens-doc"
+    with psycopg.connect(docs_db.admin_url) as c:
+        ingest(c, key, "S", "s.md", TEXT, 400)
+        get = lambda: c.execute(  # noqa: E731
+            "SELECT sensitivity FROM docs.documents WHERE doc_key = %s", (key,)
+        ).fetchone()[0]
+        assert get() == "internal"
+        r = ingest(c, key, "S", "s.md", TEXT, 400, sensitivity="public")
+        assert r.changed and get() == "public"
+        assert ingest(c, key, "S", "s.md", TEXT, 400, sensitivity="public").changed is False
+        with pytest.raises(DocumentError):
+            ingest(c, key, "S", "s.md", TEXT, 400, sensitivity="secret")
+        c.execute("DELETE FROM docs.documents WHERE doc_key = %s", (key,))
+
+
 # ---- the read-only role and the SQL guard
 
 

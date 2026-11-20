@@ -59,3 +59,5 @@ claim is made for any model on these questions; none has been run on them.
 `va docs heldout` reads it, through `documents/heldout_run.py`, for the three candidates fixed in
 `docs/adr/0009-document-retrieval-fusion.md`, once per embedder. Everything else (probe, eval,
 search, tuning) uses `dev.yaml`. Tests check that no other module names the file.
+
+**Status: SPENT** (ADR-0010). The 12 questions informed the fusion decision and may not be used to choose between settings again. `va docs heldout` refuses to run. A new set is needed.

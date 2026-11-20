@@ -225,3 +225,17 @@ questions). The guard tests now allow exactly one module, `heldout_run.py`, to n
 UNVERIFIED), measured by `va docs probe --reranker <name>` as reranked against unreranked on dev
 with bootstrap intervals. A hosted reranker keeps the same interface. 2d (injection handling) and
 2e (the router agent for mixed data-and-document questions) are not started.
+
+### Held-out outcome (ADR-0010)
+
+The pre-registered rule was applied once per embedder. B (hybrid, k=10, depth 20, keyword weight
+0.25) fails the baseline test on both Gemini embedding-2 and bge-small (MRR below the default's; worse
+on 3 and 2 questions, limit 1), so the shipped default stays. The dev finding that the default was
+worse than vector-only reversed on held-out. Limits: 11 answerable questions, one author, one
+corpus; the explanation (more lookup and exact-term questions in held-out) is an unverified
+hypothesis. The fusion choice is **undecided**. The 12 held-out document questions are **spent**;
+a new held-out set on real public documents is needed before any further retrieval decision.
+
+Reranker (dev probe only): the local MiniLM cross-encoder raised MRR by 0.105 on the default hybrid,
+had no measurable effect on vector-only or B, and lowered recall@5 from 1.00 to 0.96. No reranker
+in the default pipeline; the interface stays; recheck on harder public data.

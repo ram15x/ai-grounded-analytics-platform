@@ -53,6 +53,9 @@ ROOT = Path(__file__).resolve().parents[3]
 ADR_PATH = ROOT / "docs" / "adr" / "0009-document-retrieval-fusion.md"
 HELDOUT_QUESTIONS = ROOT / "eval" / "doc_questions" / "heldout.yaml"
 LEDGER_PATH = ROOT / "data" / "heldout_ledger.jsonl"
+# The 12 questions informed a decision (docs/adr/0010-fusion-heldout-outcome.md). A new question
+# set needs a new ADR and a new command, not a flag here.
+SPENT_BY: str | None = "docs/adr/0010-fusion-heldout-outcome.md"
 
 NAMES = ("A", "B", "baseline")
 # What the ADR must say, and the only settings this command will ever run.
@@ -221,6 +224,11 @@ def run_heldout(
     notice: Callable[[str], None] | None = None,
 ) -> ProbeResult:
     check_candidates_arg(candidates_arg)
+    if SPENT_BY:
+        raise DocumentError(
+            f"refusing to run: these held-out questions are spent ({SPENT_BY}); a new held-out set "
+            "is needed for any further document-retrieval decision"
+        )
     adr = check_adr(adr_path, root, git)
     if embedder_name not in settings.embedders:
         raise DocumentError(

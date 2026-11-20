@@ -119,6 +119,22 @@ def test_cli_refuses_other_candidates_before_touching_anything(monkeypatch, caps
 FAKE = RetrievalSettings(embedders={"fake": EmbedderSettings(kind="fake", hosted=False, dims=256)})
 
 
+@pytest.fixture(autouse=True)
+def _not_spent(request, monkeypatch):
+    """The real command is spent (ADR-0010); the mechanics are tested with the marker lifted."""
+    if "spent" not in request.node.name:
+        monkeypatch.setattr(hr, "SPENT_BY", None)
+
+
+def test_the_real_command_is_spent_and_refuses_to_run():
+    assert hr.SPENT_BY and (ROOT / hr.SPENT_BY).is_file()
+    with pytest.raises(DocumentError, match="spent"):
+        hr.run_heldout(
+            settings=FAKE, embedder_name="fake", candidates_arg="A,B,baseline",
+            admin_url="postgresql://x/y", readonly_url="postgresql://x/y", env={},
+        )  # fmt: skip
+
+
 @pytest.mark.db
 def test_scores_only_the_three_candidates_once_per_embedder(vector_db, repo, tmp_path):
     ledger = tmp_path / "ledger.jsonl"

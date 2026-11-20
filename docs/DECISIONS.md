@@ -10,6 +10,7 @@
 | [0006](adr/0006-dataset-choice.md) | Dataset choice | **Decided: UCI Online Retail only** (owner, Phase 1b) |
 | [0007](adr/0007-driver-claim-verification.md) | Verifying "driver" claims | Proposed (design only) |
 | [0009](adr/0009-document-retrieval-fusion.md) | Pre-registered fusion candidates for document search | Accepted as a pre-registration; default unchanged |
+| [0010](adr/0010-fusion-heldout-outcome.md) | Fusion held-out outcome | Accepted; B fails the rule, default kept, fusion choice **undecided**; held-out document questions spent |
 
 "Accepted (design)" means agreed as a design direction in Phase 1a, not yet proven by code.
 

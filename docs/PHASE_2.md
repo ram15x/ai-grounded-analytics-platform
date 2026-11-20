@@ -29,7 +29,7 @@ Each slice ends in a reviewable bundle with its own tests, as in Phase 1.
 | 2a | Document store, chunker with character spans, synthetic corpus, Postgres full-text search, stored-passage verification, retrieval metrics on dev questions | No | A passage claim verifies only against stored text; metrics for keyword search are produced by one command |
 | 2b | pgvector, embedder interface, vector search, reciprocal-rank fusion | Yes (measured) | Hybrid recall measured against keyword-only on the same questions |
 | 2c | Reranker interface and measurement | Yes (measured) | Reranked vs unreranked metrics reported; model choice recorded in ADR-0005 |
-| 2d | Injection handling: hostile documents, delimiting, tests | Partly | Injection tests pass; no document text is ever treated as an instruction |
+| 2d | Injection handling: hostile documents, delimiting, tests | Partly | Injection tests pass; no document text is ever treated as an instruction (mechanics built; behaviour with a real model unverified, see docs/INJECTION.md) |
 | 2e | Router agent (data / documents / both), mixed answers, label binding for passage numbers | Yes | Mixed questions answered with passage citations, verified |
 
 Order is fixed because each slice's tests need the one before. 2a needs no model choice and no
@@ -239,3 +239,15 @@ a new held-out set on real public documents is needed before any further retriev
 Reranker (dev probe only): the local MiniLM cross-encoder raised MRR by 0.105 on the default hybrid,
 had no measurable effect on vector-only or B, and lowered recall@5 from 1.00 to 0.96. No reranker
 in the default pipeline; the interface stays; recheck on harder public data.
+
+### 2d as built (injection handling)
+
+`documents/untrusted.py`: a pattern scanner, delimited and withheld rendering for model prompts
+(`render_passages`, `PASSAGE_RULES` version `passages.v1`), and a verifier rule that a passage claim
+overlapping flagged text is `UNSUPPORTED` (`passage_span_flagged`). `va docs search` marks flagged
+passages and prints titles safely; `va docs ingest` warns. Tests: the five hostile corpus documents
+are flagged and no other corpus document is; an obedient attacker's answers are rejected while
+true facts in the same chunks still verify; the prompt block never contains the injected text.
+Limits are in docs/INJECTION.md: the scanner is heuristic, a quote that really is in a document
+verifies as a quote, prose is not checked, and no real model has been run against the rules.
+Slice 2e (router agent, mixed answers, label binding) is next.

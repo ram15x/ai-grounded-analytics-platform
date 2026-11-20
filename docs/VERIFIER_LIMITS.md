@@ -111,3 +111,11 @@ to check. The scripted pipeline found this: a prose-only answer came back `verif
 (`llm/pipeline.py`) now marks such an attempt `no_figures`, feeds it back for repair, and abstains
 with reason `unverified` if no attempt verified a number. The verifier itself is unchanged, so
 calling `verify_template` directly on a figure-free text still returns `verified`.
+
+## Passage claims and flagged text
+
+A passage claim is `VERIFIED_QUOTE` only if the cited number sits in the cited span of the stored
+chunk. If that span overlaps text the scanner flags (an instruction to an AI, a role marker, a
+hidden comment, invisible characters or a spoofed citation or verification mark), the claim is
+`UNSUPPORTED` with reason `passage_span_flagged`. This is a heuristic filter and a quote that
+really is in a document still verifies as a quote; see docs/INJECTION.md.

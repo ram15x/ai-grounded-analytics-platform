@@ -39,3 +39,18 @@ sentence as the number; use names exactly as in the data or in the layer's metri
   layer; other dimensions only know values present in the executed results.
 - Free-form wording that names a scope without the dimension value (for example "that market")
   is `AMBIGUOUS`; the plain-English restatement of the query (see PHASE_1C.md) is the reader's check.
+
+## Template mode (ADR-0008)
+
+With placeholders the model types no numbers, so transcription, scale and rounding errors cannot
+occur. The limits above still apply to the rendered text. Additional limits:
+
+- Placeholders do not stop mis-description: with the binder off, at least 20 of the 30 old
+  adversarial answers (placeholder form) still pass. The binder is kept for that reason.
+- Measured on those 30 plus 33 adversarial templates: 0 false accepts of the 30 with the binder on.
+  Unit tests by the author of the checks, synthetic data; not an accuracy claim.
+- Digits outside placeholders are `UNSUPPORTED`; date, year, ordinal, list-marker and URL forms are
+  excluded. Identifier-like tokens (order or stock codes) pass only if they appear in the executed
+  result cells; a coincidental match would pass.
+- Not supported yet: passage and parameter claims, literal arguments in derived claims.
+- Whether small models follow the placeholder format is not measured.

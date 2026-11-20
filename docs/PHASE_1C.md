@@ -25,14 +25,18 @@ Nodes (LLM nodes marked *; everything else is deterministic code):
   restatement is shown with every answer, so a reader sees what was asked of the warehouse (which
   metrics, grouping, filters, ordering, limit, definitions, units) in words that cannot drift from
   the SQL. Free-form SQL has no restatement and is labelled as such.
-- compose*: receives the executed result tables and must output the existing `AnswerDoc` JSON:
-  `prose`, `queries`, `claims`. Every number in the prose needs a claim. Derived values are claims
-  with an `op` and cell args; the model's own arithmetic is never trusted.
-  Style rules the verifier relies on (see docs/VERIFIER_LIMITS.md): one number per clause, and the
-  row or period named in the same sentence as the number.
-- verify: `verify_answer` (steps A, C-G plus sentence-context binding). `verified` ends the run.
+- compose*: receives the executed result tables and outputs a `TemplateAnswer` (ADR-0008): prose
+  with placeholders like `{c1}`, plus `claims` that each name a cell, a derived value or a row
+  count. The model never types a number. The system renders each placeholder from the verified cell
+  or the recomputed derived value, formatted by the semantic layer's unit, and records the displayed
+  precision. Digits outside placeholders are `UNSUPPORTED`. The old `AnswerDoc` (model-typed
+  numbers) remains for existing examples and as a comparison baseline.
+  Style rules the verifier still relies on (docs/VERIFIER_LIMITS.md): one number per clause, and the
+  row or period named in the same sentence as the placeholder.
+- verify: `verify_template` renders, then runs `verify_answer` (steps A, C-G plus sentence-context
+  binding) on the rendered text. `verified` ends the run.
 - repair*: on any non-VERIFIED verdict the composer is re-called with the same result tables, its
-  previous `AnswerDoc`, and the failing verdicts as structured data (text, verdict, reason,
+  previous `TemplateAnswer`, and the failing verdicts as structured data (text, verdict, reason,
   claim_id). Giving the expected value back is allowed because the final text is still checked
   against the cells. A plan-level failure (METRIC_MISMATCH, unknown column, row_not_found) goes
   back to plan*. The attempt budget is shared: at most 2 repairs.

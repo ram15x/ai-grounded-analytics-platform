@@ -54,3 +54,11 @@ occur. The limits above still apply to the rendered text. Additional limits:
   result cells; a coincidental match would pass.
 - Not supported yet: passage and parameter claims, literal arguments in derived claims.
 - Whether small models follow the placeholder format is not measured.
+
+## Pipeline rule: an answer with no figure is not "verified" (Phase 1c-1)
+
+`verify_template` passes a text that contains no placeholder and no number, because there is nothing
+to check. The scripted pipeline found this: a prose-only answer came back `verified`. The pipeline
+(`llm/pipeline.py`) now marks such an attempt `no_figures`, feeds it back for repair, and abstains
+with reason `unverified` if no attempt verified a number. The verifier itself is unchanged, so
+calling `verify_template` directly on a figure-free text still returns `verified`.

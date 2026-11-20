@@ -2,7 +2,7 @@
 
 An AI analyst for business teams. Ask a question in plain English about company data and documents. The planned answer shows the SQL used, the source passages, and a verdict for every number. Numbers are checked by deterministic code before display; unsupported claims are flagged, never guessed. Scheduled reports go out only after an approval step.
 
-**Current status: Phase 1b. The deterministic core exists (warehouse loader, semantic layer, metric compiler, SQL guard, number extractor, verifier, CLI). There is no LLM, no agent, no UI, and no accuracy figure is claimed.**
+**Current status: Phase 1c-1 (router and cassettes, no live calls). The deterministic core exists (warehouse loader, semantic layer, metric compiler, SQL guard, number extractor, verifier, CLI). There is no LLM, no agent, no UI, and no accuracy figure is claimed.**
 
 ## Status
 
@@ -20,7 +20,8 @@ An AI analyst for business teams. Ask a question in plain English about company 
 | CLI: `va load`, `va profile`, `va verify answer.json` | Implemented; sample answers in `examples/` |
 | Driver-claim verification | Design only, [ADR-0007](docs/adr/0007-driver-claim-verification.md). Not implemented. |
 | Pre-commit config and GitHub Actions CI (lint, format, tests with a Postgres service, Python 3.11 and 3.12) | Files added. CI has not run on GitHub yet; nothing is pushed. |
-| SQL agent, document RAG, router, orchestration, approvals, scheduled reports | Does not exist |
+| Model router, provider adapters (Groq, Gemini, OpenRouter), cassettes, scripted plan/compose/verify pipeline | Implemented and tested with **mocked HTTP and a fake provider only. No real provider has been called**; every provider assumption is listed in [docs/PHASE_1C1_ASSUMPTIONS.md](docs/PHASE_1C1_ASSUMPTIONS.md). No prompts for real models yet. |
+| SQL agent with a real model, document RAG, orchestration, approvals, scheduled reports | Does not exist |
 | API, auth, web UI, deployment, observability | Does not exist |
 | Evals and benchmark scores | Does not exist. **No accuracy figure is claimed.** |
 

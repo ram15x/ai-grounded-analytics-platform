@@ -74,6 +74,19 @@ Rules live in config; model IDs are never in code (ADR-0003).
   100-question eval cannot run live in one day on one model, which is why cassettes (d) exist.
   Measure real token use on 5 questions before fixing any number.
 
+### Implementation status (Phase 1c-1)
+
+Built and tested with mocked HTTP and a FakeProvider only; **no real provider has been called**.
+Adapters for Groq, Gemini and OpenRouter (`src/verified_analyst/llm/providers.py`), the router
+(per-provider token buckets at `bucket.fraction` of the documented limit, retry with backoff and
+jitter, `retry-after`, circuit breaker after 3 consecutive 429s, fall-through, per-run token cap that
+ends in abstain/`budget`), and the sensitivity rule (hosted providers never see non-`public`
+datasets; unknown datasets are internal; checked in the router before every call and again in each
+hosted adapter). Limits and model IDs are in `config/router.yaml`, all marked UNVERIFIED. Every
+assumption about provider behaviour is listed in docs/PHASE_1C1_ASSUMPTIONS.md. Not built: the
+`route` node and the local-model tier, routing of METRIC_MISMATCH back to the planner, the free-form
+SQL fallback, `va eval`.
+
 ## c. Gold set
 
 - **Labelling: the gold questions and their rules are author-written** (by the project author, not
@@ -123,11 +136,24 @@ Rules live in config; model IDs are never in code (ADR-0003).
   model quality. Temperature 0 does not guarantee identical hosted output [UNVERIFIED per
   provider], so a cassette freezes one sample.
 
+### Implementation status (Phase 1c-1)
+
+Record/replay, key hashing, the secret scan and `va cassettes check` are implemented
+(`llm/cassette.py`). No cassette is committed, because the only calls made so far were to a
+FakeProvider. `check` reports stale entries (recorded hashes differ from the current prompt, layer,
+schema or warehouse), cassette age, and, given a `usage.json` written by a replay run, unused and
+missing entries. There is no record command yet; recording is a manual step with keys in the
+environment.
+
 ## e. Eval report
 
 `va eval --set dev|heldout --replay|--live` writes `reports/<run-id>.json` and `.md`. Header: git
 commit, dataset hash, semantic-layer hash, cassette-set hash, model IDs, date, n, and the line
 "Gold questions are author-written."
+
+Implemented so far (1c-1): per-call and per-run token and latency accounting in this report's
+format (`llm/accounting.py`; tokens, p50/p95 with n, by provider, cost 0). There is no `va eval`
+and no accuracy figure.
 
 Per question: outcome, attempts, verdicts, gold match (tolerance = displayed precision), the
 restatement, tokens, latency. Aggregates by tier, by path (compiled vs free-form) and by provider.

@@ -54,7 +54,12 @@ def test_ingest_search_and_eval_through_the_cli(docs_db, tmp_path, monkeypatch, 
 
     assert main(["docs", "eval"]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["questions_scored"] == 20 and report["unreachable_anchors"] == []
+    from verified_analyst.documents.metrics import load_questions
+
+    answerable = [q for q in load_questions(cli.DEV_DOC_QUESTIONS) if q.evidence]
+    assert (
+        report["questions_scored"] == len(answerable) > 20 and report["unreachable_anchors"] == []
+    )
     assert report["config"] == {"ts_config": "english", "mode": "any"}
 
     import psycopg

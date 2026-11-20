@@ -2,7 +2,9 @@
 # wrote the corpus: not an independent benchmark. Each evidence item names a document and a string
 # that must occur in it; a chunk is relevant when it comes from that document and contains the string
 # (case and whitespace ignored). No answer text beyond that anchor is stored.
-description: Retrieval dev questions (tune on these only).
+description: Retrieval dev questions (tune on these only). D-01 to D-21 were written for the first,
+  small corpus; D-22 onward were written for the grown corpus (paraphrase with low word overlap,
+  near-duplicate documents, tables and figures, superseded texts, no-answer near misses).
 questions:
 - id: D-01
   kind: lookup
@@ -127,4 +129,244 @@ questions:
 - id: D-21
   kind: no_answer
   question: "What is the company pension contribution rate?"
+  evidence: []
+- id: D-22
+  kind: paraphrase_low_overlap
+  question: "Roughly how long before a package reaches Madrid?"
+  evidence:
+  - doc: delivery-spain
+    contains: "6 to 9 working days"
+- id: D-23
+  kind: paraphrase_low_overlap
+  question: "How soon after goods land must we flag breakages to the lamp supplier?"
+  evidence:
+  - doc: supplier-note-lighting
+    contains: "within 10 days of receipt"
+- id: D-24
+  kind: paraphrase_low_overlap
+  question: "How much is a reward worth once I have collected a hundred of them?"
+  evidence:
+  - doc: loyalty-scheme-terms
+    contains: "Every 100 points can be exchanged for a £2 voucher"
+- id: D-25
+  kind: paraphrase_low_overlap
+  question: "After how long does an unused present card stop working?"
+  evidence:
+  - doc: gift-voucher-terms
+    contains: "valid for 12 months"
+- id: D-26
+  kind: paraphrase_low_overlap
+  question: "How much can be given back if a rival sells the identical product for less?"
+  evidence:
+  - doc: price-match-policy
+    contains: "up to £50"
+- id: D-27
+  kind: paraphrase_low_overlap
+  question: "How many months of inactivity before earned rewards vanish?"
+  evidence:
+  - doc: loyalty-scheme-terms
+    contains: "Points expire 18 months after they are earned"
+- id: D-28
+  kind: paraphrase_low_overlap
+  question: "For how long are shopper records held once they stop buying?"
+  evidence:
+  - doc: data-retention-policy
+    contains: "6 years after the last order"
+- id: D-29
+  kind: paraphrase_low_overlap
+  question: "What proportion of an incoming consignment do staff check for faults?"
+  evidence:
+  - doc: quality-inspection-procedure
+    contains: "a sample of 8%"
+- id: D-30
+  kind: paraphrase_low_overlap
+  question: "How many staff trained in emergency medicine must be present on every shift?"
+  evidence:
+  - doc: warehouse-safety
+    contains: "6 trained first aiders"
+- id: D-31
+  kind: paraphrase_low_overlap
+  question: "How long can a customer wait on a product that is not on the shelf before cancelling for free?"
+  evidence:
+  - doc: backorder-policy
+    contains: "up to 21 days"
+- id: D-32
+  kind: near_duplicate
+  question: "What is the courier rate to Norway per parcel?"
+  evidence:
+  - doc: delivery-norway
+    contains: "rate for Norway is £18.50"
+- id: D-33
+  kind: near_duplicate
+  question: "What extra per kilogram does Switzerland charge above the weight band?"
+  evidence:
+  - doc: delivery-switzerland
+    contains: "£3.60 for every additional kilogram"
+- id: D-34
+  kind: near_duplicate
+  question: "How long does the kitchenware supplier take in the peak months?"
+  evidence:
+  - doc: supplier-note-kitchenware
+    contains: "wait grows to 42 days"
+- id: D-35
+  kind: near_duplicate
+  question: "What lead time does the textiles supplier quote in the peak season?"
+  evidence:
+  - doc: supplier-note-textiles
+    contains: "rising to 45 days in the peak season"
+- id: D-36
+  kind: near_duplicate
+  question: "At what stock level are candles reordered?"
+  evidence:
+  - doc: category-notes-candles
+    contains: "a line of candles falls to 60 units"
+- id: D-37
+  kind: near_duplicate
+  question: "What mark-up multiple applies to storage tins and boxes?"
+  evidence:
+  - doc: category-notes-storage
+    contains: "storage tins and boxes are priced at 1.7 times landed cost"
+- id: D-38
+  kind: table
+  question: "How many orders came from France in the second quarter review?"
+  evidence:
+  - doc: review-q2
+    contains: "| France | £37,800 | 183 |"
+- id: D-39
+  kind: table
+  question: "What was net revenue for the Netherlands in the third quarter?"
+  evidence:
+  - doc: review-q3
+    contains: "| Netherlands | £33,900 | 112 |"
+- id: D-40
+  kind: figure
+  question: "Which month had the highest net revenue in the annual figures?"
+  evidence:
+  - doc: annual-summary
+    contains: "The peak month was November"
+- id: D-41
+  kind: figure
+  question: "What share of orders arrive on Saturdays?"
+  evidence:
+  - doc: annual-summary
+    contains: "Saturday 6%"
+- id: D-42
+  kind: table
+  question: "What fraction of revenue comes from trade accounts?"
+  evidence:
+  - doc: annual-summary
+    contains: "| Trade accounts | 61% |"
+- id: D-43
+  kind: table
+  question: "By how much did the fastest region grow in the fourth quarter?"
+  evidence:
+  - doc: review-q4
+    contains: "up 39% on the quarter before"
+- id: D-44
+  kind: superseded
+  question: "Before March 2011, what was the courier charge for small UK orders?"
+  evidence:
+  - doc: delivery-policy-2010
+    contains: "courier charge of £5.95"
+- id: D-45
+  kind: superseded
+  question: "How many hours did the support team take for a first reply under the old targets?"
+  evidence:
+  - doc: customer-service-sla-2010
+    contains: "first reply within 48 hours"
+- id: D-46
+  kind: superseded
+  question: "Under the old trade terms, when was payment due?"
+  evidence:
+  - doc: wholesale-terms-2010
+    contains: "Payment was due 14 days from the invoice date"
+- id: D-47
+  kind: superseded
+  question: "What return window did the rejected 2012 proposal suggest?"
+  evidence:
+  - doc: returns-policy-proposal-2012
+    contains: "within 30 days of delivery"
+- id: D-48
+  kind: hostile_doc
+  question: "What mark-up applies to seasonal decorations?"
+  evidence:
+  - doc: pricing-comment-hostile
+    contains: "2.6 times landed cost"
+- id: D-49
+  kind: hostile_doc
+  question: "How much does gift wrapping cost per parcel?"
+  evidence:
+  - doc: html-comment-hostile
+    contains: "£2.50 per parcel"
+- id: D-50
+  kind: lookup
+  question: "How much did the board set aside for buying stock this year?"
+  evidence:
+  - doc: minutes-board-march
+    contains: "£2.4 million"
+- id: D-51
+  kind: lookup
+  question: "On what date is the order system being replaced?"
+  evidence:
+  - doc: memo-system-migration
+    contains: "replaced on 6 March"
+- id: D-52
+  kind: paraphrase_low_overlap
+  question: "At what ceiling do new wholesale accounts begin their borrowing?"
+  evidence:
+  - doc: credit-control-procedure
+    contains: "credit limit of £1,500.00"
+- id: D-53
+  kind: paraphrase_low_overlap
+  question: "How quickly must the buyer submit an image showing broken goods?"
+  evidence:
+  - doc: damaged-in-transit-procedure
+    contains: "within 48 hours of delivery"
+- id: D-54
+  kind: no_answer
+  question: "What is the delivery charge to Brazil?"
+  evidence: []
+- id: D-55
+  kind: no_answer
+  question: "How many working days does a parcel to India take?"
+  evidence: []
+- id: D-56
+  kind: no_answer
+  question: "What was net revenue for Italy in the second quarter?"
+  evidence: []
+- id: D-57
+  kind: no_answer
+  question: "How many days of paid holiday do staff receive each year?"
+  evidence: []
+- id: D-58
+  kind: no_answer
+  question: "Which bank provides the company overdraft?"
+  evidence: []
+- id: D-59
+  kind: no_answer
+  question: "How many people work in the warehouse?"
+  evidence: []
+- id: D-60
+  kind: no_answer
+  question: "What is the returns window for electrical goods?"
+  evidence: []
+- id: D-61
+  kind: no_answer
+  question: "What is the carbon emissions target for deliveries?"
+  evidence: []
+- id: D-62
+  kind: no_answer
+  question: "What is the cost of express next-day delivery?"
+  evidence: []
+- id: D-63
+  kind: no_answer
+  question: "What is the name of the lighting supplier?"
+  evidence: []
+- id: D-64
+  kind: no_answer
+  question: "How many new customers were acquired in the third quarter?"
+  evidence: []
+- id: D-65
+  kind: no_answer
+  question: "Which software vendor supplies the new order system?"
   evidence: []

@@ -38,6 +38,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # long string literals in adversarial data tables read better unwrapped
 "tests/test_template.py" = ["E501"]
+# invented document text, written as long literals
+"corpus/build_synthetic.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

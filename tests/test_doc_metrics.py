@@ -108,4 +108,9 @@ def test_question_files_are_well_formed_and_do_not_overlap():
         "table",
         "conflict",
         "no_answer",
+        "paraphrase_low_overlap",
+        "near_duplicate",
+        "figure",
+        "superseded",
+        "hostile_doc",
     }

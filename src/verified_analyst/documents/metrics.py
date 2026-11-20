@@ -9,6 +9,7 @@ the chunking changes; an anchor that no chunk contains is reported, never silent
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -41,6 +42,81 @@ class Retrieved:
 
 def norm(text: str) -> str:
     return " ".join(text.casefold().split())
+
+
+_STOP = frozenset(
+    [
+        "the",
+        "and",
+        "for",
+        "are",
+        "was",
+        "were",
+        "what",
+        "which",
+        "when",
+        "where",
+        "who",
+        "whom",
+        "how",
+        "many",
+        "much",
+        "does",
+        "did",
+        "has",
+        "have",
+        "had",
+        "can",
+        "may",
+        "must",
+        "will",
+        "with",
+        "from",
+        "that",
+        "this",
+        "than",
+        "then",
+        "into",
+        "out",
+        "over",
+        "under",
+        "after",
+        "before",
+        "about",
+        "each",
+        "every",
+        "any",
+        "all",
+        "per",
+        "not",
+        "his",
+        "her",
+        "its",
+        "our",
+        "their",
+        "you",
+        "your",
+    ]
+)
+
+
+def _tokens(text: str) -> set[str]:
+    words = re.findall(r"[a-z0-9£$€%.]+", text.casefold())
+    out = set()
+    for w in words:
+        w = w.strip(".")
+        if len(w) >= 3 and w not in _STOP:
+            out.add(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return out
+
+
+def lexical_overlap(question: str, text: str) -> float:
+    """Share of the question's content words (crude stemming, no stopwords) found in `text`.
+
+    A guard for the claim that a question is a paraphrase: a low value means the question mostly
+    does not repeat the document's words. It is a rough check, not a measure of difficulty."""
+    q = _tokens(question)
+    return len(q & _tokens(text)) / len(q) if q else 0.0
 
 
 def load_questions(path: Path) -> list[Question]:

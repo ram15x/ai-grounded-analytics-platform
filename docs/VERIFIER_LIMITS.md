@@ -40,6 +40,18 @@ no filter on that dimension. Guards, all tested:
   `product_kind` values loaded: per-case results identical before and after, 0 false accepts.
   A unit test by the author of the check; not an accuracy claim.
 
+## Value aliases, measured (`tests/test_aliases.py`)
+
+Ten alias lies (a real cell described with "UK" or "United Kingdom" for a scope the query does not
+cover, a wrong row, a wrong metric, a swapped pair), each in prose and placeholder form, with both
+spellings. Before the alias was read: 4 of 10 falsely accepted with "UK", 0 of 10 with the full
+name. After: 0 of 10 with either spelling, and every case has the same verdicts and reasons under
+both spellings. The 30 adversarial answers: 0 false accepts before and after, per-case results
+identical. The 12 legitimate controls: 12 of 12 verify before and after. Five true alias sentences
+(UK row, UK-filtered query, two rows, merchandise units): verify 5 of 5 under both spellings
+(2 of 5 under "UK" before). Unit tests by the author of the check, synthetic data; not an accuracy
+claim.
+
 ## Composer conventions this implies
 
 One number per clause (comma or semicolon between numbers); name the row or period in the same
@@ -47,13 +59,22 @@ sentence as the number; use names exactly as in the data or in the layer's metri
 
 ## Known limits (pinned by tests)
 
-- Names are matched literally. "UK" for "United Kingdom" is `AMBIGUOUS` when the UK row is the
-  cited row of a country-grouped result. On a global total, or a query filtered to another
-  country, "UK net revenue was £X" is NOT seen and verifies (a false accept, pinned in
-  `tests/test_implicit_scopes.py`; the 30 adversarial answers do not cover it). The layer lists
-  "UK" as an alias of "United Kingdom", but the binder uses it only as a veto on an implicit
-  scope (below): recognising aliases everywhere would also reject "The UK is 60% of the total",
-  which the shipped examples contain and which verifies today. Decision left to the owner.
+- Names are matched literally, except aliases the layer lists (`value_aliases` in
+  `semantic/metrics.yaml`; today "UK" for "United Kingdom"). A listed alias is the same mention as
+  the value it stands for, everywhere in the binder: same row, scope and filter rules, same
+  verdicts and reasons (pinned by `tests/test_aliases.py`). Before this, "UK" was invisible, so
+  "UK net revenue was £X" on a global total or a France-filtered query verified (4 of 10 alias
+  lies were falsely accepted; now 0 of 10). A spelling the layer does NOT list ("Britain",
+  "Great Britain", "U.K.") is still not read: `AMBIGUOUS` when it names the cited row of a
+  country-grouped result, and not seen at all on a total or a differently filtered query, where
+  "Britain net revenue was £X" verifies (a false accept of the same kind; not in the 30).
+- A true sentence that names a country next to a number from a query that does not cover that
+  country is `UNSUPPORTED` (`scope_not_in_query`), alias or full name alike. Example: "The United
+  Kingdom is 59.6% of the £17,845.25 total." The total comes from a global query, and the sentence
+  gives the country as its scope. The shipped samples `examples/01_verified.json` and
+  `08_template_verified.json` say "The UK is 59.6% of the £17.8m total"; they verified only while
+  "UK" was invisible, and are now `partially_verified` (the files are unchanged; see
+  `tests/test_cli.py`). This is a conservative false reject, not loosened here.
 - "France and Germany together made £X" attaches X to the nearer name (a false accept).
 - Two numbers in one clause ("France made £A and Germany made £B") can come back `AMBIGUOUS`.
 - Only `month` and `day` periods are recognised; "last quarter", "Q4" and relative dates are not.

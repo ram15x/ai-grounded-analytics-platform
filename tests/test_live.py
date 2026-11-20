@@ -24,6 +24,8 @@ from verified_analyst.llm.live import (
     list_provider_models,
     load_probe_questions,
     probe_settings,
+    quota_info,
+    quota_reading,
     redact,
     render_models,
     run_probe,
@@ -358,6 +360,96 @@ def test_a_deliberate_invalid_model_404_neither_stops_nor_counts():
     t.expect_model_404 = True
     t("u", {}, b"", 1)
     assert t.count == 1 and t._streak == []
+
+
+# ---- 429 quota names ----
+
+GEMINI_429 = json.dumps(
+    {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota. SECRET-PROJECT-TEXT",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [
+                        {
+                            "quotaMetric": "generativelanguage.googleapis.com/free_tier_requests",
+                            "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                            "quotaDimensions": {"model": "m", "location": "global"},
+                            "quotaValue": "0",
+                        }
+                    ],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "23s"},
+            ],
+        }
+    }
+).encode()
+GROQ_429 = json.dumps(
+    {
+        "error": {
+            "message": "Rate limit reached for model `m` in organization `org_01SECRET` service "
+            "tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 7500, Requested 900. "
+            "Please try again in 5.2s.",
+            "type": "tokens",
+            "code": "rate_limit_exceeded",
+        }
+    }
+).encode()
+
+
+def test_quota_info_keeps_names_and_limits_from_a_google_style_body():
+    info = quota_info(GEMINI_429)
+    assert info["violations"] == [
+        {
+            "quota_metric": "generativelanguage.googleapis.com/free_tier_requests",
+            "quota_id": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+            "quota_value": "0",
+        }
+    ]
+    assert info["retry_delay"] == "23s" and info["status"] == "RESOURCE_EXHAUSTED"
+    assert "SECRET" not in json.dumps(info)
+    assert quota_reading(info) == "window named: minute; a limit of 0 was reported"
+
+
+def test_quota_info_keeps_limit_names_from_a_groq_style_body_and_no_org_id():
+    info = quota_info(GROQ_429)
+    assert info["limit_on"] == "tokens per minute" and info["limit_name"] == "TPM"
+    assert info["limit_value"] == "8000" and info["retry_delay"] == "5.2s"
+    assert info["code"] == "rate_limit_exceeded" and info["type"] == "tokens"
+    assert "SECRET" not in json.dumps(info) and "org_" not in json.dumps(info)
+    assert quota_reading(info) == "window named: minute"
+
+
+def test_a_daily_limit_is_read_as_a_day_window():
+    body = json.dumps(
+        {"error": {"message": "Rate limit reached on tokens per day (TPD): Limit 200000, Used 1."}}
+    ).encode()
+    assert quota_reading(quota_info(body)) == "window named: day"
+
+
+@pytest.mark.parametrize("body", [b"", b"not json", b"[]", b'{"error": "x"}', b'{"error": {}}'])
+def test_quota_info_returns_none_when_there_is_nothing_to_keep(body):
+    assert quota_info(body) is None
+
+
+def test_names_are_cleaned_and_cut():
+    body = json.dumps(
+        {"error": {"details": [{"violations": [{"quotaId": "ok-id\n<script>" + "x" * 500}]}]}}
+    ).encode()
+    qid = quota_info(body)["violations"][0]["quota_id"]
+    assert "<" not in qid and "\n" not in qid and len(qid) <= 120
+
+
+def test_a_429_with_names_keeps_the_names_not_the_body_and_without_names_keeps_the_body():
+    answers = iter([HttpResponse(429, GEMINI_429), HttpResponse(429, b'{"x": "plain 429 text"}')])
+    t = CountingTransport(lambda *a: next(answers), max_requests=5, env=KEYS)
+    t("u", {}, b"", 1)
+    t("u", {}, b"", 1)
+    assert t.events[0].quota and t.events[0].error_body is None
+    assert t.events[1].quota is None and "plain 429 text" in t.events[1].error_body
 
 
 # ------------------------------------------------------------ probe settings
@@ -925,3 +1017,18 @@ def test_probe_cli_exits_4_when_the_provider_is_unavailable(env, tmp_path, monke
     code = main(["live", "probe", "--provider", "groq", "--model", "x",
                  "--out-dir", str(tmp_path / "cli")])  # fmt: skip
     assert code == 4 and "provider unavailable, nothing measured" in capsys.readouterr().out
+
+
+@pytest.mark.db
+def test_report_lists_429_quota_names_without_the_body(env, tmp_path, monkeypatch):
+    monkeypatch.setattr(live, "_sleep", lambda s: None)
+    m = Model(statuses=[status(429, {"Retry-After": "1"}, body=GEMINI_429)])
+    out = probe(env, m, tmp_path, qs=load_probe_questions()[:1])
+    http = out["report"]["http"]
+    assert http["quota_429"][0]["seq"] == 1
+    assert http["quota_429"][0]["violations"][0]["quota_value"] == "0"
+    assert http["error_bodies"] == []  # the 429's body is not kept
+    md = out["markdown"]
+    assert "HTTP 429 quota details" in md and "a limit of 0 was reported" in md
+    assert "SECRET-PROJECT-TEXT" not in md
+    assert "SECRET-PROJECT-TEXT" not in (tmp_path / "run" / "report.json").read_text()

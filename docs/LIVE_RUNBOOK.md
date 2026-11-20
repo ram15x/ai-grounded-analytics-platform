@@ -120,6 +120,13 @@ The probe stops on its own in three cases, and says so in a bold line at the top
   available": exit code 4. The provider's text (redacted, cut at 300 characters) is in the line.
   The quota check's deliberate invalid-model step is exempt from this and from the count.
 
+## HTTP 429 details
+
+For a 429 the report keeps the quota metric, quota id, limit value, limit name and retry delay
+the body names (allow-listed short strings), not the body. Read "window named: minute / day" and
+"a limit of 0 was reported" as keyword matches on those names, not as the provider's statement.
+If no names are found the redacted, truncated body is printed as for any other error.
+
 ## Abstains in the report
 
 For every question that abstained, the report has an "Abstains (raw)" section. It shows the reason

@@ -82,6 +82,116 @@ def safe_error_body(body: bytes, env: Mapping[str, str], limit: int = ERROR_BODY
     return text if len(text) <= limit else text[:limit] + f"... [truncated, {len(text)} chars]"
 
 
+# ---------------------------------------------------------------- 429 quota details
+
+_TOKEN_OK = re.compile(r"[^A-Za-z0-9_./:\- ()]")
+_PERIOD = re.compile(r"per[ -](second|minute|min|hour|day)|per(second|minute|hour|day)", re.I)
+_MSG_LIMIT = re.compile(r"\blimit[: ]+(\d[\d,.]*)", re.I)
+_MSG_KIND = re.compile(
+    r"\bon ([a-z ]{3,30}?) per (second|minute|hour|day)(?: \(([A-Za-z]{2,5})\))?"
+)
+_MSG_METRIC = re.compile(r"metric: ([\w./\-]{3,160})")
+_MSG_RETRY = re.compile(r"try again in ([\w.]{1,12})", re.I)
+_MSG_FREE = re.compile(r"\b(free-models-per-(?:min|day)|[a-z-]+-per-(?:min|day))\b")
+QUOTA_FIELD_CHARS = 120
+
+
+def _tok(value: Any, limit: int = QUOTA_FIELD_CHARS) -> str | None:
+    """A short provider-supplied name or number, with anything outside a small safe alphabet
+    removed (so no id, key or free text is carried), or None."""
+    if not isinstance(value, str | int | float) or isinstance(value, bool):
+        return None
+    text = _TOKEN_OK.sub("", str(value)).strip()[:limit]
+    return text or None
+
+
+def quota_info(body: bytes) -> dict[str, Any] | None:
+    """The quota metric and limit names a 429 body carries, and nothing else: no message text,
+    no organisation or project id, no request content. Returns None when none were found.
+    Shapes handled (all UNVERIFIED against a live body except where a report shows them):
+    Google RPC `error.details[].violations[]` (quotaMetric, quotaId, quotaValue) and RetryInfo,
+    Groq/OpenAI style `error.type`/`error.code` plus the limit name in the message, and
+    OpenRouter's `free-models-per-...` limit name."""
+    try:
+        data = json.loads(body[:20000].decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+    if isinstance(data, list) and data:
+        data = data[0]
+    err = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(err, dict):
+        return None
+    out: dict[str, Any] = {}
+    for key, name in (("status", "status"), ("type", "type"), ("code", "code")):
+        v = _tok(err.get(key))
+        if v and not (key == "code" and v == "429"):
+            out[name] = v
+    violations: list[dict[str, str]] = []
+    for d in err.get("details") or []:
+        if not isinstance(d, dict):
+            continue
+        for v in d.get("violations") or []:
+            if isinstance(v, dict):
+                item = {
+                    k: t
+                    for k, raw in (
+                        ("quota_metric", v.get("quotaMetric")),
+                        ("quota_id", v.get("quotaId")),
+                        ("quota_value", v.get("quotaValue")),
+                    )
+                    if (t := _tok(raw))
+                }
+                if item:
+                    violations.append(item)
+        if d.get("retryDelay") is not None:
+            rd = _tok(d.get("retryDelay"), 20)
+            if rd:
+                out["retry_delay"] = rd
+    if violations:
+        out["violations"] = violations[:4]
+    msg = err.get("message") if isinstance(err.get("message"), str) else ""
+    if m := _MSG_KIND.search(msg):
+        out["limit_on"] = _tok(f"{m.group(1)} per {m.group(2)}")
+        if m.group(3):
+            out["limit_name"] = _tok(m.group(3))
+    if m := _MSG_LIMIT.search(msg):
+        out["limit_value"] = _tok(m.group(1), 20)
+    if m := _MSG_METRIC.search(msg):
+        out.setdefault("quota_metric", _tok(m.group(1)))
+    if m := _MSG_FREE.search(msg):
+        out["limit_name"] = _tok(m.group(1))
+    if "retry_delay" not in out and (m := _MSG_RETRY.search(msg)):
+        out["retry_delay"] = _tok(m.group(1).rstrip("."), 20)
+    out = {k: v for k, v in out.items() if v}
+    return out or None
+
+
+def quota_reading(info: dict[str, Any]) -> str:
+    """A keyword reading of a quota_info result: which window the limit names, and whether a
+    limit of zero was reported. It only looks for words in the names the provider sent."""
+    names = " ".join(
+        [str(info.get(k, "")) for k in ("limit_on", "limit_name", "quota_metric", "quota_id")]
+        + [
+            f"{v.get('quota_id', '')} {v.get('quota_metric', '')}"
+            for v in info.get("violations", [])
+        ]
+    )
+    windows = []
+    for m in _PERIOD.finditer(names):
+        w = (m.group(1) or m.group(2)).lower()
+        windows.append({"min": "minute"}.get(w, w))
+    values = [v["quota_value"] for v in info.get("violations", []) if "quota_value" in v]
+    if "limit_value" in info:
+        values.append(info["limit_value"])
+    parts = []
+    parts.append(
+        "window named: " + "/".join(sorted(set(windows))) if windows else "no window named"
+    )
+    if any(v.strip().strip(".,") == "0" for v in values):
+        parts.append("a limit of 0 was reported")
+    return "; ".join(parts)
+
+
 # ---------------------------------------------------------------- statistics
 
 
@@ -172,6 +282,7 @@ class HttpEvent:
     latency_ms: float
     rate_headers: dict[str, str] = field(default_factory=dict)
     error_body: str | None = None  # redacted, truncated; only for a non-2xx response
+    quota: dict[str, Any] | None = None  # names/limits parsed from a 429 body; replaces its body
 
 
 class CountingTransport:
@@ -221,6 +332,12 @@ class CountingTransport:
             except ProviderUnavailable as stop:
                 raise stop from exc
             raise
+        quota = quota_info(resp.body) if resp.status == 429 else None
+        if 200 <= resp.status < 300 or quota:
+            # a 429 whose quota names were found keeps those names, not the body
+            error_body = None
+        else:
+            error_body = safe_error_body(resp.body, self.env)
         self.events.append(
             HttpEvent(
                 seq,
@@ -228,7 +345,8 @@ class CountingTransport:
                 None,
                 (self.clock() - start) * 1000,
                 rate_headers(resp.headers),
-                None if 200 <= resp.status < 300 else safe_error_body(resp.body, self.env),
+                error_body,
+                quota,
             )
         )
         if resp.status in (401, 403):
@@ -621,6 +739,11 @@ def build_report(
             "requests_sent": counting.count,
             "by_status": by_status,
             "retry_after_headers": retry_after,
+            "quota_429": [
+                {"seq": e.seq, **e.quota, "reading": quota_reading(e.quota)}
+                for e in counting.events
+                if e.quota
+            ],
             "error_bodies": [
                 {"seq": e.seq, "status": e.status, "body": e.error_body}
                 for e in counting.events
@@ -672,6 +795,20 @@ def abstain_section(layer: SemanticLayer, completed: list[QuestionRun]) -> dict[
     }
 
 
+def render_quota(q: dict[str, Any]) -> str:
+    parts = [
+        f"{k}={q[k]}"
+        for k in ("status", "type", "code", "limit_on", "limit_name", "limit_value", "retry_delay")
+        if k in q
+    ]
+    for v in q.get("violations", []):
+        parts.append("violation(" + ", ".join(f"{k}={v[k]}" for k in sorted(v)) + ")")
+    if "quota_metric" in q:
+        parts.append(f"quota_metric={q['quota_metric']}")
+    parts.append(f"reading: {q['reading']}")
+    return "; ".join(parts)
+
+
 def render_report(rep: dict[str, Any]) -> str:
     h, st, ht = rep["header"], rep["stop"], rep["http"]
     f = lambda v: "n/a" if v is None else f"{v:.0f}"  # noqa: E731
@@ -698,6 +835,15 @@ def render_report(rep: dict[str, Any]) -> str:
         + (f"; cut by a cap: {', '.join(st['cut'])}" if st["cut"] else ""),
         f"- HTTP requests sent: {ht['requests_sent']}; by status: {ht['by_status']}",
         f"- retry-after headers: {ht['retry_after_headers'] or 'none seen'}",
+        *(
+            [
+                "- HTTP 429 quota details (names and limits only; the body is not kept; the "
+                "reading is a keyword match on those names):"
+            ]
+            + [f"  - request {q['seq']}: {render_quota(q)}" for q in ht.get("quota_429", [])]
+            if ht.get("quota_429")
+            else []
+        ),
         *(
             [
                 "- non-2xx response bodies (provider text only; redacted; cut at "

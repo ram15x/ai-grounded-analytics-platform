@@ -106,6 +106,46 @@ def cmd_profile(args: argparse.Namespace) -> int:
     return 0
 
 
+PROFILE_METRICS = [
+    "gross_revenue", "cancelled_revenue", "discount_amount", "net_revenue",
+    "units_sold", "order_count", "active_customers", "aov", "revenue_per_customer",
+]  # fmt: skip
+
+
+def profile_db(readonly_url: str) -> dict:
+    """Metric values over analytics.sales_lines, all rows vs excluding flagged exact duplicates.
+
+    Uses the semantic layer's own expressions, so these are the numbers the product would show.
+    """
+    from .compiler import metric_expression  # noqa: PLC0415
+
+    layer = load_semantic_layer()
+    src = f"{layer.source.relation} AS {layer.source.alias}"
+    out: dict = {}
+    a = layer.source.alias
+    cols = ", ".join(f"{metric_expression(layer, m)} AS {m}" for m in PROFILE_METRICS)
+    for label, where in (
+        ("all_rows", ""),
+        ("excluding_exact_duplicates", f" WHERE NOT {a}.is_exact_duplicate"),
+    ):
+        res = execute_guarded(readonly_url, f"SELECT {cols} FROM {src}{where}")
+        out[label] = {k: str(v) for k, v in zip(res.columns, res.rows[0], strict=True)}
+    counts = execute_guarded(
+        readonly_url,
+        f"SELECT {a}.line_type, {a}.is_exact_duplicate, COUNT(*) AS n, "
+        f"SUM({a}.line_amount) AS amount FROM {src} GROUP BY 1, 2 ORDER BY 1, 2",
+    )
+    out["rows_by_line_type_and_duplicate_flag"] = [
+        dict(zip(counts.columns, (str(x) for x in r), strict=True)) for r in counts.rows
+    ]
+    return out
+
+
+def cmd_profile_db(args: argparse.Namespace) -> int:
+    print(json.dumps(profile_db(readonly_database_url()), indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="va", description="Verified Analyst (deterministic core)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -121,6 +161,10 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("profile", help="data-quality counts from a source file (no database)")
     pr.add_argument("source")
     pr.set_defaults(fn=cmd_profile)
+    pd_ = sub.add_parser(
+        "profile-db", help="metric totals from the loaded warehouse, with/without duplicates"
+    )
+    pd_.set_defaults(fn=cmd_profile_db)
     return p
 
 

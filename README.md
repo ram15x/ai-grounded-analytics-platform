@@ -60,9 +60,10 @@ create databases and roles; otherwise they are skipped.
 ### Try the verifier
 
 ```
-docker compose up -d                       # needs POSTGRES_PASSWORD in the environment
+docker compose up -d --wait                # needs POSTGRES_PASSWORD; set VA_PG_PORT if 5432 is taken
 export VA_DATABASE_URL=... VA_READONLY_PASSWORD=... VA_READONLY_DATABASE_URL=...
 va load --download                         # or: va load --source Online_Retail.xlsx
+va profile-db                              # metric totals, with and without exact duplicates
 va verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise
 ```
 

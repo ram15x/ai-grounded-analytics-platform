@@ -1,6 +1,7 @@
 """`va verify` on the hand-written sample answers in examples/ (needs the warehouse fixture)."""
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,20 @@ def test_invalid_answer_file_is_a_clean_error(tmp_path, monkeypatch, capsys):
     bad.write_text('{"prose": "x", "claims": [{"id": 1}]}')
     assert main(["verify", str(bad)]) == 2
     assert "error" in capsys.readouterr().err
+
+
+@pytest.mark.db
+def test_profile_db_reports_duplicates_effect(warehouse):
+    from verified_analyst.cli import profile_db  # noqa: PLC0415
+
+    out = profile_db(warehouse.readonly_url)
+    assert set(out["all_rows"]) == set(out["excluding_exact_duplicates"])
+    dups = sum(
+        int(r["n"])
+        for r in out["rows_by_line_type_and_duplicate_flag"]
+        if r["is_exact_duplicate"] == "True"
+    )
+    assert dups == warehouse.normalized.dq["exact_duplicate_rows"]
+    assert Decimal(out["all_rows"]["gross_revenue"]) >= Decimal(
+        out["excluding_exact_duplicates"]["gross_revenue"]
+    )

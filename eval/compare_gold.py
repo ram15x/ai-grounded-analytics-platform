@@ -59,11 +59,16 @@ def compare(questions: list[dict], gold: dict, layer, url: str) -> list[dict]:
             )
             if not agree:
                 declared = q.get("declared_rule_difference")
-                row["classification"] = (
-                    "intended rule difference (declared by the author before comparing; owner to confirm)"
-                    if declared else
-                    "UNCLASSIFIED: decide gold bug, semantic-layer bug, or intended rule difference"
-                )  # fmt: skip
+                if declared:
+                    row["classification"] = (
+                        "intended rule difference "
+                        "(declared by the author before comparing; owner to confirm)"
+                    )
+                else:
+                    row["classification"] = (
+                        "UNCLASSIFIED: decide gold bug, semantic-layer bug, "
+                        "or intended rule difference"
+                    )
                 row["note"] = declared or ""
         rows.append(row)
     return rows

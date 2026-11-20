@@ -210,6 +210,33 @@ def cmd_docs_probe(args: argparse.Namespace) -> int:
     return res.exit_code
 
 
+def cmd_docs_heldout(args: argparse.Namespace) -> int:
+    import time  # noqa: PLC0415
+
+    from .documents.heldout_run import render_markdown, run_heldout  # noqa: PLC0415
+    from .documents.probe import write_report  # noqa: PLC0415
+    from .documents.settings import load_retrieval_settings  # noqa: PLC0415
+
+    res = run_heldout(
+        settings=load_retrieval_settings(),
+        embedder_name=args.embedder,
+        candidates_arg=args.candidates,
+        admin_url=admin_database_url(),
+        readonly_url=readonly_database_url(),
+        env=os.environ,
+        max_requests=args.max_requests,
+    )
+    out_dir = (
+        Path("data")
+        / "live_runs"
+        / f"{time.strftime('%Y%m%d_%H%M%S')}_docs_heldout_{args.embedder}"
+    )
+    write_report(res.report, out_dir, render_markdown)
+    print(render_markdown(res.report))
+    print(f"report written to {out_dir}")
+    return res.exit_code
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     report = run_verify(Path(args.answer), readonly_database_url())
     print(json.dumps(report.as_dict(), indent=2) if args.json else render(report))
@@ -456,6 +483,15 @@ def build_parser() -> argparse.ArgumentParser:
     dp.add_argument("--config", default=None, help="another retrieval config file")
     dp.add_argument("--out-dir", default=None, help="default data/live_runs/<time>_docs_<names>")
     dp.set_defaults(fn=cmd_docs_probe)
+    dh = dc_sub.add_parser(
+        "heldout",
+        help="score the three pre-registered fusion candidates on the locked held-out questions, "
+        "once per embedder (needs docs/adr/0009 committed and unchanged)",
+    )
+    dh.add_argument("--candidates", required=True, help="must be exactly A,B,baseline")
+    dh.add_argument("--embedder", required=True, help="a name from config/retrieval.yaml")
+    dh.add_argument("--max-requests", type=int, default=None, help="at most 150")
+    dh.set_defaults(fn=cmd_docs_heldout)
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(

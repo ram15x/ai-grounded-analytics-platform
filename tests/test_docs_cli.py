@@ -21,16 +21,32 @@ def test_docs_eval_has_no_way_to_name_a_question_file():
         p.parse_args(["docs", "eval", "--questions", "x.yaml"])
 
 
-def test_product_code_never_names_the_heldout_retrieval_file():
+def test_only_the_gated_command_names_the_heldout_retrieval_file():
+    """`va docs heldout` is the one place: its module holds the file name, cli.py only the command
+    word, and no module reached by `va docs probe`, `eval` or `search` mentions it."""
     for path in SRC.rglob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        assert "heldout" not in text.lower().replace("held-out", ""), path
+        text = path.read_text(encoding="utf-8").lower().replace("held-out", "")
+        if path.name == "heldout_run.py":
+            continue
+        if path.name == "cli.py":
+            assert "heldout.yaml" not in text and "doc_questions" in text
+            continue
+        assert "heldout" not in text, path
+    importers = [
+        p.name
+        for p in SRC.rglob("*.py")
+        if "heldout_run" in p.read_text(encoding="utf-8") and p.name != "heldout_run.py"
+    ]
+    assert importers == ["cli.py"]
     assert cli.DEV_DOC_QUESTIONS.name == "dev.yaml"
     assert cli.DEV_DOC_QUESTIONS.is_file()
 
 
 def test_the_documents_package_reads_no_question_file_at_all():
+    """Only the gated held-out module knows where a question file is; it is checked above."""
     for path in (SRC / "documents").glob("*.py"):
+        if path.name == "heldout_run.py":
+            continue
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"doc_questions", text), path
 

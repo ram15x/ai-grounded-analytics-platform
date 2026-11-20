@@ -212,3 +212,34 @@ the first one), 4 provider unavailable, rate-limited or request cap reached.
 Vectors are stored per model, so a repeat run embeds nothing new and sends only the question
 batches. A failed first call usually means a request shape in `docs/PHASE_2B_ASSUMPTIONS.md` was
 wrong; paste the `Stopped early:` line.
+
+### Local reranker (slice 2c)
+
+A cross-encoder on this computer's CPU (fastembed; same optional extra as the local embedders).
+The first run of each model may download its files; the command prints a notice first. The probe
+reranks the default hybrid, vector-only and the pre-registered hybrid_B, and prints each change
+against the unreranked method with a bootstrap interval. A hosted reranker (Jina) only reranks the
+default hybrid, to save requests.
+
+```powershell
+va docs probe --embedder local_bge_small_en_v15 --reranker local_minilm_l6_cross_encoder
+va docs probe --embedder gemini_embedding_2_768 --reranker local_minilm_l6_cross_encoder
+va docs probe --embedder gemini_embedding_2_768 --reranker local_bge_reranker_base   # larger, slower
+```
+
+### Held-out document questions (once per embedder)
+
+Commit `docs/adr/0009-document-retrieval-fusion.md` first, with the dev numbers pasted into its
+evidence table. The command refuses if that file is missing, uncommitted, changed since it was
+committed, or disagrees with the candidates built into the code. It accepts only the three
+pre-registered candidates and no other setting, scores them on the 12 held-out document questions,
+and refuses a second run for the same embedder (`data/heldout_ledger.jsonl`).
+
+```powershell
+va docs heldout --candidates A,B,baseline --embedder gemini_embedding_2_768
+va docs heldout --candidates A,B,baseline --embedder local_bge_small_en_v15
+```
+
+If the first run fails before scoring (for example a missing key), nothing is recorded and you can
+run it again. The output has the per-question rank of the first relevant passage for each
+candidate and which questions differ. It applies no decision rule.

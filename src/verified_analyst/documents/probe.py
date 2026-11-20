@@ -402,8 +402,12 @@ def render_markdown(rep: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_report(rep: dict[str, Any], out_dir: Path) -> Path:
+def write_report(
+    rep: dict[str, Any],
+    out_dir: Path,
+    render: Callable[[dict[str, Any]], str] = render_markdown,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.json").write_text(json.dumps(rep, indent=2), "utf-8")
-    (out_dir / "report.md").write_text(render_markdown(rep), "utf-8")
+    (out_dir / "report.md").write_text(render(rep), "utf-8")
     return out_dir

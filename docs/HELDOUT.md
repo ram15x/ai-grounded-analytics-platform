@@ -52,3 +52,10 @@ result with the gold: 13 of 13 agree, none differ. The two non-expressible gold 
 compared with a direct SQL query over the warehouse and agree. The same author wrote the gold, the
 questions and the semantic layer, so this is weak evidence, not an independent benchmark. No accuracy
 claim is made for any model on these questions; none has been run on them.
+
+## Document held-out questions
+
+`eval/doc_questions/heldout.yaml` (12 questions) is separate from the text-to-SQL file above. Only
+`va docs heldout` reads it, through `documents/heldout_run.py`, for the three candidates fixed in
+`docs/adr/0009-document-retrieval-fusion.md`, once per embedder. Everything else (probe, eval,
+search, tuning) uses `dev.yaml`. Tests check that no other module names the file.

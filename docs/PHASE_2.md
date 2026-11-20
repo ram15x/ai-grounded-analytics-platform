@@ -211,3 +211,17 @@ are a word-hash, so its numbers say nothing about real embeddings).
 
 The probe report also measures whether the top score separates answerable from no-answer
 questions (AUC). Search never abstains by itself; no threshold is set.
+
+### Held-out gate and the local reranker (slice 2c)
+
+ADR-0009 fixes three candidates before any held-out scoring: A vector-only, B hybrid (RRF constant
+10, 20 candidates, keyword weight 0.25) and the baseline default. `va docs heldout` scores only
+those, once per embedder, from an ADR that is committed and unchanged; it prints per-question
+differences and applies no decision rule. The shipped default is unchanged. The held-out set is
+still locked to everything else and is still not an independent benchmark (same author, 12
+questions). The guard tests now allow exactly one module, `heldout_run.py`, to name the file.
+
+2c adds a local cross-encoder reranker through fastembed (feature, model names and sizes
+UNVERIFIED), measured by `va docs probe --reranker <name>` as reranked against unreranked on dev
+with bootstrap intervals. A hosted reranker keeps the same interface. 2d (injection handling) and
+2e (the router agent for mixed data-and-document questions) are not started.

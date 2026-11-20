@@ -200,8 +200,18 @@ def test_no_question_text_or_id_is_shared_with_the_dev_set():
 
 
 def test_no_product_code_reads_or_embeds_the_held_out_file():
-    hits = [p for p in (ROOT / "src").rglob("*.py") if "heldout" in p.read_text("utf-8").lower()]
+    # `va docs heldout` is the one deliberate exception (heldout_run.py plus its command word in
+    # cli.py); it reads the DOCUMENT question file only. The text-to-SQL held-out file is still
+    # named nowhere in src.
+    allowed = {"heldout_run.py", "cli.py"}
+    hits = [
+        p
+        for p in (ROOT / "src").rglob("*.py")
+        if "heldout" in p.read_text("utf-8").lower() and p.name not in allowed
+    ]
     assert hits == []
+    for p in (ROOT / "src").rglob("*.py"):
+        assert "questions/heldout" not in p.read_text("utf-8").replace("\\", "/"), p
     from verified_analyst.llm.prompts import PROMPT_TEMPLATES
 
     blob = " ".join(PROMPT_TEMPLATES.values()).lower()

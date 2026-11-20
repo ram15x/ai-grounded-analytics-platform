@@ -56,8 +56,17 @@ reduces it, and what is not covered. No real model has been run against any of t
   probes.
 - A hosted model may only see documents marked public (slice 2b); that is a separate control.
 
-## For slice 2e
+## Slice 2e: what changed
 
-The composer prompt must include `PASSAGE_RULES` and use `render_passages` for every passage it
-shows. The labels (`P1`, `P2`) map to passage ids in the returned `Rendered.labels`; binding a
-model's label back to an id is part of 2e.
+The composer prompt now includes `PASSAGE_RULES` and `render_passages` for every passage it shows
+(`compose.v2`, `repair.v2`). A model's label binds back to an id through `Rendered.labels`, and a
+passage figure is quoted by a system-listed handle (`P2 n3`) instead of a typed number
+(docs/PHASE_2.md, "2e as built"). Handles are built from the withheld text, so a figure inside
+flagged text is never offered. A label binder (R1 to R3) refuses a figure whose label or sentence
+does not match its surroundings in the passage. New tests run an obedient attacker composer for
+each of the five hostile documents through the whole path: none of its answers verifies.
+
+What 2e does **not** change: the scanner is still a list of patterns, prose is still unchecked, a
+real quote still verifies as a quote, and the binder is a heuristic. Whether a real model obeys the
+rules is measured only by `va route probe` (injection section: replies that contain a string the
+hostile document asked for, as raw counts), which the owner runs. Until that is run, it is unmeasured.

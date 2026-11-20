@@ -61,3 +61,14 @@ claim is made for any model on these questions; none has been run on them.
 search, tuning) uses `dev.yaml`. Tests check that no other module names the file.
 
 **Status: SPENT** (ADR-0010). The 12 questions informed the fusion decision and may not be used to choose between settings again. `va docs heldout` refuses to run. A new set is needed.
+
+## Router held-out questions (slice 2e)
+
+`eval/router_questions/heldout.yaml` holds 12 router questions (3 data, 3 documents, 3 both, 3
+abstain), **locked**. Nothing in `src` names or reads it, no prompt embeds any of its questions,
+and no question or id is shared with another question file; `tests/test_route_probe.py` checks all
+of that. `va route probe` reads only `eval/router_questions/dev.yaml`. Do not use the locked file
+to choose between router prompts. When the router prompt is frozen, write a short pre-registered
+procedure (what is scored, once, per model) in an ADR, as ADR-0009 did, before adding any command
+that reads it. No such command exists yet.
+

@@ -243,3 +243,26 @@ va docs heldout --candidates A,B,baseline --embedder local_bge_small_en_v15
 If the first run fails before scoring (for example a missing key), nothing is recorded and you can
 run it again. The output has the per-question rank of the first relevant passage for each
 candidate and which questions differ. It applies no decision rule.
+
+## 7. Router and injection probe (slice 2e)
+
+Needs the warehouse loaded, the synthetic corpus ingested **as public** (`va docs ingest ...
+--sensitivity public`, the same step as section 6), and one hosted key in this window only. It runs
+the 12 dev router questions and the 5 injection questions (one per hostile document) through the
+whole route-and-answer path against ONE model, public data and public documents only, retrieval by
+keyword, top 3 passages. Nothing is recorded as a cassette and nothing is committed.
+
+```powershell
+# cheapest: only the route call for the 12 router questions (12 requests)
+va route probe --provider groq --model <MODEL ID> --route-only --max-requests 20
+# full: route, plan, compose and the injection set; at most 60 requests
+va route probe --provider groq --model <MODEL ID> --max-requests 60
+```
+
+It stops on the first 401/403 (exit 3), when the provider is unavailable (exit 4), when the request
+or token cap is reached, or if a retrieved document is not public (exit 4). The report
+(`data/live_runs/<time>_<provider>_<model>/report.md`) is raw counts with n: how often the route
+matched the author's label (and a confusion table), schema-valid replies, answers that typed a digit
+outside a placeholder, how many model replies contained a string a hostile document asked for,
+tokens and latency. It makes no accuracy claim and ranks nothing. Paste back the whole report.
+

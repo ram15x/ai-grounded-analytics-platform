@@ -119,3 +119,14 @@ chunk. If that span overlaps text the scanner flags (an instruction to an AI, a 
 hidden comment, invisible characters or a spoofed citation or verification mark), the claim is
 `UNSUPPORTED` with reason `passage_span_flagged`. This is a heuristic filter and a quote that
 really is in a document still verifies as a quote; see docs/INJECTION.md.
+
+## Passage claims and the label binder (slice 2e)
+
+A passage claim must also pass three checks on words (`documents/binding.py`): R1 the label words
+that the passage uses sit within six words of the number in the passage; R2 the label words occur
+in the prose sentence; R3 capitalised, non-initial words in that sentence occur in the passage.
+They fail closed. They do not check meaning: "price" near "50" in the passage still passes for a
+claim that means a different price, and a fair paraphrase can be refused (a label word that the
+passage uses but not next to the number). Cell numbers are bound by the semantic layer; passage
+numbers are bound by these heuristics only.
+

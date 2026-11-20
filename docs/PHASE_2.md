@@ -75,9 +75,9 @@ network, so it can be built and tested in full here.
   is made on dev-question metrics, with latency and cost recorded, then scored once on the held-out
   questions.
 - Chunk size and overlap: tuned on dev questions only.
-- Whether passage numbers need label binding as strict as cell numbers (slice 2e). Today a passage
-  number is checked for presence, unit and precision, not for the entity or metric it is about.
-  That is a known gap, and it is a verifier change that needs its own adversarial set.
+- Whether passage numbers need label binding as strict as cell numbers (slice 2e). Slice 2e adds a
+  heuristic binder (R1 to R3 below). It is stricter than presence, unit and precision but it is not
+  the semantic-layer binding that cell numbers get, and its adversarial set is small.
 
 ## Risks, stated now
 
@@ -223,8 +223,8 @@ questions). The guard tests now allow exactly one module, `heldout_run.py`, to n
 
 2c adds a local cross-encoder reranker through fastembed (feature, model names and sizes
 UNVERIFIED), measured by `va docs probe --reranker <name>` as reranked against unreranked on dev
-with bootstrap intervals. A hosted reranker keeps the same interface. 2d (injection handling) and
-2e (the router agent for mixed data-and-document questions) are not started.
+with bootstrap intervals. A hosted reranker keeps the same interface. 2d (injection handling) is below; 2e
+(the router agent) is next.
 
 ### Held-out outcome (ADR-0010)
 
@@ -250,4 +250,62 @@ are flagged and no other corpus document is; an obedient attacker's answers are 
 true facts in the same chunks still verify; the prompt block never contains the injected text.
 Limits are in docs/INJECTION.md: the scanner is heuristic, a quote that really is in a document
 verifies as a quote, prose is not checked, and no real model has been run against the rules.
-Slice 2e (router agent, mixed answers, label binding) is next.
+
+### 2e as built (router, mixed answers, label binding)
+
+**Route.** `llm/answer.py` `answer_question` first asks the model for a route (`route.v1`:
+data, documents, both, or abstain with a reason). The route prompt holds the catalogue and a fixed
+operator-written description of the corpus; it holds no passage and no data. An invalid reply is
+asked once more, then the question abstains `route_failed`. A route `abstain` ends the run with the
+router's reason (`ambiguous`, `out_of_scope`, `forecast`, `causal`, `personal_data`). Data runs the
+existing plan, compile, guard and execute steps. Documents retrieves passages (keyword by default;
+any search function can be given) and skips planning. Both does both. Nothing is retrieved for a
+data route.
+
+**Passage numbers are placeholders too.** The composer never types a passage figure. The system
+lists, for each rendered passage (flagged paragraphs already withheld), the numbers the extractor
+finds as handles `P2 n3`, and the composer writes
+`{"kind": "passage_number", "label": "P2", "number": "n3"}`. The system writes the digits from the
+stored text (`documents/numbers.py`, `template.py`), builds a `PassageRef` with the span from the
+stored chunk, and the verifier re-checks it: span in range, no flagged overlap, number present,
+unit compatible, and the binder. Handles never include a number inside flagged text. A handle that
+was not listed is `unknown_passage_number`. Decimals and scale are not allowed on a passage number.
+Derived claims over passage numbers are not built.
+
+**Label binding (`documents/binding.py`, default on, fails closed).** R1: the words of the claim
+label that the passage itself uses must all sit within six words of the number in the passage, and
+at least one label word must (`label_not_in_passage_window`). R2: the label words must occur in
+the prose sentence that carries the number (`label_not_in_sentence`). R3: every capitalised,
+non-initial word in that sentence that is not a label word must occur in the cited passage
+(`entity_not_in_passage`). Stemming is a simple suffix strip. This catches a number moved to a
+neighbouring subject or an entity the passage never names. It does not understand meaning: a
+label that really is near a number but means something else passes, and a legitimate paraphrase
+can be refused. It also applies to every passage claim, including those from `va verify`.
+
+**Sensitivity.** Each retrieval returns the sensitivity of its documents (public only if every
+document is public). The compose request carries the dataset tag `docs.public` (tagged public in
+`config/router.yaml`) or `docs.internal` (untagged, so internal). A hosted provider is refused the
+request, so the answer abstains `sensitivity`; a local provider is not. The route request carries
+no passage text, so a refusal cannot leak any.
+
+**Other abstains.** `no_passage`: nothing retrieved, or no passage has a quotable figure after
+withholding. `unverified`: no attempt verified a figure (a documents-only answer that states no
+placeholder figure is never shown as verified). A plan abstain code passes through.
+
+**Not built.** Document facts that are words, not numbers, are not verified (docs/INJECTION.md).
+The router is a prompt, not a trained component, and its prompt is a first draft. Hybrid retrieval
+inside `answer_question` is possible through the search function but is not wired to a command.
+
+**Tests (no real model).** `tests/test_answer_e2e.py` runs a FakeProvider through a mixed question,
+a documents-only question, a data-only question, no-answer paths (router abstain, bad route twice,
+nothing retrieved, silent composer, plan abstain), sensitivity (hosted refused, local allowed,
+mixed batch counts as internal), retrieval with the fake embedder, and each of the five hostile
+documents with an obedient attacker composer. `tests/test_binding.py` and
+`tests/test_passage_numbers.py` cover the binder and the placeholders.
+
+**Probe.** `va route probe` is in docs/LIVE_RUNBOOK.md section 7. Questions:
+`eval/router_questions/dev.yaml` (12 router questions: 3 data, 3 documents, 3 both, 3 abstain;
+plus 5 injection questions, one per hostile document) and `heldout.yaml` (12, locked, same mix).
+Nothing in `src` names the locked file; a guard test checks that, that no question is shared with
+any other question file, and that no prompt embeds a question from either. All labels are the
+author's. No accuracy claim is made.

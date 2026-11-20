@@ -122,6 +122,6 @@ held-out file has not been scored.
 
 ### Next
 
-2b needs a pgvector image (the compose file uses plain `postgres:16`), a harder and larger corpus
+2b needs the pgvector image (compose now uses it; see docs/DOCKER_PGVECTOR_SWITCH.md), a harder and larger corpus
 so that methods can be told apart, and your documents ingested locally. Both are decisions for the
 owner; see the questions in the hand-over message.

@@ -43,7 +43,18 @@ def rate_headers(headers: dict[str, str]) -> dict[str, str]:
     return {k: v[:80] for k, v in headers.items() if RATE_HEADER_RE.search(k)}
 
 
+def user_agent() -> str:
+    """An explicit, honest User-Agent. Python's default (`Python-urllib/3.x`) is blocked by some
+    providers' edge firewalls (observed as an HTTP 403 on Groq while curl got 200; the cause is a
+    hypothesis, not confirmed). Contains no key and no machine-specific data."""
+    from .. import __version__  # noqa: PLC0415
+
+    return f"verified-analyst/{__version__}"
+
+
 def _fetch(req: urllib.request.Request, timeout: float) -> HttpResponse:
+    if not req.has_header("User-agent"):
+        req.add_header("User-Agent", user_agent())
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return HttpResponse(

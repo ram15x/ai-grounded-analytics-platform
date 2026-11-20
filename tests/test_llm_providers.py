@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 
 import pytest
 
@@ -263,3 +264,73 @@ def test_the_test_suite_blocks_outbound_network_connections():
     # a literal address, so no DNS lookup happens before the guard is reached
     with socket.socket() as sock, pytest.raises(AssertionError, match="must not use the network"):
         sock.connect(("203.0.113.7", 443))
+
+
+# ---- User-Agent (urllib layer, with urlopen mocked: no network) ----
+
+
+class _FakeResp:
+    status = 200
+    headers = {"Content-Type": "application/json"}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return b"{}"
+
+
+def _capture(monkeypatch):
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req)
+        return _FakeResp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    return seen
+
+
+def test_post_and_get_send_an_explicit_user_agent_not_the_python_default(monkeypatch):
+    from verified_analyst import __version__
+    from verified_analyst.llm.transport import urllib_get
+
+    seen = _capture(monkeypatch)
+    urllib_transport("https://example.test/x", {"Authorization": "Bearer k"}, b"{}", 5)
+    urllib_get("https://example.test/y", {"x-goog-api-key": "k"}, 5)
+    assert [r.get_method() for r in seen] == ["POST", "GET"]
+    for r in seen:
+        ua = r.get_header("User-agent")
+        assert ua == f"verified-analyst/{__version__}"
+        assert "python" not in ua.lower()
+
+
+def test_an_explicit_user_agent_from_the_caller_is_kept(monkeypatch):
+    seen = _capture(monkeypatch)
+    urllib_transport("https://example.test/x", {"User-Agent": "custom/1"}, b"{}", 5)
+    assert seen[0].get_header("User-agent") == "custom/1"
+
+
+def test_user_agent_contains_no_key_or_host_data(monkeypatch):
+    from verified_analyst.llm.transport import user_agent
+
+    for k, v in KEYS.items():
+        monkeypatch.setenv(k, v)
+    ua = user_agent()
+    assert all(v not in ua for v in KEYS.values())
+    assert re.fullmatch(r"verified-analyst/[0-9][0-9A-Za-z.+-]*", ua)
+
+
+def test_adapter_requests_reach_the_transport_with_keys_only_in_auth_headers(monkeypatch):
+    seen = _capture(monkeypatch)
+    p = GroqProvider("groq", "GROQ_API_KEY", env=KEYS)  # default urllib transport, urlopen mocked
+    body = ok_openai().body
+    monkeypatch.setattr(_FakeResp, "read", lambda self: body)
+    p.complete(public(), "m", 5)
+    req_ = seen[0]
+    assert req_.get_header("User-agent").startswith("verified-analyst/")
+    assert KEYS["GROQ_API_KEY"] not in req_.get_header("User-agent")
+    assert KEYS["GROQ_API_KEY"] in req_.get_header("Authorization")

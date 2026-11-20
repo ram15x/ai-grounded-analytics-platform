@@ -63,6 +63,7 @@ create databases and roles; otherwise they are skipped.
 ```
 docker compose up -d --wait                # needs POSTGRES_PASSWORD; set VA_PG_PORT if 5432 is taken
 export VA_DATABASE_URL=... VA_READONLY_PASSWORD=... VA_READONLY_DATABASE_URL=...
+# optional: VA_CONNECT_TIMEOUT_S (seconds to wait for a connection, default 10, max 300)
 va load --download                         # or: va load --source Online_Retail.xlsx
 va profile-db                              # metric totals, with and without exact duplicates
 va verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise

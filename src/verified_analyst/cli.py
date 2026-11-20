@@ -4,6 +4,7 @@ Environment (never files):
   VA_DATABASE_URL           admin/loader connection (load, profile)
   VA_READONLY_DATABASE_URL  read-only role connection (verify)
   VA_READONLY_PASSWORD      optional: create/refresh the read-only role during load
+  VA_CONNECT_TIMEOUT_S      optional: seconds to wait for a database connection (default 10)
 """
 
 from __future__ import annotations

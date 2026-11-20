@@ -22,6 +22,8 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
+from verified_analyst.config import connect_kwargs
+
 logging.getLogger("sqlglot").setLevel(logging.ERROR)  # keep "falling back to Command" quiet
 
 DIALECT = "postgres"
@@ -204,8 +206,9 @@ def execute_guarded(
     ):
         raise GuardError("bad_timeout", "timeout_ms must be an integer between 1 and 60000")
     start = time.perf_counter()
+    connect = connect_kwargs(readonly_url)
     try:
-        with psycopg.connect(readonly_url) as conn:
+        with psycopg.connect(readonly_url, **connect) as conn:
             conn.read_only = True
             with conn.transaction():
                 conn.execute(f"SET LOCAL statement_timeout = {int(timeout_ms)}")

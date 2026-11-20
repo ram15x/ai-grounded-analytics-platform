@@ -13,6 +13,7 @@ import pandas as pd
 import psycopg
 from psycopg import sql
 
+from verified_analyst.config import connect_kwargs
 from verified_analyst.warehouse.normalize import RAW_COLUMNS, Normalized, normalize
 
 UCI_URL = "https://archive.ics.uci.edu/static/public/352/online+retail.zip"
@@ -165,7 +166,7 @@ def load_file(
 ) -> tuple[Normalized, dict]:
     raw = read_raw(path)
     n = normalize(raw)
-    with psycopg.connect(admin_url, autocommit=False) as conn:
+    with psycopg.connect(admin_url, autocommit=False, **connect_kwargs(admin_url)) as conn:
         create_schema(conn)
         load_tables(conn, n)
         info = reconcile(conn, n, raw)

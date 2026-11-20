@@ -159,6 +159,8 @@ never read the held-out file. A hosted embedder or reranker sees only documents 
 the command refuses before any request if any ingested document is not. Nothing is an accuracy
 claim: the questions and documents have the same author.
 
+`va docs probe` grants the same default read-only role as `va docs ingest`; pass `--reader-role` for another.
+
 Once, with the pgvector image running (docs/DOCKER_PGVECTOR_SWITCH.md), ingest the synthetic corpus
 as public:
 
@@ -182,9 +184,25 @@ va docs probe --embedder openrouter_text_embedding_3_small --max-requests 30
 # A reranker on top (Jina; needs JINA_API_KEY; about 65 requests, paced)
 va docs probe --embedder gemini_embedding_2_768 --reranker jina_reranker_v3_5 --max-requests 80
 
-# On this computer (Ollama running with the model pulled; no key)
-va docs probe --embedder ollama_embeddinggemma
+# On this computer's CPU, no key and no daemon. Install the optional extra first (once):
+#   pip install -e ".[local]"
+# The first run of each model may download its files (the command prints a notice first).
+va docs probe --embedder local_bge_small_en_v15
+va docs probe --embedder local_bge_base_en_v15      # larger and slower
 ```
+
+Add `--fusion-study` to any probe to also score a fixed grid of fusion settings (RRF constant,
+candidate depth, keyword weight) on the same dev questions. It sends no extra requests, uses the
+vectors and question embeddings the probe already has, and prints a table with the change against
+the default and a bootstrap interval. It selects nothing: run it with at least two embedders and
+look for changes that agree before anyone changes a default.
+
+```powershell
+va docs probe --embedder gemini_embedding_2_768 --fusion-study --max-requests 30
+```
+
+The report also has a "Questions with no answer" table: how well the top search score separates
+questions the documents answer from ones they do not (AUC). It sets no threshold.
 
 Each run writes `data/live_runs/<time>_docs_<names>/report.json` and `report.md`. Paste back the
 printed table and the `HTTP:` line (status counts, latency); do not paste keys. Exit codes: 0 done,

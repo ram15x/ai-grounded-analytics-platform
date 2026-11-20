@@ -184,7 +184,8 @@ held-out file has not been scored.
 - `documents/vectorstore.py`: embeddings in `docs.chunk_embeddings` keyed by (document, chunk,
   model id); exact cosine search; the model id includes the model, dimensions and prefixes.
 - `documents/fusion.py`: reciprocal-rank fusion (k=60) and a reranking wrapper (depth 20).
-- `documents/embed_http.py`, `documents/rerank.py`: clients for Gemini, OpenRouter, Ollama, a
+- `documents/embed_http.py`, `documents/rerank.py`: clients for Gemini, OpenRouter, a local CPU
+  model through the optional `fastembed` extra (Ollama is not used), a
   Jina-style rerank API and a local cross-encoder. No retries; errors map to short kinds; keys are
   redacted. Request shapes come from provider docs and are untried (docs/PHASE_2B_ASSUMPTIONS.md).
 - `documents/settings.py`, `config/retrieval.yaml`: the candidates. Nothing is chosen yet.
@@ -195,3 +196,18 @@ held-out file has not been scored.
 No embedder or reranker has been chosen. That waits for the probe output you run. With questions and
 documents from one author it will show which candidate behaves better on this set, not how any would
 do on real documents. The held-out set is still locked and is not an independent benchmark.
+
+### Fusion and abstention (dev only)
+
+With real Gemini vectors the owner saw vector search alone ahead of the default hybrid on the dev
+questions (recall@1 0.88 against 0.71, MRR 0.93 against 0.82; one run, one embedder). The default
+fuses keyword and vector rankings with equal weight, RRF constant 60 and 50 candidates each.
+`va docs probe --fusion-study` scores a fixed 27-setting grid (constant 10/30/60, depth 10/20/50,
+keyword weight 1/0.5/0.25) plus both single methods on the same questions and reports each change
+against the default with a paired bootstrap interval. It selects nothing and the default has not
+been changed. A setting is worth considering only if the same direction shows up with a second
+embedder. Run here with the fake embedder, the study only proves the mechanics (the fake vectors
+are a word-hash, so its numbers say nothing about real embeddings).
+
+The probe report also measures whether the top score separates answerable from no-answer
+questions (AUC). Search never abstains by itself; no threshold is set.

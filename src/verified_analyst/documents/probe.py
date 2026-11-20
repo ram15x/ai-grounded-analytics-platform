@@ -118,6 +118,84 @@ def _gate_sensitivity(conn: psycopg.Connection, hosted: bool) -> int:
     return n
 
 
+@dataclass
+class Models:
+    embedder: Embedder
+    reranker: Reranker | None
+    emb_ct: CountingTransport | None
+    rr_ct: CountingTransport | None
+
+
+def build_models(
+    settings: RetrievalSettings,
+    embedder_name: str,
+    reranker_name: str | None,
+    env: Mapping[str, str],
+    cap: int,
+    *,
+    embed_transport: Transport | None = None,
+    rerank_transport: Transport | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    local_library: Callable | None = None,
+    rerank_library: Callable | None = None,
+    notice: Callable[[str], None] | None = None,
+) -> Models:
+    """Build the named embedder (and reranker), wrapping any HTTP transport in a request counter.
+    Models on this computer make no requests and need no counter. Nothing is loaded or sent yet."""
+    es = settings.embedders[embedder_name]
+    rs = settings.rerankers[reranker_name] if reranker_name else None
+    emb_ct: CountingTransport | None = None
+    rr_ct: CountingTransport | None = None
+    if es.kind in ("fake", "local"):
+        embedder = build_embedder(embedder_name, es, env, library=local_library, notice=notice)
+    else:
+        inner = embed_transport or (loopback_transport if es.kind == "ollama" else urllib_transport)
+        emb_ct = _counting(inner, cap, env)
+        embedder = build_embedder(embedder_name, es, env, emb_ct)
+    reranker: Reranker | None = None
+    if rs is not None:
+        if rs.kind == "rerank_api":
+            inner = rerank_transport or urllib_transport
+            if rs.min_interval_s:
+                inner = Paced(inner, rs.min_interval_s, sleep)
+            rr_ct = _counting(inner, cap, env)
+            reranker = build_reranker(reranker_name, rs, env, rr_ct, notice=notice)
+        else:
+            reranker = build_reranker(reranker_name, rs, env, library=rerank_library, notice=notice)
+    return Models(embedder, reranker, emb_ct, rr_ct)
+
+
+def embed_pending(conn: psycopg.Connection, embedder: Embedder, batch_size: int) -> int:
+    """Embed and store every chunk that has no vector for this model; commit per batch."""
+    todo = pending_chunks(conn, embedder.model_id)
+    for i in range(0, len(todo), batch_size):
+        part = todo[i : i + batch_size]
+        store_embeddings(
+            conn, embedder.model_id, part, embedder.embed([c.text for c in part], "document")
+        )
+        conn.commit()
+    return len(todo)
+
+
+def _rerank_effect(methods: dict[str, Any]) -> dict[str, Any]:
+    """For each `X+rerank` method, the change against `X` on the same questions (after minus
+    before), with a paired bootstrap interval. Reports only; it decides nothing."""
+    out: dict[str, Any] = {}
+    for name, after in methods.items():
+        if not name.endswith("+rerank") or name[: -len("+rerank")] not in methods:
+            continue
+        before = methods[name[: -len("+rerank")]]
+        ids = sorted(after["per_question"])
+        out[name] = {
+            m: fusion_study.paired_bootstrap(
+                [before["per_question"][i][m] for i in ids],
+                [after["per_question"][i][m] for i in ids],
+            )
+            for m in fusion_study.PAIRED_METRICS
+        }
+    return out
+
+
 def run_probe(
     *,
     settings: RetrievalSettings,
@@ -134,6 +212,7 @@ def run_probe(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.perf_counter,
     local_library: Callable | None = None,
+    rerank_library: Callable | None = None,
     notice: Callable[[str], None] | None = None,
     study_fusion: bool = False,
 ) -> ProbeResult:
@@ -154,25 +233,17 @@ def run_probe(
     es = settings.embedders[embedder_name]
     rs = settings.rerankers[reranker_name] if reranker_name else None
 
-    emb_ct: CountingTransport | None = None
-    rr_ct: CountingTransport | None = None
-    embedder: Embedder
-    if es.kind in ("fake", "local"):
-        embedder = build_embedder(embedder_name, es, env, library=local_library, notice=notice)
-    else:
-        inner = embed_transport or (loopback_transport if es.kind == "ollama" else urllib_transport)
-        emb_ct = _counting(inner, cap, env)
-        embedder = build_embedder(embedder_name, es, env, emb_ct)
-    reranker: Reranker | None = None
-    if rs is not None:
-        if rs.kind == "rerank_api":
-            inner = rerank_transport or urllib_transport
-            if rs.min_interval_s:
-                inner = Paced(inner, rs.min_interval_s, sleep)
-            rr_ct = _counting(inner, cap, env)
-            reranker = build_reranker(reranker_name, rs, env, rr_ct)
-        else:
-            reranker = build_reranker(reranker_name, rs, env)
+    models = build_models(
+        settings, embedder_name, reranker_name, env, cap,
+        embed_transport=embed_transport, rerank_transport=rerank_transport, sleep=sleep,
+        local_library=local_library, rerank_library=rerank_library, notice=notice,
+    )  # fmt: skip
+    embedder, reranker, emb_ct, rr_ct = (
+        models.embedder,
+        models.reranker,
+        models.emb_ct,
+        models.rr_ct,
+    )
 
     report: dict[str, Any] = {
         "started": started,
@@ -198,18 +269,7 @@ def run_probe(
             report["documents"] = _gate_sensitivity(conn, hosted)
             ensure_vector_schema(conn, reader_role)
             conn.commit()
-            todo = pending_chunks(conn, embedder.model_id)
-            report["chunks_embedded_this_run"] = len(todo)
-            step = es.batch_size
-            for i in range(0, len(todo), step):
-                part = todo[i : i + step]
-                store_embeddings(
-                    conn,
-                    embedder.model_id,
-                    part,
-                    embedder.embed([c.text for c in part], "document"),
-                )
-                conn.commit()
+            report["chunks_embedded_this_run"] = embed_pending(conn, embedder, es.batch_size)
             n_chunks = conn.execute("SELECT count(*) FROM docs.chunks").fetchone()[0]
         report["chunks"] = n_chunks
 
@@ -230,13 +290,18 @@ def run_probe(
             "vector": vector,
             "hybrid": hybrid(keyword, vector),
         }
+        methods["hybrid_B"] = fusion_study.fused(keyword, vector, fusion_study.CANDIDATE_B)
         if reranker is not None:
             rk = reranker
-            methods["hybrid+rerank"] = reranked(
-                methods["hybrid"],
-                lambda q, hits: rk.score(q, [h.text for h in hits]),
-                depth=rk.depth,
-            )
+            # A hosted reranker costs one request per question per method, so it only reranks
+            # the default hybrid; a local one reranks each base so the effect can be compared.
+            bases = ["hybrid"] if rk.hosted else ["hybrid", "vector", "hybrid_B"]
+            for base in bases:
+                methods[f"{base}+rerank"] = reranked(
+                    methods[base],
+                    lambda q, hits: rk.score(q, [h.text for h in hits]),
+                    depth=rk.depth,
+                )
         report["abstention"] = {
             "note": abstention.NOTE,
             "keyword": abstention.profile(keyword, questions),
@@ -255,6 +320,7 @@ def run_probe(
             )
             out["seconds"] = round(clock() - t0, 2)
             report["methods"][name] = out
+        report["rerank_effect"] = _rerank_effect(report["methods"])
     except AuthStop as exc:
         stop, code = {"kind": "auth", "detail": f"HTTP {exc.status}"}, 3
     except (ProviderUnavailable, ModelGone) as exc:
@@ -301,6 +367,25 @@ def render_markdown(rep: dict[str, Any]) -> str:
             lines.append(
                 f"| {name} | {cells} | {u['returned_something']} of {u['n']} | {m['seconds']} |"
             )
+    if rep.get("rerank_effect"):
+        lines += ["", "## Reranked against not reranked (same questions)", ""]
+        lines += [
+            "| method | recall@1 change | mrr change | better / worse (mrr) |",
+            "|---|---|---|---|",
+        ]
+        for name, eff in rep["rerank_effect"].items():
+
+            def fmt(v):
+                return f"{v['mean_change']:+.3f} [{v['ci95'][0]:+.3f}, {v['ci95'][1]:+.3f}]" + (
+                    "*" if v["excludes_zero"] else ""
+                )
+
+            m = eff["mrr"]
+            lines.append(
+                f"| {name} | {fmt(eff['recall@1'])} | {fmt(m)} "
+                f"| {m['questions_better']} / {m['questions_worse']} |"
+            )
+        lines += ["", "`*`: the 95% bootstrap interval excludes zero. Dev questions only."]
     ab = rep.get("abstention")
     if ab:
         lines += ["", "## Questions with no answer in the documents", "", f"> {ab['note']}", ""]

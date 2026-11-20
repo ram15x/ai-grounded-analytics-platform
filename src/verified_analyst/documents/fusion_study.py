@@ -39,6 +39,11 @@ class Setting:
         return f"k={self.rrf_k} depth={self.depth} kw_weight={self.keyword_weight:g}"
 
 
+BASELINE = Setting(DEFAULT[1], DEFAULT[2], DEFAULT[3])
+# Pre-registered in docs/adr/0009 before any held-out scoring; changing it is a decision.
+CANDIDATE_B = Setting(rrf_k=10, depth=20, keyword_weight=0.25)
+
+
 def grid() -> list[Setting]:
     return [Setting(k, d, w) for w in GRID_KEYWORD_WEIGHT for d in GRID_DEPTH for k in GRID_K]
 

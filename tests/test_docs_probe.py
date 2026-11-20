@@ -104,7 +104,10 @@ def test_fake_models_run_all_methods_without_http(vector_db):
     res = probe(vector_db, "fake", "fake")
     r = res.report
     assert res.exit_code == 0 and r["stop"] is None
-    assert set(r["methods"]) == {"keyword", "vector", "hybrid", "hybrid+rerank"}
+    assert set(r["methods"]) == {
+        "keyword", "vector", "hybrid", "hybrid_B",
+        "hybrid+rerank", "vector+rerank", "hybrid_B+rerank",
+    }  # fmt: skip
     assert r["http"]["embedder"]["requests"] == 0 and r["scope"] == "dev questions only"
     assert "accuracy" in r["note"] and "Nothing here is an accuracy claim" in r["note"]
     for m in r["methods"].values():
@@ -179,6 +182,7 @@ def test_a_missing_key_makes_no_request(vector_db):
         questions=QUESTIONS,
         env={},
         embed_transport=mock,
+        reader_role=vector_db.role,
     )
     assert res.exit_code == 2 and res.report["stop"]["kind"] == "no_key" and not mock.calls
 
@@ -322,24 +326,74 @@ def test_probe_reports_abstention_and_an_optional_fusion_study(vector_db):
 
 
 @pytest.mark.db
-def test_probe_grants_the_default_read_only_role_when_none_is_given(vector_db, monkeypatch):
-    import verified_analyst.documents.probe as pr
-    from verified_analyst.warehouse.load import READONLY_ROLE_DEFAULT
+def test_probe_grants_the_default_read_only_role_when_none_is_given(vector_db, default_reader_role):
+    res = run_probe(
+        settings=settings(), embedder_name="fake", reranker_name=None,
+        admin_url=vector_db.admin_url, readonly_url=vector_db.readonly_url,
+        questions=QUESTIONS, env={},
+    )  # fmt: skip
+    assert default_reader_role == "va_readonly" and res.exit_code == 0
+    with psycopg.connect(vector_db.admin_url) as c:
+        assert c.execute(
+            "SELECT has_schema_privilege(%s, 'docs', 'USAGE')", (default_reader_role,)
+        ).fetchone()[0]
 
-    seen = []
-    real = pr.ensure_vector_schema
-    monkeypatch.setattr(
-        pr,
-        "ensure_vector_schema",
-        lambda conn, role=None: seen.append(role) or real(conn, vector_db.role),
-    )
-    run_probe(
-        settings=settings(),
-        embedder_name="fake",
-        reranker_name=None,
-        admin_url=vector_db.admin_url,
-        readonly_url=vector_db.readonly_url,
-        questions=QUESTIONS,
-        env={},
-    )
-    assert seen == [READONLY_ROLE_DEFAULT] == ["va_readonly"]
+
+@pytest.mark.db
+def test_a_missing_read_only_role_is_a_friendly_error_not_a_traceback(vector_db):
+    with pytest.raises(
+        DocumentError, match=r"read-only role 'no_such_role_zz' does not exist.*--reader-role"
+    ):
+        run_probe(
+            settings=settings(), embedder_name="fake", reranker_name=None,
+            admin_url=vector_db.admin_url, readonly_url=vector_db.readonly_url,
+            questions=QUESTIONS, env={}, reader_role="no_such_role_zz",
+        )  # fmt: skip
+    with (
+        psycopg.connect(vector_db.admin_url) as c,
+        pytest.raises(DocumentError, match="does not exist"),
+    ):
+        ingest(c, "zz-role-test", "T", "t.md", "text", reader_role="no_such_role_zz")
+    with psycopg.connect(vector_db.admin_url) as c:
+        assert (
+            c.execute(
+                "SELECT count(*) FROM docs.documents WHERE doc_key='zz-role-test'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
+@pytest.mark.db
+def test_a_local_reranker_is_measured_against_each_unreranked_base(vector_db):
+    st = settings()
+    st.rerankers["loc"] = RerankerSettings(kind="cross_encoder", hosted=False, model="x/y", depth=5)
+    loads, notes = [], []
+
+    class Model:
+        def rerank(self, query, docs):
+            q = set(query.lower().split())
+            return [len(q & set(d.lower().split())) / (1 + len(q)) for d in docs]
+
+    def lib(model, cache_dir):
+        loads.append(model)
+        return Model()
+
+    res = probe(vector_db, "fake", "loc", settings=st, rerank_library=lib, notice=notes.append)
+    r = res.report
+    assert res.exit_code == 0, r["stop"]
+    assert {"hybrid+rerank", "vector+rerank", "hybrid_B+rerank"} <= set(r["methods"])
+    assert set(r["rerank_effect"]) == {"hybrid+rerank", "vector+rerank", "hybrid_B+rerank"}
+    eff = r["rerank_effect"]["vector+rerank"]
+    assert set(eff) == {"recall@1", "mrr"} and "ci95" in eff["mrr"]
+    assert loads == ["x/y"] and len(notes) == 1  # one load, one notice
+    assert r["http"]["reranker"] == {"requests": 0}
+    assert "Reranked against not reranked" in render_markdown(r)
+
+
+@pytest.mark.db
+def test_a_hosted_reranker_only_reranks_the_default_hybrid(vector_db):
+    mock = MockProvider()
+    res = probe(vector_db, "fake", "hosted", rerank_transport=mock, sleep=lambda s: None)
+    assert res.exit_code == 0
+    assert [m for m in res.report["methods"] if m.endswith("+rerank")] == ["hybrid+rerank"]
+    assert res.report["http"]["reranker"]["requests"] == len(QUESTIONS)

@@ -207,3 +207,24 @@ def vector_db(docs_db):
         todo = pending_chunks(conn, emb.model_id)
         store_embeddings(conn, emb.model_id, todo, emb.embed([c.text for c in todo], "document"))
     return docs_db
+
+
+@pytest.fixture
+def default_reader_role(docs_db):
+    """The default read-only role name (`va_readonly`), created for the test when the server has
+    none and removed afterwards. A role that already exists (a developer's real one) is left alone
+    and only the grants this test made in the scratch database are removed."""
+    from verified_analyst.warehouse.load import READONLY_ROLE_DEFAULT as role
+
+    base = os.environ["VA_TEST_DATABASE_URL"]
+    with psycopg.connect(base, autocommit=True) as c:
+        existed = c.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
+        if not existed:
+            c.execute(f'CREATE ROLE "{role}" NOLOGIN')
+    yield role
+    with psycopg.connect(docs_db.admin_url, autocommit=True) as c:
+        c.execute(f'REVOKE ALL ON ALL TABLES IN SCHEMA docs FROM "{role}"')
+        c.execute(f'REVOKE ALL ON SCHEMA docs FROM "{role}"')
+    if not existed:
+        with psycopg.connect(base, autocommit=True) as c:
+            c.execute(f'DROP ROLE "{role}"')

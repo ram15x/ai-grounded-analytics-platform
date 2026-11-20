@@ -173,8 +173,14 @@ def _grant_reader(conn: psycopg.Connection, role: str) -> None:
     from psycopg import sql  # noqa: PLC0415
 
     r = sql.Identifier(role)
-    conn.execute(sql.SQL("GRANT USAGE ON SCHEMA docs TO {}").format(r))
-    conn.execute(sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA docs TO {}").format(r))
+    try:
+        conn.execute(sql.SQL("GRANT USAGE ON SCHEMA docs TO {}").format(r))
+        conn.execute(sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA docs TO {}").format(r))
+    except psycopg.errors.UndefinedObject as exc:
+        raise DocumentError(
+            f"the read-only role {role!r} does not exist in this database server. Create it first "
+            "(`va load` creates the default one) or pass --reader-role with a role that exists"
+        ) from exc
 
 
 def search(

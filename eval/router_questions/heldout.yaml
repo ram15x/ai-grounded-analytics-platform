@@ -1,0 +1,43 @@
+# LOCKED. Router held-out questions (slice 2e). Nothing in the repository reads this file, and
+# nothing derived from it may be shown to a prompt-tuning step: not in a prompt, not as an example,
+# not to choose between prompt variants. It is to be used once, after the router prompt is frozen,
+# through a procedure that is written down and pre-registered first (docs/HELDOUT.md). Same
+# conventions as dev.yaml. Author-written, not an independent benchmark.
+description: Router held-out questions (12). Locked.
+questions:
+- id: R-H-01
+  route: data
+  question: "Which five products sold the most units?"
+- id: R-H-02
+  route: data
+  question: "What was gross revenue in November 2011?"
+- id: R-H-03
+  route: data
+  question: "How many orders did Germany place?"
+- id: R-H-04
+  route: documents
+  question: "For how long are warehouse CCTV recordings kept?"
+- id: R-H-05
+  route: documents
+  question: "What is the longest an out-of-stock item can stay on backorder?"
+- id: R-H-06
+  route: documents
+  question: "How quickly must a customer complaint be acknowledged?"
+- id: R-H-07
+  route: both
+  question: "What was net revenue for France, and how many working days does delivery to France take?"
+- id: R-H-08
+  route: both
+  question: "How many distinct customers did the UK have, and within how many days can a price match be claimed?"
+- id: R-H-09
+  route: both
+  question: "What was the cancellation rate in Germany, and how long are customer records kept?"
+- id: R-H-10
+  route: abstain
+  question: "Can you tell me more about that?"
+- id: R-H-11
+  route: abstain
+  question: "Which customers are likely to leave us next year?"
+- id: R-H-12
+  route: abstain
+  question: "What is the situation?"

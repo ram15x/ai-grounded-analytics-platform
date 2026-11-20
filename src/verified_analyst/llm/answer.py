@@ -72,6 +72,47 @@ def make_retriever(readonly_url: str, k: int = 3, search_fn: Search | None = Non
     return retrieve
 
 
+def decide_route(
+    question: str,
+    *,
+    layer: SemanticLayer,
+    router: Router,
+    run: RunContext,
+    corpus_description: str,
+    max_tokens: int | None = None,
+) -> tuple[RouteOutput | None, list[dict[str, Any]], str]:
+    """Ask the router model, with one more try if its reply is not a valid route. Returns the
+    route (None when it gave no valid one), one event per reply, and the abstain reason to use
+    when the route is None ("route_failed", or "budget", "sensitivity", "provider_error")."""
+    events: list[dict[str, Any]] = []
+    for _ in range(ROUTE_ATTEMPTS):
+        req = route_request(layer, question, corpus_description)
+        if max_tokens:
+            req = dataclasses.replace(req, max_tokens=max_tokens)
+        try:
+            got = router.call(req, run)
+        except BudgetExceeded:
+            return None, events, "budget"
+        except SensitivityRefusal:
+            return None, events, "sensitivity"
+        except (AllProvidersFailed, CassetteMiss):
+            return None, events, "provider_error"
+        ev: dict[str, Any] = {"step": "route", "json_ok": False, "schema_ok": False}
+        events.append(ev)
+        try:
+            if got.finish_reason == JSON_REJECTED:
+                raise ValueError(REJECTED_TEXT)
+            raw = _json(got.text)
+            ev["json_ok"] = True
+            route = RouteOutput.model_validate(raw)
+            ev["schema_ok"] = True
+            ev["route"] = route.route
+            return route, events, ""
+        except (ValueError, ValidationError):
+            continue
+    return None, events, "route_failed"
+
+
 def answer_question(
     question: str,
     *,
@@ -94,34 +135,13 @@ def answer_question(
                                  "planner_reply": None}  # fmt: skip
         return result
 
-    route: RouteOutput | None = None
-    for _ in range(ROUTE_ATTEMPTS):
-        req = route_request(layer, question, corpus_description)
-        if max_tokens:
-            req = dataclasses.replace(req, max_tokens=max_tokens)
-        try:
-            got = router.call(req, run)
-        except BudgetExceeded:
-            return stop("budget")
-        except SensitivityRefusal:
-            return stop("sensitivity")
-        except (AllProvidersFailed, CassetteMiss):
-            return stop("provider_error")
-        ev: dict[str, Any] = {"step": "route", "json_ok": False, "schema_ok": False}
-        result.events.append(ev)
-        try:
-            if got.finish_reason == JSON_REJECTED:
-                raise ValueError(REJECTED_TEXT)
-            raw = _json(got.text)
-            ev["json_ok"] = True
-            route = RouteOutput.model_validate(raw)
-            ev["schema_ok"] = True
-            ev["route"] = route.route
-            break
-        except (ValueError, ValidationError):
-            continue
+    route, events, why = decide_route(
+        question, layer=layer, router=router, run=run, corpus_description=corpus_description,
+        max_tokens=max_tokens,
+    )  # fmt: skip
+    result.events.extend(events)
     if route is None:
-        return stop("route_failed")
+        return stop(why)
     if route.route == "abstain":
         return stop(route.reason or "ambiguous", source="router")
     result.route = route.route

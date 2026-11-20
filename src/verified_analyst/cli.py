@@ -425,6 +425,32 @@ def cmd_live_probe(args: argparse.Namespace) -> int:
     return 3 if out["stopped_on_auth"] else 4 if out["stopped_early"] else 0
 
 
+def cmd_route_probe(args: argparse.Namespace) -> int:
+    from .llm import route_probe  # noqa: PLC0415
+    from .llm.live import default_out_dir, redact  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    layer = load_semantic_layer()
+    url = readonly_database_url()
+    opts = route_probe.RouteProbeOptions(
+        provider=args.provider,
+        model=args.model,
+        out_dir=Path(args.out_dir) if args.out_dir else default_out_dir(args.provider, args.model),
+        max_requests=args.max_requests,
+        token_cap=args.token_cap,
+        max_tokens=args.max_tokens,
+        route_only=args.route_only,
+    )
+    out = route_probe.run_route_probe(
+        load_router_settings(), opts, layer=layer, readonly_url=url,
+        known_values=catalogue(layer, url), env=os.environ,
+    )  # fmt: skip
+    print(redact(out["markdown"], os.environ))
+    print(f"files written to: {out['out_dir']}")
+    print("Nothing was recorded and nothing was committed.")
+    return 3 if out["stopped_on_auth"] else 4 if out["stopped_early"] else 0
+
+
 def _request_cap(text: str) -> int:
     try:
         n = int(text)
@@ -539,6 +565,23 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--quota-check", action="store_true", help="3 extra requests, see the report")
     lp.add_argument("--no-record", action="store_true", help="do not record cassettes")
     lp.set_defaults(fn=cmd_live_probe)
+    rt = sub.add_parser("route", help="router and injection probe (needs a key in the environment)")
+    rt_sub = rt.add_subparsers(dest="route_cmd", required=True)
+    rp = rt_sub.add_parser("probe", help="dev router and injection questions against ONE model")
+    rp.add_argument("--provider", required=True)
+    rp.add_argument("--model", required=True)
+    rp.add_argument("--out-dir", help="default data/live_runs/<time>_<provider>_<model>")
+    rp.add_argument(
+        "--max-requests", type=_request_cap, default=None, metavar="N",
+        help="HTTP request cap for the run, 1 to 60 (default: the config value, 25)",
+    )  # fmt: skip
+    rp.add_argument("--token-cap", type=int, default=None, help="lowers the config cap only")
+    rp.add_argument("--max-tokens", type=int, default=None, help="completion allowance per call")
+    rp.add_argument(
+        "--route-only", action="store_true",
+        help="only the route call for the 12 router questions (12 requests, no injection set)",
+    )  # fmt: skip
+    rp.set_defaults(fn=cmd_route_probe)
     return p
 
 

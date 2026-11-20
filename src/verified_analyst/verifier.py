@@ -29,6 +29,7 @@ from .claims import (
 )
 from .compiler import CompileError, MetricQuery, compile_query
 from .context import ContextFail, check_cell_context
+from .documents.untrusted import blocked_overlap
 from .extract import ExtractedNumber, extract_numbers
 from .semantic import SemanticLayer, norm_term
 
@@ -472,6 +473,11 @@ class Verifier:
         s, e = ref.span
         if not (0 <= s < e <= len(text)):
             raise _Fail(UNSUPPORTED, "span_out_of_range")
+        flagged = blocked_overlap(text, s, e)
+        if flagged:
+            # Instruction-like text, hidden comments, invisible characters and spoofed marks
+            # cannot be cited as a verified quote (docs/INJECTION.md).
+            raise _Fail(UNSUPPORTED, "passage_span_flagged", ",".join(flagged))
         shown = item.value
         assert shown is not None
         for p in extract_numbers(text[s:e]).ok:

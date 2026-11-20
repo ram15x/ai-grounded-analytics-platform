@@ -115,6 +115,7 @@ def render(report: Report | TemplateReport) -> str:
 
 def cmd_docs_ingest(args: argparse.Namespace) -> int:
     from .documents.store import ingest, read_document  # noqa: PLC0415
+    from .documents.untrusted import scan  # noqa: PLC0415
     from .warehouse.load import READONLY_ROLE_DEFAULT  # noqa: PLC0415
 
     files: list[Path] = []
@@ -141,19 +142,32 @@ def cmd_docs_ingest(args: argparse.Namespace) -> int:
             )
             state = "stored" if r.changed else "unchanged"
             print(f"{state:<9} {r.doc_key} ({r.chunks} chunks)")
+            kinds = sorted({fl.kind for fl in scan(text)})
+            if kinds:
+                print(
+                    f"warning: {r.doc_key} has text flagged as {', '.join(kinds)}; it is stored "
+                    "as written, withheld from model prompts and cannot be cited where flagged",
+                    file=sys.stderr,
+                )
     return 0
 
 
 def cmd_docs_search(args: argparse.Namespace) -> int:
     from .documents.store import search  # noqa: PLC0415
+    from .documents.untrusted import printable, scan  # noqa: PLC0415
 
     hits = search(readonly_database_url(), args.query, args.k, args.config, args.mode)
     if args.json:
-        print(json.dumps([h.__dict__ for h in hits], indent=2, ensure_ascii=False))
+        rows = [{**h.__dict__, "flags": sorted({f.kind for f in scan(h.text)})} for h in hits]
+        print(json.dumps(rows, indent=2))  # ASCII-escaped: invisible characters stay visible
         return 0
     for h in hits:
-        print(f"{h.score:6.3f}  {h.passage_id}  [{h.char_start}:{h.char_end}] {h.title}")
+        title = printable(h.title, 80)
+        print(f"{h.score:6.3f}  {h.passage_id}  [{h.char_start}:{h.char_end}] {title}")
         print(f"        {h.text[:160]!r}")
+        flags = sorted({f.kind for f in scan(h.text)})
+        if flags:
+            print(f"        flagged: {', '.join(flags)} (cannot be cited where flagged)")
     if not hits:
         print("no passage matched")
     return 0

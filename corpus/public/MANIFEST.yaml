@@ -1,0 +1,17 @@
+# Provenance of every real public document in this folder. Empty on purpose: nothing has been
+# downloaded and nothing may be added without the owner's approval (docs/PUBLIC_DOCUMENTS_PLAN.md).
+# tests/test_public_manifest.py fails if a file here has no entry, if an entry has no file, or if
+# an entry lacks any field below.
+#
+# Entry shape:
+#   - doc_key: lowercase key used by `va docs ingest` (file name without extension)
+#     file: file name in this folder (.md or .txt)
+#     title: page or document title
+#     source_url: https address the text was taken from
+#     licence: OGL-3.0            # only licences listed in tests/test_public_manifest.py
+#     licence_url: https address of the licence text or the page's licence statement
+#     licence_checked_on_page: true   # the owner (or an approved check) saw the licence on that page
+#     retrieved: 2026-01-31       # date the text was copied
+#     sha256: hex digest of the file as stored
+#     attribution: the exact attribution sentence the licence asks for
+documents: []

@@ -18,6 +18,9 @@ EXPECTED = {
     "05_bad_derivation.json": ("partially_verified", {"DERIVATION_MISMATCH": 1}),
     "06_scale_error.json": ("partially_verified", {"UNSUPPORTED": 1}),
     "07_ambiguous_number.json": ("partially_verified", {"AMBIGUOUS": 1}),
+    "08_template_verified.json": ("verified", {"VERIFIED": 3, "VERIFIED_DERIVED": 1}),
+    "09_template_number_typed_by_model.json": ("partially_verified", {"UNSUPPORTED": 1}),
+    "10_template_wrong_row.json": ("partially_verified", {"UNSUPPORTED": 1}),
 }
 
 

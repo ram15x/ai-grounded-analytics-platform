@@ -1,0 +1,97 @@
+{
+  "question": "Which countries earn the most, and how concentrated is revenue?",
+  "template": "EIRE led with {uk} of net revenue, ahead of EIRE at {eire}. The UK is {share} of the {total} total.",
+  "queries": [
+    {
+      "id": "q_top",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count"
+        ],
+        "dimensions": [
+          "country"
+        ],
+        "order_by": [
+          {
+            "by": "net_revenue",
+            "desc": true
+          }
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "id": "q_total",
+      "metric_query": {
+        "metrics": [
+          "net_revenue",
+          "order_count",
+          "aov"
+        ]
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "uk",
+      "label": "net revenue",
+      "unit": "currency",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_top",
+        "column": "net_revenue",
+        "row_key": {
+          "country": "United Kingdom"
+        }
+      }
+    },
+    {
+      "id": "eire",
+      "label": "net revenue",
+      "unit": "currency",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_top",
+        "column": "net_revenue",
+        "row_key": {
+          "country": "EIRE"
+        }
+      }
+    },
+    {
+      "id": "share",
+      "label": "share of net revenue",
+      "unit": "percent",
+      "provenance": {
+        "kind": "derived",
+        "op": "percent_of",
+        "args": [
+          {
+            "kind": "cell",
+            "query_id": "q_top",
+            "column": "net_revenue",
+            "row_key": {
+              "country": "United Kingdom"
+            }
+          },
+          {
+            "kind": "cell",
+            "query_id": "q_total",
+            "column": "net_revenue"
+          }
+        ]
+      }
+    },
+    {
+      "id": "total",
+      "label": "net revenue",
+      "unit": "currency",
+      "provenance": {
+        "kind": "cell",
+        "query_id": "q_total",
+        "column": "net_revenue"
+      }
+    }
+  ]
+}

@@ -17,11 +17,12 @@ from pathlib import Path
 import psycopg
 from pydantic import ValidationError
 
-from .claims import AnswerDoc
+from .claims import AnswerDoc, TemplateAnswer
 from .compiler import CompileError, compile_query
 from .config import ConfigError, admin_database_url, readonly_database_url
 from .guard import GuardError, QueryTimeout, execute_guarded
 from .semantic import SemanticError, load_semantic_layer
+from .template import TemplateReport, is_template_doc, verify_template
 from .verifier import ExecutedQuery, Report, verify_answer
 
 
@@ -49,21 +50,31 @@ def catalogue(layer, readonly_url: str) -> dict[str, set[str]]:
     return out
 
 
-def run_verify(path: Path, readonly_url: str) -> Report:
+def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
     layer = load_semantic_layer()
-    doc = AnswerDoc.model_validate_json(path.read_text(encoding="utf-8"))
-    executed = {q.id: _execute(layer, readonly_url, q) for q in doc.queries}
+    raw = json.loads(path.read_text(encoding="utf-8"))
 
     def shadow(mq):
         cq = compile_query(layer, mq)
         res = execute_guarded(readonly_url, cq.sql)
         return ExecutedQuery("shadow", cq.sql, res.columns, res.rows, metric_query=mq)
 
-    return verify_answer(layer, doc, executed, shadow, catalogue(layer, readonly_url))
+    known = catalogue(layer, readonly_url)
+    if isinstance(raw, dict) and is_template_doc(raw):
+        tdoc = TemplateAnswer.model_validate(raw)
+        executed = {q.id: _execute(layer, readonly_url, q) for q in tdoc.queries}
+        return verify_template(layer, tdoc, executed, shadow, known)
+    doc = AnswerDoc.model_validate(raw)
+    executed = {q.id: _execute(layer, readonly_url, q) for q in doc.queries}
+    return verify_answer(layer, doc, executed, shadow, known)
 
 
-def render(report: Report) -> str:
+def render(report: Report | TemplateReport) -> str:
     lines = [f"STATUS: {report.status}"]
+    if isinstance(report, TemplateReport):
+        lines.append(f"  rendered: {report.rendered}")
+        lines += [f"  ISSUE {i.code}: {i.detail}" for i in report.issues]
+        report = report.report
     for v in report.verdicts:
         extra = f" ({v.detail})" if v.detail else ""
         lines.append(f"  {v.verdict:<19} {v.text!r:<22} {v.reason}{extra}")

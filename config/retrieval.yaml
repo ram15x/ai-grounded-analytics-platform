@@ -87,6 +87,7 @@ rerankers:
     hosted: true
     env_key: JINA_API_KEY
     url: https://api.jina.ai/v1/rerank
+    min_interval_s: 0.7  # stays under the 100 requests per minute free limit
     model: jina-reranker-v3.5
     depth: 20
   jina_reranker_v2_base_multilingual:
@@ -94,6 +95,7 @@ rerankers:
     hosted: true
     env_key: JINA_API_KEY
     url: https://api.jina.ai/v1/rerank
+    min_interval_s: 0.7  # stays under the 100 requests per minute free limit
     model: jina-reranker-v2-base-multilingual
     depth: 20
   # A local cross-encoder through the optional `sentence-transformers` package (pip install

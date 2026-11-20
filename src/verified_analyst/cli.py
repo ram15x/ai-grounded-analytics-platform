@@ -179,6 +179,36 @@ def cmd_docs_eval(args: argparse.Namespace) -> int:
     return 0 if not out["unreachable_anchors"] else 1
 
 
+def cmd_docs_probe(args: argparse.Namespace) -> int:
+    import time  # noqa: PLC0415
+
+    from .documents.metrics import load_questions  # noqa: PLC0415
+    from .documents.probe import render_markdown, run_probe, write_report  # noqa: PLC0415
+    from .documents.settings import load_retrieval_settings  # noqa: PLC0415
+
+    settings = load_retrieval_settings(Path(args.config) if args.config else None)
+    res = run_probe(
+        settings=settings,
+        embedder_name=args.embedder,
+        reranker_name=args.reranker,
+        admin_url=admin_database_url(),
+        readonly_url=readonly_database_url(),
+        questions=load_questions(DEV_DOC_QUESTIONS),  # dev questions only; there is no option
+        env=os.environ,
+        max_requests=args.max_requests,
+        reader_role=args.reader_role,
+    )
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    tail = args.embedder + (f"_{args.reranker}" if args.reranker else "")
+    out_dir = (
+        Path(args.out_dir) if args.out_dir else Path("data") / "live_runs" / f"{stamp}_docs_{tail}"
+    )
+    write_report(res.report, out_dir)
+    print(render_markdown(res.report))
+    print(f"report written to {out_dir}")
+    return res.exit_code
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     report = run_verify(Path(args.answer), readonly_database_url())
     print(json.dumps(report.as_dict(), indent=2) if args.json else render(report))
@@ -406,6 +436,18 @@ def build_parser() -> argparse.ArgumentParser:
     de.add_argument("--config", choices=["english", "simple"], default="english")
     de.add_argument("--mode", choices=["any", "all"], default="any")
     de.set_defaults(fn=cmd_docs_eval)
+    dp = dc_sub.add_parser(
+        "probe",
+        help="compare keyword, vector, hybrid and reranked search on the dev questions "
+        "(calls the embedder you name; hosted ones only see public documents)",
+    )
+    dp.add_argument("--embedder", required=True, help="a name from config/retrieval.yaml")
+    dp.add_argument("--reranker", default=None, help="optional name from config/retrieval.yaml")
+    dp.add_argument("--max-requests", type=int, default=None, help="per transport; at most 150")
+    dp.add_argument("--reader-role", default=None, help="read-only role to grant access to")
+    dp.add_argument("--config", default=None, help="another retrieval config file")
+    dp.add_argument("--out-dir", default=None, help="default data/live_runs/<time>_docs_<names>")
+    dp.set_defaults(fn=cmd_docs_probe)
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(

@@ -57,6 +57,7 @@ class RerankerSettings(_M):
     env_key: str | None = None
     timeout_s: float = Field(default=60, gt=0, le=300)
     depth: int = Field(default=20, ge=2, le=100)  # candidates handed to the reranker
+    min_interval_s: float = Field(default=0.0, ge=0, le=30)  # pause between requests (rate limits)
 
     @model_validator(mode="after")
     def _check(self) -> RerankerSettings:

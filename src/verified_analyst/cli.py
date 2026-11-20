@@ -36,6 +36,18 @@ def _execute(layer, readonly_url: str, spec) -> ExecutedQuery:
     )
 
 
+def catalogue(layer, readonly_url: str) -> dict[str, set[str]]:
+    """All values of small closed dimensions, so the verifier can spot a wrong scope in prose."""
+    out: dict[str, set[str]] = {}
+    for name, dim in layer.dimensions.items():
+        if dim.enumerable and dim.type == "text":
+            sql = f"SELECT DISTINCT {dim.column} AS v FROM {layer.source.relation} AS {layer.source.alias}"
+            out[name] = {
+                str(r[0]) for r in execute_guarded(readonly_url, sql).rows if r[0] is not None
+            }
+    return out
+
+
 def run_verify(path: Path, readonly_url: str) -> Report:
     layer = load_semantic_layer()
     doc = AnswerDoc.model_validate_json(path.read_text(encoding="utf-8"))
@@ -46,7 +58,7 @@ def run_verify(path: Path, readonly_url: str) -> Report:
         res = execute_guarded(readonly_url, cq.sql)
         return ExecutedQuery("shadow", cq.sql, res.columns, res.rows, metric_query=mq)
 
-    return verify_answer(layer, doc, executed, shadow)
+    return verify_answer(layer, doc, executed, shadow, catalogue(layer, readonly_url))
 
 
 def render(report: Report) -> str:

@@ -28,6 +28,7 @@ dimensions:
     type: text
     description: Country recorded on the invoice
     synonyms: [market, by country]
+    enumerable: true
   stock_code:
     column: l.stock_code
     type: text
@@ -38,6 +39,7 @@ dimensions:
     type: text
     description: merchandise or non_merchandise (postage, fees, manual lines)
     synonyms: [product type]
+    enumerable: true
   customer_id:
     column: l.customer_id
     type: text

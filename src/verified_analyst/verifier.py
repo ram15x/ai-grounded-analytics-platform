@@ -28,6 +28,7 @@ from .claims import (
     to_decimal,
 )
 from .compiler import CompileError, MetricQuery, compile_query
+from .context import ContextFail, check_cell_context
 from .extract import ExtractedNumber, extract_numbers
 from .semantic import SemanticLayer, norm_term
 
@@ -131,7 +132,11 @@ class Verifier:
         queries: dict[str, ExecutedQuery],
         passages: dict[str, str] | None = None,
         shadow: ShadowFn | None = None,
+        known_values: dict[str, set[str]] | None = None,
     ):
+        self.known_values = known_values or {}
+        self._prose = ""
+        self._spans: list[tuple[int, int]] = []
         self.layer = layer
         self.queries = queries
         self.passages = passages or {}
@@ -141,7 +146,9 @@ class Verifier:
 
     def verify(self, prose: str, claims: list[Claim]) -> Report:
         report = Report()
+        self._prose = prose
         extraction = extract_numbers(prose)
+        self._spans = [(i.start, i.end) for i in extraction.items if i.status != "excluded"]
         report.excluded = list(extraction.excluded)
         prose_values = {i.value for i in extraction.ok if i.value is not None}
         remaining = list(claims)
@@ -209,8 +216,9 @@ class Verifier:
                 return v(VERIFIED, "row_count", expected)
             if isinstance(prov, CellRef):
                 cell = self._cell(prov)
-                expected, note = self._bind(item, claim, cell)
+                expected, note, metric = self._bind(item, claim, cell)
                 self._compare(item, claim, expected, UNSUPPORTED, derived=False)
+                self._context(item, prov, cell, metric)
                 return v(VERIFIED, note, expected)
             assert isinstance(prov, DerivedRef)
             expected = self._derive(prov, prose_values)
@@ -286,7 +294,9 @@ class Verifier:
         except ValueError as exc:
             raise _Fail(UNSUPPORTED, "cell_not_numeric") from exc
 
-    def _bind(self, item: ExtractedNumber, claim: Claim, cell: _Cell) -> tuple[Decimal, str]:
+    def _bind(
+        self, item: ExtractedNumber, claim: Claim, cell: _Cell
+    ) -> tuple[Decimal, str, str | None]:
         layer = self.layer
         col_metric = cell.column if cell.column in layer.metrics else None
         label_metric = layer.resolve_metric(claim.label)
@@ -299,7 +309,7 @@ class Verifier:
                 and cell.column not in layer.dimensions
             ):
                 raise _Fail(UNSUPPORTED, "label_unbound", claim.label)
-            return cell.value, "cell"
+            return cell.value, "cell", None
         m = layer.metrics[metric]
         kind = m.unit_kind
         if (
@@ -317,7 +327,7 @@ class Verifier:
             raise _Fail(UNSUPPORTED, "unit_incompatible", f"{item.unit} vs {m.unit}")
         self._definition_check(cell, metric)
         value = cell.value * 100 if kind == "ratio" and item.unit == "percent" else cell.value
-        return value, "cell_bound"
+        return value, "cell_bound", metric
 
     def _definition_check(self, cell: _Cell, metric: str) -> None:
         """Step F: the executed query must be the metric's definition (compiled or shadowed)."""
@@ -359,6 +369,20 @@ class Verifier:
                 "disagrees_with_metric_definition",
                 f"canonical {canon_val}, query {cell.value}",
             )
+
+    def _context(
+        self, item: ExtractedNumber, ref: CellRef, cell: _Cell, metric: str | None
+    ) -> None:
+        q = cell.query
+        try:
+            check_cell_context(
+                prose=self._prose, start=item.start, end=item.end, layer=self.layer,
+                columns=q.columns, rows=q.rows, row=cell.row, row_key=ref.row_key,
+                metric_query=q.metric_query or q.declared_metric_query, metric=metric,
+                known_values=self.known_values, number_spans=self._spans,
+            )  # fmt: skip
+        except ContextFail as f:
+            raise _Fail(f.verdict, f.reason, f.detail) from f
 
     # ---- derived
 
@@ -458,6 +482,7 @@ def verify_answer(
     doc: AnswerDoc,
     executed: dict[str, ExecutedQuery],
     shadow: ShadowFn | None = None,
+    known_values: dict[str, set[str]] | None = None,
 ) -> Report:
     passages = {p.id: p.text for p in doc.passages}
-    return Verifier(layer, executed, passages, shadow).verify(doc.prose, doc.claims)
+    return Verifier(layer, executed, passages, shadow, known_values).verify(doc.prose, doc.claims)

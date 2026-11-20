@@ -28,6 +28,7 @@ class Dimension(BaseModel):
     type: Literal["text", "date"]
     description: str = ""
     synonyms: list[str] = Field(default_factory=list)
+    enumerable: bool = False  # small closed set: the verifier may load all its values
 
 
 class Metric(BaseModel):

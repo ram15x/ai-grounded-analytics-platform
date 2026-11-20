@@ -323,10 +323,18 @@ def test_shadow_recomputation_agrees_and_disagrees():
 
 def test_lower_and_upper_bounds(q1):
     base = lambda t, v: claim("c", t, v, "currency", "net revenue", cell())  # noqa: E731
-    assert verdicts(run("Over £1,000.", [base("£1,000", "1000")], [q1])) == ["VERIFIED"]
-    assert verdicts(run("Over £2,000.", [base("£2,000", "2000")], [q1])) == ["UNSUPPORTED"]
-    assert verdicts(run("Under £2,000.", [base("£2,000", "2000")], [q1])) == ["VERIFIED"]
-    assert verdicts(run("Under £1,000.", [base("£1,000", "1000")], [q1])) == ["UNSUPPORTED"]
+    assert verdicts(run("France net revenue was over £1,000.", [base("£1,000", "1000")], [q1])) == [
+        "VERIFIED"
+    ]
+    assert verdicts(run("France net revenue was over £2,000.", [base("£2,000", "2000")], [q1])) == [
+        "UNSUPPORTED"
+    ]
+    assert verdicts(
+        run("France net revenue was under £2,000.", [base("£2,000", "2000")], [q1])
+    ) == ["VERIFIED"]
+    assert verdicts(
+        run("France net revenue was under £1,000.", [base("£1,000", "1000")], [q1])
+    ) == ["UNSUPPORTED"]
 
 
 def test_direction_word_must_match_sign(q1):

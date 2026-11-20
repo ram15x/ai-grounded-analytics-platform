@@ -13,10 +13,12 @@ verifier says nothing about whether the document is right (ARCHITECTURE section 
 ## What exists today
 
 `passage` claims verify that a number appears in a cited span of a passage, with the same unit and a
-compatible precision (`Verifier._passage`). The passage text, however, comes from the answer file
-(`AnswerDoc.passages`), which in a live run is written by the model. **A model that writes both the
-passage and the claim would verify against its own words.** Phase 2 closes that: passages are
-looked up in a store by id, and the stored text must hash to the recorded value.
+compatible precision (`Verifier._passage`). The passage text used to come from the answer file (`AnswerDoc.passages`),
+which in a live run is written by the model. **A model that writes both the passage and the claim
+would verify against its own words.** Closed in slice 2a and tightened afterwards: passages are
+looked up in a store by id and the stored text must hash to the recorded value; with no store at
+all, `verify_answer` marks every passage claim UNSUPPORTED (`no_passage_store`) and only a test that
+passes `trust_passages_written_in_the_answer_file=True` can use the answer file's text.
 
 ## Slices
 
@@ -100,7 +102,64 @@ network, so it can be built and tested in full here.
   (`mode=any`). The all-words mode (`mode=all`) is kept for quoted phrases and returns nothing for
   most sentence questions.
 
-### Measured here, with the caveats that matter
+## The grown corpus (decision of the owner, 2026-11-20)
+
+80 invented documents (the 14 hand-written ones plus 66 written by `corpus/build_synthetic.py`) and
+65 dev questions. The held-out file is **unchanged and locked**: 12 questions, 1 without an answer.
+It is still the same author's work and **it is not an independent benchmark**, and neither is the
+dev set. What was added to make retrieval harder:
+
+- **Near-duplicate families** that differ in one number or entity: delivery to 8 countries, 7
+  supplier notes, 6 category notes, 4 quarterly reviews with tables, plus an annual summary with
+  figures and a table of customer segments.
+- **Superseded, draft and proposed documents** as hard negatives (old delivery, service, trade,
+  stock and pricing policies; an unapproved revenue draft; a trade returns policy; a rejected 2012
+  proposal).
+- **14 further policies, 8 minutes, memos and FAQs, 6 unrelated documents**, and **4 more hostile
+  documents** (an instruction in a pricing note, a fake passage citation with a fake "verified"
+  mark, an instruction in an HTML comment, a fake "administrator mode" line). They are stored as
+  plain text and the injection slice will test them.
+- **Dev questions:** 12 paraphrases written to share few words with their document (checked by a
+  crude overlap measure, at most 0.5), 6 near-duplicate discriminations, 5 table and 2 figure
+  questions, 4 superseded-text questions, 2 hostile-document questions, and **13 no-answer questions
+  (20%)**, several of them near misses such as "delivery to Brazil" while delivery notes for other
+  countries exist.
+
+Mechanical checks (`tests/test_corpus.py`): the generator reproduces the committed files; every
+anchor sits in its own document and in no other; every anchor fits inside one chunk; the no-answer
+share is at least 8 per 40.
+
+**Two label collisions were found and fixed on the corpus side.** The new FAQ repeated the 28-day
+return window and the £250.00 trade minimum, and the new trade returns policy said "within 14 days
+of delivery", which is also the anchor of a held-out question. The new documents were reworded;
+the held-out file was not touched.
+
+### Measured on the grown corpus (dev questions, build container)
+
+Chunk size 800 characters, so every document is one chunk (80 chunks). 52 questions with an answer
+are scored; the 13 without one are not.
+
+| Text-search config | Mode | recall@1 | recall@3 | recall@5 | recall@10 | MRR | nDCG@5 |
+|---|---|---|---|---|---|---|---|
+| english | any | 0.60 | 0.77 | 0.85 | 0.92 | 0.70 | 0.73 |
+| english | all | 0.10 | 0.13 | 0.15 | 0.15 | 0.12 | 0.13 |
+| simple | any | 0.44 | 0.67 | 0.79 | 0.85 | 0.57 | 0.62 |
+| simple | all | 0.02 | 0.02 | 0.02 | 0.02 | 0.02 | 0.02 |
+
+By kind, `english` / `any`: lookup 16 questions, recall@5 0.94; near-duplicate 6, recall@1 0.33 and
+recall@5 1.00; table 5, recall@5 1.00; paraphrase with low overlap 12, **recall@1 0.33, recall@5
+0.42, MRR 0.40**. At 300 characters (146 chunks) `english` / `any` gives recall@5 0.85 and MRR 0.65.
+All 13 no-answer questions still returned passages, because keyword search cannot say "nothing
+relevant".
+
+How to read this. The corpus now separates cases: keyword search is weak on paraphrases, which is
+the gap that vectors and a reranker are meant to close, and good enough on exact wording. The
+defaults were chosen earlier on the first dev questions, so they are not independent of this
+set. These are mechanics numbers on invented text by the author, **not accuracy claims**, and the
+held-out set has not been scored.
+
+
+### Measured on the first, small corpus (kept for comparison; superseded by the grown-corpus section above)
 
 Mechanics check on the 21 author-written dev questions over the 14-document synthetic corpus, run
 in the build container (20 scored, 1 with no answer in the corpus). Chunk size 800 characters.
@@ -122,6 +181,5 @@ held-out file has not been scored.
 
 ### Next
 
-2b needs the pgvector image (compose now uses it; see docs/DOCKER_PGVECTOR_SWITCH.md), a harder and larger corpus
-so that methods can be told apart, and your documents ingested locally. Both are decisions for the
-owner; see the questions in the hand-over message.
+2b uses the pgvector image (docs/DOCKER_PGVECTOR_SWITCH.md) and the grown corpus above. Embedding
+and reranker candidates are measured by probe runs the owner executes; see the next section.

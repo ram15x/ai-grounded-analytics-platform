@@ -266,6 +266,16 @@ def test_the_test_suite_blocks_outbound_network_connections():
         sock.connect(("203.0.113.7", 443))
 
 
+def test_the_network_guard_does_not_need_af_unix_which_windows_lacks(monkeypatch):
+    """The guard once read socket.AF_UNIX directly and crashed with AttributeError on Windows."""
+    import socket
+
+    monkeypatch.delattr(socket, "AF_UNIX", raising=False)
+    assert not hasattr(socket, "AF_UNIX")  # the autouse guard now runs as it would on Windows
+    with socket.socket() as sock, pytest.raises(AssertionError, match="must not use the network"):
+        sock.connect(("203.0.113.7", 443))
+
+
 # ---- User-Agent (urllib layer, with urlopen mocked: no network) ----
 
 

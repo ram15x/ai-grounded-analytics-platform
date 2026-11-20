@@ -78,7 +78,9 @@ def _no_outbound_network(monkeypatch):
     real_connect = socket.socket.connect
 
     def guarded(self, address):
-        if self.family == socket.AF_UNIX or (
+        # Windows has no AF_UNIX: look it up here, and treat its absence as "no unix sockets"
+        unix = getattr(socket, "AF_UNIX", None)
+        if (unix is not None and self.family == unix) or (
             isinstance(address, tuple) and str(address[0]) in ("127.0.0.1", "::1", "localhost")
         ):
             return real_connect(self, address)

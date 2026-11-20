@@ -19,6 +19,7 @@ from typing import Any
 import psycopg
 
 from verified_analyst.config import connect_kwargs
+from verified_analyst.documents import abstention, fusion_study
 from verified_analyst.documents.embed import Embedder, EmbeddingError
 from verified_analyst.documents.embed_http import build_embedder
 from verified_analyst.documents.fusion import Search, hybrid, reranked
@@ -134,7 +135,12 @@ def run_probe(
     clock: Callable[[], float] = time.perf_counter,
     local_library: Callable | None = None,
     notice: Callable[[str], None] | None = None,
+    study_fusion: bool = False,
 ) -> ProbeResult:
+    if reader_role is None:
+        from verified_analyst.warehouse.load import READONLY_ROLE_DEFAULT  # noqa: PLC0415
+
+        reader_role = READONLY_ROLE_DEFAULT  # the role `va docs ingest` grants by default
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if embedder_name not in settings.embedders:
         raise DocumentError(
@@ -231,6 +237,13 @@ def run_probe(
                 lambda q, hits: rk.score(q, [h.text for h in hits]),
                 depth=rk.depth,
             )
+        report["abstention"] = {
+            "note": abstention.NOTE,
+            "keyword": abstention.profile(keyword, questions),
+            "vector": abstention.profile(vector, questions),
+        }
+        if study_fusion:
+            report["fusion_study"] = fusion_study.run_study(keyword, vector, questions, corpus)
         report["methods"] = {}
         for name, fn in methods.items():
             t0 = clock()
@@ -288,6 +301,19 @@ def render_markdown(rep: dict[str, Any]) -> str:
             lines.append(
                 f"| {name} | {cells} | {u['returned_something']} of {u['n']} | {m['seconds']} |"
             )
+    ab = rep.get("abstention")
+    if ab:
+        lines += ["", "## Questions with no answer in the documents", "", f"> {ab['note']}", ""]
+        lines += ["| search | no-answer returned nothing | separation (AUC) |", "|---|---|---|"]
+        for name in ("keyword", "vector"):
+            p = ab[name]
+            auc_ = p["auc"]
+            lines.append(
+                f"| {name} | {p['returned_nothing']['unanswerable']} of {p['unanswerable']['n']} "
+                f"| {'n/a' if auc_ is None else f'{auc_:.2f}'} |"
+            )
+    if rep.get("fusion_study"):
+        lines += ["", fusion_study.render_markdown(rep["fusion_study"])]
     return "\n".join(lines) + "\n"
 
 

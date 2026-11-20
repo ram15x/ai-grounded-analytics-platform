@@ -303,3 +303,43 @@ def test_a_local_model_that_fails_to_load_exits_2_and_is_reported(vector_db):
 
     res = probe(vector_db, "loc", settings=st, local_library=library, notice=lambda s: None)
     assert res.exit_code == 2 and res.report["stop"]["kind"] == "load_failed"
+
+
+@pytest.mark.db
+def test_probe_reports_abstention_and_an_optional_fusion_study(vector_db):
+    plain = probe(vector_db, "fake")
+    ab = plain.report["abstention"]
+    assert set(ab) == {"note", "keyword", "vector"} and "fusion_study" not in plain.report
+    assert ab["vector"]["unanswerable"]["n"] >= 1 or all(
+        q.evidence for q in QUESTIONS
+    )  # the 12-question slice may hold no unanswerable question
+    withfusion = probe(vector_db, "fake", study_fusion=True)
+    fs = withfusion.report["fusion_study"]
+    assert len(fs["grid"]) == 27 and fs["scope"] == "dev questions only"
+    md = render_markdown(withfusion.report)
+    assert "Fusion study" in md and "Questions with no answer" in md
+    assert withfusion.report["http"]["embedder"]["requests"] == 0
+
+
+@pytest.mark.db
+def test_probe_grants_the_default_read_only_role_when_none_is_given(vector_db, monkeypatch):
+    import verified_analyst.documents.probe as pr
+    from verified_analyst.warehouse.load import READONLY_ROLE_DEFAULT
+
+    seen = []
+    real = pr.ensure_vector_schema
+    monkeypatch.setattr(
+        pr,
+        "ensure_vector_schema",
+        lambda conn, role=None: seen.append(role) or real(conn, vector_db.role),
+    )
+    run_probe(
+        settings=settings(),
+        embedder_name="fake",
+        reranker_name=None,
+        admin_url=vector_db.admin_url,
+        readonly_url=vector_db.readonly_url,
+        questions=QUESTIONS,
+        env={},
+    )
+    assert seen == [READONLY_ROLE_DEFAULT] == ["va_readonly"]

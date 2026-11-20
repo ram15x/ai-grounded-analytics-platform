@@ -197,6 +197,7 @@ def cmd_docs_probe(args: argparse.Namespace) -> int:
         env=os.environ,
         max_requests=args.max_requests,
         reader_role=args.reader_role,
+        study_fusion=args.fusion_study,
     )
     stamp = time.strftime("%Y%m%d_%H%M%S")
     tail = args.embedder + (f"_{args.reranker}" if args.reranker else "")
@@ -444,7 +445,14 @@ def build_parser() -> argparse.ArgumentParser:
     dp.add_argument("--embedder", required=True, help="a name from config/retrieval.yaml")
     dp.add_argument("--reranker", default=None, help="optional name from config/retrieval.yaml")
     dp.add_argument("--max-requests", type=int, default=None, help="per transport; at most 150")
-    dp.add_argument("--reader-role", default=None, help="read-only role to grant access to")
+    dp.add_argument(
+        "--reader-role", default=None, help="read-only role to grant access to (default: as ingest)"
+    )
+    dp.add_argument(
+        "--fusion-study",
+        action="store_true",
+        help="also score a grid of fusion settings on the dev questions (no extra requests)",
+    )
     dp.add_argument("--config", default=None, help="another retrieval config file")
     dp.add_argument("--out-dir", default=None, help="default data/live_runs/<time>_docs_<names>")
     dp.set_defaults(fn=cmd_docs_probe)

@@ -57,6 +57,13 @@ def pytest_collection_modifyitems(config, items):
     reason = _db_skip_reason()
     if reason is None:
         return
+    if os.environ.get("VA_REQUIRE_DB") == "1":
+        raise pytest.UsageError(
+            reason.replace(
+                "database tests skipped", "VA_REQUIRE_DB=1 but the test database is unusable"
+            )
+            + f" [{len(db_items)} database tests would have been skipped]"
+        )
     skip = pytest.mark.skip(reason=reason)
     for item in db_items:
         item.add_marker(skip)

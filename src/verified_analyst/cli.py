@@ -14,11 +14,12 @@ import os
 import sys
 from pathlib import Path
 
+import psycopg
 from pydantic import ValidationError
 
 from .claims import AnswerDoc
 from .compiler import CompileError, compile_query
-from .config import admin_database_url, readonly_database_url
+from .config import ConfigError, admin_database_url, readonly_database_url
 from .guard import GuardError, QueryTimeout, execute_guarded
 from .semantic import SemanticError, load_semantic_layer
 from .verifier import ExecutedQuery, Report, verify_answer
@@ -172,6 +173,13 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except psycopg.Error as exc:
+        first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        print(f"error: database: {first}", file=sys.stderr)
+        return 2
     except (ValidationError, SemanticError, CompileError, GuardError, QueryTimeout) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

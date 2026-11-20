@@ -29,6 +29,10 @@ class Dimension(BaseModel):
     description: str = ""
     synonyms: list[str] = Field(default_factory=list)
     enumerable: bool = False  # small closed set: the verifier may load all its values
+    # other ways a sentence may name a value, keyed by the value as stored: {"United Kingdom":
+    # ["UK"]}. The binder uses them only to RECOGNISE a mention (never to accept a row on
+    # its own: an alias that names the cited row is AMBIGUOUS, see context.py).
+    value_aliases: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Metric(BaseModel):
@@ -42,6 +46,11 @@ class Metric(BaseModel):
     decimals: int = Field(ge=0, le=8)
     synonyms: list[str] = Field(default_factory=list)
     allowed_dimensions: list[str]
+    # Scopes this metric's own definition already applies, as {dimension: [values]}. A sentence
+    # may name such a value ("merchandise units") without the query filtering on it. It is
+    # honoured for THIS metric only, and the layer refuses a declaration its `expr` does not
+    # back up (see SemanticLayer._check). Never inherited by ratio metrics.
+    implicit_scopes: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _shape(self) -> Metric:
@@ -87,13 +96,51 @@ class SemanticLayer(BaseModel):
             for d in m.allowed_dimensions:
                 if d not in self.dimensions:
                     raise ValueError(f"{name}: unknown dimension {d!r}")
+            self._check_implicit_scopes(name, m)
             if m.kind == "ratio":
                 for ref in (m.numerator, m.denominator):
                     if ref not in self.metrics:
                         raise ValueError(f"{name}: unknown metric {ref!r}")
                     if self.metrics[ref].kind != "simple":
                         raise ValueError(f"{name}: ratio of ratios is not supported")
+        for dname, dim in self.dimensions.items():
+            self._check_value_aliases(dname, dim)
         return self
+
+    def _check_implicit_scopes(self, name: str, m: Metric) -> None:
+        for dim_name, values in m.implicit_scopes.items():
+            where = f"{name}: implicit_scopes[{dim_name!r}]"
+            dim = self.dimensions.get(dim_name)
+            if dim is None:
+                raise ValueError(f"{where}: unknown dimension")
+            if dim.type != "text" or not dim.enumerable:
+                raise ValueError(f"{where}: only an enumerable text dimension can be a scope")
+            if dim_name in m.allowed_dimensions:
+                raise ValueError(f"{where}: a metric cannot both be fixed to and grouped by it")
+            if m.kind != "simple":
+                raise ValueError(f"{where}: only a simple metric can declare an implicit scope")
+            if not values or any(not isinstance(v, str) or not v.strip() for v in values):
+                raise ValueError(f"{where}: needs a non-empty list of values")
+            for v in values:
+                # the declaration must be true of the metric's own expression
+                pattern = rf"{re.escape(dim.column)}\s*(?<![!<>=])=\s*'{re.escape(v)}'"
+                if not re.search(pattern, m.expr or ""):
+                    raise ValueError(
+                        f"{where}: expr does not filter {dim.column} = '{v}', so the scope is "
+                        "not built into this metric"
+                    )
+
+    @staticmethod
+    def _check_value_aliases(dname: str, dim: Dimension) -> None:
+        if dim.value_aliases and dim.type != "text":
+            raise ValueError(f"{dname}: value_aliases only apply to a text dimension")
+        seen: dict[str, str] = {norm_term(v): v for v in dim.value_aliases}
+        for value, aliases in dim.value_aliases.items():
+            for alias in aliases:
+                key = norm_term(alias)
+                if not key or (key in seen and seen[key] != value):
+                    raise ValueError(f"{dname}: alias {alias!r} is empty or used twice")
+                seen[key] = value
 
     def resolve_metric(self, label: str) -> str | None:
         """Map a free-text label to a metric name via name/synonym match, else None."""

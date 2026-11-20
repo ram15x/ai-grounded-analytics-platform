@@ -292,3 +292,43 @@ def test_internal_dataset_with_only_hosted_providers_abstains_with_sensitivity(e
     assert (out.outcome, out.reason) == ("abstain", "sensitivity")
     assert len(t.calls) == 1  # the plan only; the compose payload never left
     assert "10638.54" not in json.dumps(t.calls[0]["body"])
+
+
+def test_repair_prompt_carries_field_paths_not_just_a_count(env):
+    bad = {
+        "template": "The United Kingdom led with {uk}.",
+        "claims": [{"id": "uk", "label": "net revenue", "unit": "GBP", "provenance": cell("EIRE")}],
+    }
+    out, fake, _ = go({"plan": [PLAN], "compose": [bad], "repair": [GOOD]}, env)
+    assert out.outcome == "verified"
+    repair_user = fake.requests[2].messages[1][1]
+    assert "claims.0.unit" in repair_user and "Input should be" in repair_user
+    assert "GBP" not in repair_user.split("Problems:")[1]  # the bad value is not echoed in problems
+    assert out.attempts[0].problems and "claims.0.unit" in out.attempts[0].problems[0]
+
+
+def test_a_derived_percent_of_claim_shaped_like_the_prompt_example_verifies(env):
+    """The compose prompt's worked example uses a percent_of derivation over two cells. This runs
+    the same shape against the real warehouse so the example is not a shape that cannot verify."""
+    derived = {
+        "template": "The United Kingdom had net revenue of {uk}, and EIRE had {eire}. "
+        "The United Kingdom's was {pct} of EIRE's.",
+        "claims": [
+            claim("uk", "United Kingdom"),
+            claim("eire", "EIRE"),
+            {
+                "id": "pct",
+                "label": "United Kingdom net revenue as a percent of EIRE",
+                "unit": "percent",
+                "provenance": {
+                    "kind": "derived",
+                    "op": "percent_of",
+                    "args": [cell("United Kingdom"), cell("EIRE")],
+                },
+            },
+        ],
+    }
+    out, _, _ = go({"plan": [PLAN], "compose": [derived]}, env)
+    assert out.outcome == "verified", [(a.status, a.problems) for a in out.attempts]
+    assert out.repairs_used == 0
+    assert "%" in out.rendered

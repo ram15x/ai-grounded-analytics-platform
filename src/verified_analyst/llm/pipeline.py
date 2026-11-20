@@ -132,6 +132,22 @@ def typed_digit(rep: TemplateReport) -> bool:
     return any(v.reason == "number_outside_placeholder" for v in rep.report.verdicts)
 
 
+def schema_problems(exc: Exception, max_items: int = 8, msg_chars: int = 140) -> list[str]:
+    """Field-level problems for the repair prompt: the path and the message of each pydantic
+    error, never the offending input. Other errors (for example unparseable JSON) give one
+    line. Each message and the list are cut, so a bad answer cannot make the prompt grow."""
+    if not isinstance(exc, ValidationError):
+        return [f"schema_failure: {str(exc).splitlines()[0][:200]}"]
+    errs = exc.errors(include_url=False, include_context=False, include_input=False)
+    out = []
+    for e in errs[:max_items]:
+        path = ".".join(str(x) for x in e["loc"]) or "(top level)"
+        out.append(f"schema_failure at {path}: {e['msg'][:msg_chars]}")
+    if len(errs) > max_items:
+        out.append(f"schema_failure: and {len(errs) - max_items} more errors")
+    return out
+
+
 def _problems(report: TemplateReport) -> list[str]:
     out = [f"{i.code}: {i.detail}" for i in report.issues]
     for v in report.report.verdicts:
@@ -246,7 +262,7 @@ def run_question(
                 claims=out.claims,
             )
         except (ValueError, ValidationError) as exc:
-            problems = [f"schema_failure: {str(exc).splitlines()[0][:200]}"]
+            problems = schema_problems(exc)
             result.attempts.append(Attempt(kind, "schema_failure", problems=problems))
         else:
             cev["schema_ok"] = True

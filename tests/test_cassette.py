@@ -77,7 +77,7 @@ def test_key_ignores_fields_that_do_not_change_the_request():
 def test_real_hash_helpers_are_hex_and_stable():
     assert layer_hash() == layer_hash() and len(layer_hash()) == 64
     assert schema_hash() == schema_hash() and len(schema_hash()) == 64
-    assert set(prompt_hashes()) == {"plan.v0", "compose.v0", "repair.v0"}
+    assert set(prompt_hashes()) == {"plan.v0", "compose.v1", "repair.v1"}
 
 
 def test_layer_hash_ignores_line_endings(tmp_path):

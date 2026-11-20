@@ -95,5 +95,6 @@ Remove-Item Env:GROQ_API_KEY, Env:GEMINI_API_KEY, Env:OPENROUTER_API_KEY
 
 Raw numbers for one model with n and a Wilson interval each. "Every number verified" means the numbers
 matched the warehouse, not that the right question was answered. There is no accuracy claim and no
-comparison across models. The prompts are the untuned v0 minimum, so a result describes the model and
-those prompts together.
+comparison across models. The prompts are first drafts (plan.v0 untuned; compose.v1 and repair.v1 written after the first
+real run, not yet run live), so a result describes the model and those prompts together. The report
+lists the exact prompt ids and hashes, and shows the provider's error text for any non-2xx response.

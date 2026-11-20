@@ -532,7 +532,8 @@ def build_report(
                 "max_tokens": opts.max_tokens or 1024,
             },
             "scope": "one model, public data only; raw results; no accuracy claim, no ranking",
-            "prompt_note": "prompts are the untuned minimum (plan.v0, compose.v0, repair.v0): "
+            "prompt_note": "prompts are first drafts, not tuned or proven "
+            f"({', '.join(sorted(prompt_hashes()))}): "
             "results describe this model with these prompts together",
         },
         "stop": {"reason": stop_reason, "questions_completed": len(completed), "cut": cut},

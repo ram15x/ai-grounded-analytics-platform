@@ -9,8 +9,8 @@ An AI analyst for business teams. Ask a question in plain English about company 
 | Area | State |
 |---|---|
 | Research, architecture, ADRs | Done, see [docs/RESEARCH.md](docs/RESEARCH.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
-| Warehouse (Postgres 16 via docker-compose; dims, facts, read-only views, read-only role) | Implemented and tested against a **synthetic** 368-row fixture. **Real UCI data not yet loaded**: the build sandbox could not download it. `docker-compose.yml` has not been run. |
-| Data profile and data-quality decisions | Decisions written and implemented, see [docs/DATA_PROFILE.md](docs/DATA_PROFILE.md). Measured counts on the real file are **pending**. |
+| Warehouse (Postgres 16 via docker-compose; dims, facts, read-only views, read-only role) | Loaded and reconciled on the real UCI file (541,909 rows); tests use a synthetic 368-row fixture. `docker-compose.yml` has not been run. |
+| Data profile and data-quality decisions | Decisions implemented with measured sizes on the real file, see [docs/DATA_PROFILE.md](docs/DATA_PROFILE.md). |
 | Semantic layer (`semantic/metrics.yaml`, 11 metrics) | Implemented. Each metric is tested against an independent pandas derivation (shares the business rules, not the code). |
 | Metric compiler (metric + dimensions + filters to SQL) | Implemented and tested |
 | SQL guard (sqlglot, one SELECT, deny-lists, allow-listed relations, LIMIT, timeout, read-only role) | Implemented; 100+ adversarial and accepted cases. Not a proof of safety. |
@@ -70,7 +70,21 @@ va verify examples/01_verified.json        # exit 0 when fully verified, 1 other
 The sample answers are written against the synthetic fixture (`va load --source tests/fixtures/mini_retail.csv`);
 against the real data their numbers will differ.
 
+
 API keys, when they are needed, are read from environment variables only. Nothing in this repo stores a key.
+
+## Data and known limits
+
+Measured on the real file (`Online Retail.xlsx`, 541,909 rows, 2010-12-01 to 2011-12-09; details in
+[docs/DATA_PROFILE.md](docs/DATA_PROFILE.md)):
+
+- Net revenue is 9,769,872.05 (gross 10,666,684.54, cancelled 891,116.27, discounts 5,696.22); 19,960 orders; 4,338 identified customers.
+- **Exact duplicates stay counted.** 5,268 rows (0.97%). Without them net revenue would be 9,748,131.07 (-0.22%) and units -0.28%; orders and customers do not change.
+- **24.93% of rows (135,080) have no customer.** They are kept in revenue; 15.04% of net revenue (1,469,806.24) cannot be tied to a customer, and customer metrics ignore them.
+- **Units sold means merchandise units** (postage, fees and manual lines excluded). Counting every sale row would give 11,380 more.
+- 2,517 rows with price <= 0 are `adjustment` and excluded from all metrics; 2,995 rows are non-merchandise codes.
+- Gold check: 15 author-written questions, 11 expressible as catalogue queries, 11 agree, 4 not expressible ([docs/GOLD_DIFFS.md](docs/GOLD_DIFFS.md)). The gold author also wrote the semantic layer, so agreement is weak evidence. No accuracy figure is claimed.
+- The verifier's sentence binder is a heuristic with documented limits: [docs/VERIFIER_LIMITS.md](docs/VERIFIER_LIMITS.md).
 
 ## Data and licence
 

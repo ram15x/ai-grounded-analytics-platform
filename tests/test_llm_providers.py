@@ -260,5 +260,6 @@ def test_adapter_registry_matches_config_kinds():
 def test_the_test_suite_blocks_outbound_network_connections():
     import socket
 
-    with pytest.raises(AssertionError, match="must not use the network"):
-        socket.create_connection(("example.com", 443), timeout=1)
+    # a literal address, so no DNS lookup happens before the guard is reached
+    with socket.socket() as sock, pytest.raises(AssertionError, match="must not use the network"):
+        sock.connect(("203.0.113.7", 443))

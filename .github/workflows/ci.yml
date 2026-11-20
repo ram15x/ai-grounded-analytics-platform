@@ -2,6 +2,7 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -10,6 +11,7 @@ permissions:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -27,6 +29,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      VA_REQUIRE_DB: "1"
       VA_TEST_DATABASE_URL: host=localhost port=5432 user=postgres dbname=postgres password=postgres
     steps:
       - uses: actions/checkout@v4

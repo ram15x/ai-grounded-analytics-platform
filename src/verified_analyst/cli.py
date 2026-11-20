@@ -41,7 +41,8 @@ def catalogue(layer, readonly_url: str) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for name, dim in layer.dimensions.items():
         if dim.enumerable and dim.type == "text":
-            sql = f"SELECT DISTINCT {dim.column} AS v FROM {layer.source.relation} AS {layer.source.alias}"
+            src = f"{layer.source.relation} AS {layer.source.alias}"
+            sql = f"SELECT DISTINCT {dim.column} AS v FROM {src}"
             out[name] = {
                 str(r[0]) for r in execute_guarded(readonly_url, sql).rows if r[0] is not None
             }

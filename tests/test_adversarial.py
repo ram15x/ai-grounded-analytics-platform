@@ -35,19 +35,85 @@ def test_categories_are_all_covered():
 
 
 CONTROLS = [
-    ("France net revenue was £1,111.11.", "£1,111.11", "1111.11", "net revenue", cell("qc", "net_revenue", country="France")),
-    ("Germany net revenue was £2,222.22.", "£2,222.22", "2222.22", "net revenue", cell("qc", "net_revenue", country="Germany")),
-    ("EIRE made £3,333.33 in net revenue.", "£3,333.33", "3333.33", "net revenue", cell("qc", "net_revenue", country="EIRE")),
-    ("In February net revenue was £5,202.02.", "£5,202.02", "5202.02", "net revenue", cell("qm", "net_revenue", month="2011-02-01")),
-    ("Net revenue for March 2011 was £5,303.03.", "£5,303.03", "5303.03", "net revenue", cell("qm", "net_revenue", month="2011-03-01")),
-    ("Net revenue for 2011-01 was £5,101.01.", "£5,101.01", "5101.01", "net revenue", cell("qm", "net_revenue", month="2011-01-01")),
-    ("Gross revenue was £9,500.95.", "£9,500.95", "9500.95", "gross revenue", cell("qt", "gross_revenue")),
+    (
+        "France net revenue was £1,111.11.",
+        "£1,111.11",
+        "1111.11",
+        "net revenue",
+        cell("qc", "net_revenue", country="France"),
+    ),
+    (
+        "Germany net revenue was £2,222.22.",
+        "£2,222.22",
+        "2222.22",
+        "net revenue",
+        cell("qc", "net_revenue", country="Germany"),
+    ),
+    (
+        "EIRE made £3,333.33 in net revenue.",
+        "£3,333.33",
+        "3333.33",
+        "net revenue",
+        cell("qc", "net_revenue", country="EIRE"),
+    ),
+    (
+        "In February net revenue was £5,202.02.",
+        "£5,202.02",
+        "5202.02",
+        "net revenue",
+        cell("qm", "net_revenue", month="2011-02-01"),
+    ),
+    (
+        "Net revenue for March 2011 was £5,303.03.",
+        "£5,303.03",
+        "5303.03",
+        "net revenue",
+        cell("qm", "net_revenue", month="2011-03-01"),
+    ),
+    (
+        "Net revenue for 2011-01 was £5,101.01.",
+        "£5,101.01",
+        "5101.01",
+        "net revenue",
+        cell("qm", "net_revenue", month="2011-01-01"),
+    ),
+    (
+        "Gross revenue was £9,500.95.",
+        "£9,500.95",
+        "9500.95",
+        "gross revenue",
+        cell("qt", "gross_revenue"),
+    ),
     ("Sales were £9,000.09.", "£9,000.09", "9000.09", "net revenue", cell("qt", "net_revenue")),
-    ("France net revenue was £1,111.11.", "£1,111.11", "1111.11", "net revenue", cell("qf", "net_revenue")),
-    ("France and EIRE together made £3,333.33 of net revenue.", "£3,333.33", "3333.33", "net revenue", cell("qi", "net_revenue")),
-    ("January net revenue was £5,101.01.", "£5,101.01", "5101.01", "net revenue", cell("qj", "net_revenue")),
-    ("Cancelled revenue was £400.04.", "£400.04", "400.04", "cancelled revenue", cell("qt", "cancelled_revenue")),
-]  # fmt: skip
+    (
+        "France net revenue was £1,111.11.",
+        "£1,111.11",
+        "1111.11",
+        "net revenue",
+        cell("qf", "net_revenue"),
+    ),
+    (
+        "France and EIRE together made £3,333.33 of net revenue.",
+        "£3,333.33",
+        "3333.33",
+        "net revenue",
+        cell("qi", "net_revenue"),
+    ),
+    (
+        "January net revenue was £5,101.01.",
+        "£5,101.01",
+        "5101.01",
+        "net revenue",
+        cell("qj", "net_revenue"),
+    ),
+    (
+        "Cancelled revenue was £400.04.",
+        "£400.04",
+        "400.04",
+        "cancelled revenue",
+        cell("qt", "cancelled_revenue"),
+    ),
+]
 
 
 @pytest.mark.parametrize("prose,text,val,label,prov", CONTROLS, ids=[c[0][:40] for c in CONTROLS])

@@ -103,7 +103,7 @@ def cases() -> list[Case]:
     def add(name, cat, prose, *claims):
         out.append(Case(name, cat, prose, list(claims)))
 
-    # ---- wrong row (8): the number is real but belongs to a different row -------------------
+    # ---- wrong row (8): the number is real but belongs to a different row ----
     add(
         "row-01 Germany prose, France cell",
         "wrong_row",
@@ -177,7 +177,7 @@ def cases() -> list[Case]:
         gbp("£2,222.22", "2222.22", "net revenue", cell("qc", "net_revenue", country="Germany")),
     )
 
-    # ---- wrong period (6) ----------------------------------------------------------------------
+    # ---- wrong period (6) ----
     add(
         "per-01 February prose, January cell",
         "wrong_period",
@@ -228,7 +228,7 @@ def cases() -> list[Case]:
         gbp("£5,303.03", "5303.03", "net revenue", cell("qm", "net_revenue", month="2011-03-01")),
     )
 
-    # ---- wrong dimension value (5): prose scope differs from the query's filter ---------------------
+    # ---- wrong dimension value (5): prose scope differs from the query's filter ----
     add(
         "dim-01 query filtered to France, prose says Germany",
         "wrong_dimension_value",
@@ -260,7 +260,7 @@ def cases() -> list[Case]:
         gbp("£1,111.11", "1111.11", "net revenue", cell("qf", "net_revenue")),
     )
 
-    # ---- right number, different metric, same unit (8) ---------------------------------------------
+    # ---- right number, different metric, same unit (8) ----
     add(
         "met-01 gross cell called net revenue",
         "wrong_metric_same_unit",
@@ -310,7 +310,7 @@ def cases() -> list[Case]:
         gbp("£100.01", "100.01", "discount amount", cell("qt", "discount_amount")),
     )
 
-    # ---- mixed / edge (3) -------------------------------------------------------------------------------
+    # ---- mixed / edge (3) ----
     add(
         "mix-01 two rows named, number between them",
         "wrong_row",

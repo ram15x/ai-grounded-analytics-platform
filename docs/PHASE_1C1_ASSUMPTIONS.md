@@ -8,7 +8,7 @@ passing test proves the code does what these assumptions say, not that the assum
 **Status column.** Every row is STILL UNKNOWN until real output from `va live models` or `va live probe`
 has been pasted back and read. A row is changed to CONFIRMED or REFUTED only from that output, with the
 date and the line that shows it, never from memory. "Settled by" names the output that can decide it.
-As of this commit no real provider has been called, so nothing is CONFIRMED or REFUTED.
+Real output so far: one `va live models --provider groq` run (2026-11-20). Rows it settles are marked below; everything else is STILL UNKNOWN.
 
 ## Request and response shapes
 
@@ -43,7 +43,7 @@ As of this commit no real provider has been called, so nothing is CONFIRMED or R
 
 | # | Assumption | Status | Settled by | Evidence (date, source line) |
 |---|---|---|---|---|
-| 20 | `openai/gpt-oss-20b` is the string Groq expects. The Gemini and OpenRouter IDs are deliberately unset (`REPLACE-...`) and the adapters refuse to call until they are filled in. RESEARCH.md notes Gemini names churn and that 2.5 models were reported to retire on 2026-10-16. | STILL UNKNOWN | `va live models`: configured-model line PRESENT/ABSENT; Gemini/OpenRouter ID lists |  |
+| 20 | `openai/gpt-oss-20b` is the string Groq expects. The Gemini and OpenRouter IDs are deliberately unset (`REPLACE-...`) and the adapters refuse to call until they are filled in. RESEARCH.md notes Gemini names churn and that 2.5 models were reported to retire on 2026-10-16. | CONFIRMED (Groq ID); STILL UNKNOWN (Gemini, OpenRouter) | `va live models`: configured-model line PRESENT/ABSENT; Gemini/OpenRouter ID lists | 2026-11-20, owner's `va live models --provider groq`: `configured model (default): openai/gpt-oss-20b -> PRESENT` in a 200 listing of 11 models. Exists for this key; not yet used in a completion. Gemini and OpenRouter IDs are still unset. |
 | 21 | Sending the UCI Online Retail data (CC BY 4.0, public) to free hosted tiers is acceptable even though Gemini's unpaid terms allow human review and training use, and OpenRouter `:free` data policies are unresearched. The `public` tag on `analytics.sales_lines` is the owner's decision to confirm. Gemini's terms also say EEA/UK/CH use needs paid services. | STILL UNKNOWN | the owner's decision and the providers' current terms, not a program output |  |
 
 ## Behaviour that matters for the eval
@@ -59,9 +59,10 @@ As of this commit no real provider has been called, so nothing is CONFIRMED or R
 
 | # | Assumption | Status | Settled by | Evidence (date, source line) |
 |---|---|---|---|---|
-| 26 | Listing endpoints work as coded: Groq `GET .../openai/v1/models`, OpenRouter `GET .../api/v1/models`, Gemini `GET .../v1beta/models?pageSize=1000` with `nextPageToken`; response fields `data[].id`, `pricing.prompt`, `models[].name`, `supportedGenerationMethods`. | STILL UNKNOWN | `va live models` output: HTTP status and model counts per provider |  |
-| 27 | The headers matched by the pattern `ratelimit|rate-limit|retry-after|quota|remaining` are the ones each provider uses for limits. Gemini may send none. | STILL UNKNOWN | `va live models` and probe 'rate-limit headers seen' |  |
+| 26 | Listing endpoints work as coded: Groq `GET .../openai/v1/models`, OpenRouter `GET .../api/v1/models`, Gemini `GET .../v1beta/models?pageSize=1000` with `nextPageToken`; response fields `data[].id`, `pricing.prompt`, `models[].name`, `supportedGenerationMethods`. | CONFIRMED (Groq only); STILL UNKNOWN (Gemini, OpenRouter) | `va live models` output: HTTP status and model counts per provider | 2026-11-20, owner's `va live models --provider groq`: `HTTP 200: 11 models listed`, IDs parsed from `data[].id`. Gemini and OpenRouter listings not yet run. |
+| 27 | The headers matched by the pattern `ratelimit|rate-limit|retry-after|quota|remaining` are the ones each provider uses for limits. Gemini may send none. | STILL UNKNOWN | `va live models` and probe 'rate-limit headers seen' | 2026-11-20, owner's `va live models --provider groq`: `rate-limit headers seen: none` on the Groq listing response. That says nothing about completion responses, where Groq may still send them. |
 | 28 | Reasoning tokens are reported at `usage.completion_tokens_details.reasoning_tokens` (Groq, OpenRouter) and `usageMetadata.thoughtsTokenCount` (Gemini). | STILL UNKNOWN | probe tokens line: reasoning reported > 0 for a reasoning model |  |
 | 29 | A request with an unknown model ID fails with a 4xx without being served, so it is a clean probe for whether failed requests use quota. | STILL UNKNOWN | `--quota-check`: invalid_model step shows HTTP 4xx |  |
 | 30 | A 25-request probe stays within each free tier's per-minute limits and so produces no 429s. | STILL UNKNOWN | probe: by-status counts and the retry-after section |  |
 | 31 | Sending the 10 T1 questions, the catalogue and single-row result tables (public UCI aggregates) is all the data a probe sends; no customer-level rows leave the machine. | STILL UNKNOWN | review `calls.jsonl` in the recorded cassette before anything is committed |  |
+| 32 | Groq's edge rejects Python's default User-Agent (HTTP 403) and accepts an explicit one. | CONFIRMED (Groq, listing, n=1 each) | `va live models --provider groq` before and after the User-Agent change | Before: owner saw HTTP 403 through urllib and 200 through curl.exe with the same key and URL. After the explicit `verified-analyst/<version>` header (commit 293d5a8): 2026-11-20, owner's `va live models --provider groq`: `HTTP 200`. One run each, not repeated; the User-Agent was the only intended change, so the cause is inferred, not isolated. |

@@ -1,0 +1,295 @@
+# HELD-OUT questions, tiers T2 and T3 (15 of the planned 100). AUTHOR-WRITTEN by the project author.
+#
+# HELD-OUT RULE: nothing in this file may be shown to a prompt-tuning step, put in a prompt or an
+# example, or used to choose between prompt variants. It is for scoring only, after a prompt or
+# model choice is frozen. The metric_query on each question is the intended plan, not a model's
+# answer, and counts as part of the answer key. Gold VALUES are not stored in the repository:
+# eval/gold/run_heldout.py computes them from the raw file with eval/gold/t2.py (pandas, independent
+# of the semantic layer and of dev.yaml's gold code).
+#
+# Not an independent benchmark: the same author wrote the semantic layer. Agreement with the layer is
+# weak evidence and every difference is a finding.
+held_out: true
+description: Held-out T2/T3 questions. Never used for prompt tuning.
+common_rules:
+- Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+- Money is Quantity x UnitPrice in GBP, as recorded.
+- Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+- 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+  ''D''.'
+- 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+  ''D''.'
+- A discount row has StockCode D and UnitPrice > 0.
+- Gross revenue is the sum of Quantity x UnitPrice over sale rows (postage and fees included). Net
+  revenue is gross revenue minus cancelled revenue minus discounts.
+- 'A merchandise code is five digits followed by at most three capital letters (for example 85123A).
+  Merchandise units are the Quantity on merchandise sale rows.'
+- A month is the calendar month of InvoiceDate. The file runs from 2010-12-01 to 2011-12-09, so
+  December 2011 is a partial month.
+- A country is the Country text as recorded (the United Kingdom is "United Kingdom").
+- An order is a distinct InvoiceNo that has at least one sale row.
+questions:
+- id: H-T2-01
+  split: held_out
+  tier: T2
+  author_written: true
+  question: What was gross revenue in Germany?
+  gold_fn: gross_revenue_in_country
+  gold_args: {country: Germany}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [gross_revenue]
+    filters:
+    - {dimension: country, op: eq, value: Germany}
+- id: H-T2-02
+  split: held_out
+  tier: T2
+  author_written: true
+  question: What was net revenue in November 2011?
+  gold_fn: net_revenue_in_month
+  gold_args: {month: '2011-11'}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [net_revenue]
+    filters:
+    - {dimension: month, op: eq, value: '2011-11'}
+- id: H-T2-03
+  split: held_out
+  tier: T2
+  author_written: true
+  question: Which five countries had the highest gross revenue, and what was each one's gross revenue?
+  gold_fn: top_countries_by_gross_revenue
+  gold_args: {n: 5}
+  answer_shape: table
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [gross_revenue]
+    dimensions: [country]
+    order_by:
+    - {by: gross_revenue, desc: true}
+    limit: 5
+- id: H-T2-04
+  split: held_out
+  tier: T2
+  author_written: true
+  question: How many orders were placed in each of September, October and November 2011?
+  gold_fn: orders_per_month
+  gold_args: {months: ['2011-09', '2011-10', '2011-11']}
+  answer_shape: table
+  unit: orders
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [order_count]
+    dimensions: [month]
+    filters:
+    - {dimension: month, op: between, value: ['2011-09', '2011-11']}
+    order_by:
+    - {by: month}
+- id: H-T2-05
+  split: held_out
+  tier: T2
+  author_written: true
+  question: How many distinct customers bought something in France?
+  rules:
+  - Only sale rows with a CustomerID count; rows without a CustomerID are not a customer.
+  gold_fn: active_customers_in_country
+  gold_args: {country: France}
+  answer_shape: scalar
+  unit: customers
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [active_customers]
+    filters:
+    - {dimension: country, op: eq, value: France}
+- id: H-T2-06
+  split: held_out
+  tier: T2
+  author_written: true
+  question: Which month had the highest cancelled revenue, and how much was it?
+  rules:
+  - Cancelled revenue is the positive value of Quantity x UnitPrice over cancellation rows.
+  gold_fn: month_with_highest_cancelled_revenue
+  gold_args: {}
+  answer_shape: table
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [cancelled_revenue]
+    dimensions: [month]
+    order_by:
+    - {by: cancelled_revenue, desc: true}
+    limit: 1
+- id: H-T2-07
+  split: held_out
+  tier: T2
+  author_written: true
+  question: What was the average order value in the United Kingdom?
+  rules:
+  - Average order value is gross revenue divided by the number of orders, both restricted to the country.
+  gold_fn: average_order_value_in_country
+  gold_args: {country: United Kingdom}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [aov]
+    filters:
+    - {dimension: country, op: eq, value: United Kingdom}
+- id: H-T3-01
+  split: held_out
+  tier: T3
+  author_written: true
+  question: By what percent did gross revenue change from October 2011 to November 2011?
+  rules:
+  - 'Percent change is (November - October) / October x 100, not rounded before the comparison.'
+  gold_fn: percent_change_gross_revenue
+  gold_args: {month_from: '2011-10', month_to: '2011-11'}
+  answer_shape: scalar
+  unit: percent
+  decimals: 2
+  expressible_as_metric_query: true
+  needs_derived_claim: percent_change over two cells of the one result
+  metric_query:
+    metrics: [gross_revenue]
+    dimensions: [month]
+    filters:
+    - {dimension: month, op: in, value: ['2011-10', '2011-11']}
+    order_by:
+    - {by: month}
+- id: H-T3-02
+  split: held_out
+  tier: T3
+  author_written: true
+  question: Compare net revenue in December 2010 with net revenue in December 2011. (The file ends on 9
+    December 2011.)
+  rules:
+  - The two months are not the same length (2011-12 is partial). A good answer says so; the gold
+    holds only the two net revenue values.
+  gold_fn: net_revenue_in_two_months
+  gold_args: {months: ['2010-12', '2011-12']}
+  answer_shape: table
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [net_revenue]
+    dimensions: [month]
+    filters:
+    - {dimension: month, op: in, value: ['2010-12', '2011-12']}
+    order_by:
+    - {by: month}
+- id: H-T3-03
+  split: held_out
+  tier: T3
+  author_written: true
+  question: What was net revenue in Germany from July to December 2011?
+  gold_fn: net_revenue_in_country_between_months
+  gold_args: {country: Germany, first: '2011-07', last: '2011-12'}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [net_revenue]
+    filters:
+    - {dimension: country, op: eq, value: Germany}
+    - {dimension: month, op: between, value: ['2011-07', '2011-12']}
+- id: H-T3-04
+  split: held_out
+  tier: T3
+  author_written: true
+  question: Which three products sold the most merchandise units in the United Kingdom?
+  rules:
+  - Products are StockCode values; only merchandise sale rows count, so postage, fees and manual lines
+    cannot appear.
+  gold_fn: top_products_by_merchandise_units_in_country
+  gold_args: {country: United Kingdom, n: 3}
+  answer_shape: table
+  unit: units
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics: [units_sold]
+    dimensions: [stock_code]
+    filters:
+    - {dimension: country, op: eq, value: United Kingdom}
+    order_by:
+    - {by: units_sold, desc: true}
+    limit: 3
+- id: H-T3-05
+  split: held_out
+  tier: T3
+  author_written: true
+  question: On average, how many merchandise units were there per order?
+  rules:
+  - Merchandise units divided by orders, over the whole file. Orders count every invoice with a sale
+    row, including ones that contain only postage or fees.
+  gold_fn: merchandise_units_per_order
+  gold_args: {}
+  answer_shape: scalar
+  unit: units per order
+  decimals: 2
+  expressible_as_metric_query: true
+  needs_derived_claim: ratio of two cells of the one result
+  metric_query:
+    metrics: [units_sold, order_count]
+- id: H-T3-06
+  split: held_out
+  tier: T3
+  author_written: true
+  question: How much gross revenue came from lines that have no customer number?
+  gold_fn: gross_revenue_without_customer_id
+  gold_args: {}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  needs_derived_claim: difference of two cells of the one result (gross minus identified gross)
+  metric_query:
+    metrics: [gross_revenue, identified_gross_revenue]
+- id: H-T3-07
+  split: held_out
+  tier: T3
+  author_written: true
+  question: What share of gross revenue came from the three countries with the highest gross revenue
+    combined?
+  rules:
+  - 'Share = (sum of gross revenue of the top three countries) / (gross revenue of all rows) x 100.'
+  gold_fn: share_of_gross_revenue_from_top_countries
+  gold_args: {n: 3}
+  answer_shape: scalar
+  unit: percent
+  decimals: 2
+  expressible_as_metric_query: false
+  not_expressible_reason: Needs a total over all countries next to the top three. One MetricQuery
+    returns either the top three rows or the whole table, not both, there is no share-of-total
+    metric, and a derived claim cannot nest a sum inside a percent_of.
+- id: H-T3-08
+  split: held_out
+  tier: T3
+  author_written: true
+  question: What was the median order value?
+  rules:
+  - 'An order value is the sum of Quantity x UnitPrice over the invoice''s sale rows. The median is
+    over invoices with at least one sale row; for an even count it is the mean of the two middle
+    values.'
+  gold_fn: median_order_value
+  gold_args: {}
+  answer_shape: scalar
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: false
+  not_expressible_reason: The catalogue has no median or percentile, and per-order values are not a
+    dimension it can group by.

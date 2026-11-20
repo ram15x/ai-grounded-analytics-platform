@@ -73,7 +73,7 @@ def test_every_gold_function_has_a_hand_check():
 # ---- independence ------------------------------------------------------------------------------
 
 ALLOWED = {"__future__", "re", "decimal", "pathlib", "pandas", "argparse", "hashlib", "json",
-           "sys", "yaml", "t1"}  # fmt: skip
+           "sys", "yaml", "t1", "t2", "typing"}  # fmt: skip
 
 
 @pytest.mark.parametrize("path", sorted(GOLD.glob("*.py")), ids=lambda p: p.name)

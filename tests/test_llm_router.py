@@ -648,3 +648,23 @@ def openrouter_only():
     cfg = settings()
     cfg.tasks = {t: ["openrouter", "gemini"] for t in ("route", "plan", "compose", "repair")}
     return cfg
+
+
+def test_timeout_is_per_provider_in_the_shipped_config():
+    cfg = load_router_settings(ROOT / "config" / "router.yaml")
+    assert cfg.providers["groq"].timeout_s == 30
+    assert cfg.providers["gemini"].timeout_s == 90
+    text = (ROOT / "config" / "router.yaml").read_text()
+    gemini_block = text.split("  gemini:")[1].split("  openrouter:")[0]
+    assert "UNVERIFIED" in gemini_block.split("timeout_s")[0]
+
+
+def test_each_provider_call_gets_that_providers_timeout():
+    cfg = settings()
+    cfg.providers["groq"].timeout_s = 30
+    cfg.providers["gemini"].timeout_s = 90
+    # a long retry-after sends the call from groq on to gemini
+    router, run, tr, _ = rig(cfg, groq=[status(429, {"Retry-After": "600"})], gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"
+    assert tr["groq"].calls[0]["timeout"] == 30
+    assert tr["gemini"].calls[0]["timeout"] == 90

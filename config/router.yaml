@@ -15,7 +15,7 @@ providers:
     kind: groq
     hosted: true
     env_key: GROQ_API_KEY
-    timeout_s: 30
+    timeout_s: 30    # per provider; each provider's own value is passed to its calls
     rpm: 30          # UNVERIFIED (RESEARCH.md: 30 RPM)
     tpd: 200000      # UNVERIFIED (RESEARCH.md: 200K TPD)
     # Seen once, 2026-11-20, in the response headers of 24 requests to openai/gpt-oss-20b:
@@ -32,7 +32,10 @@ providers:
     kind: gemini
     hosted: true
     env_key: GEMINI_API_KEY
-    timeout_s: 30
+    # UNVERIFIED: 90 s is a guess sized from one probe (2026-11-20, gemini-3.5-flash): 5 calls
+    # finished in 18.4-28.4 s and 13 hit a 30 s limit. Where the real latency tail ends is not
+    # known; 90 may still be too short or may only make failures slower. Groq stays at 30.
+    timeout_s: 90
     models:
       default: REPLACE-WITH-CURRENT-GEMINI-FLASH-MODEL-ID
   openrouter:

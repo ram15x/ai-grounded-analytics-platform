@@ -21,7 +21,8 @@ An AI analyst for business teams. Ask a question in plain English about company 
 | Driver-claim verification | Design only, [ADR-0007](docs/adr/0007-driver-claim-verification.md). Not implemented. |
 | Pre-commit config and GitHub Actions CI (lint, format, tests with a Postgres service, Python 3.11 and 3.12) | Files added. CI has not run on GitHub yet; nothing is pushed. |
 | Model router, provider adapters (Groq, Gemini, OpenRouter), cassettes, scripted plan/compose/verify pipeline | Implemented and tested with **mocked HTTP and a fake provider only. No real provider has been called**; every provider assumption is listed in [docs/PHASE_1C1_ASSUMPTIONS.md](docs/PHASE_1C1_ASSUMPTIONS.md). No prompts for real models yet. |
-| SQL agent with a real model, document RAG, orchestration, approvals, scheduled reports | Does not exist |
+| Documents (Phase 2a): store with character spans, keyword search, passage citations checked against stored text, retrieval metrics | Implemented and tested; synthetic corpus in `corpus/synthetic`. No vectors, reranker or router yet. See [docs/PHASE_2.md](docs/PHASE_2.md) |
+| SQL agent with a real model, vector search and reranking, orchestration, approvals, scheduled reports | Does not exist |
 | API, auth, web UI, deployment, observability | Does not exist |
 | Evals and benchmark scores | Does not exist. **No accuracy figure is claimed.** |
 
@@ -66,6 +67,7 @@ export VA_DATABASE_URL=... VA_READONLY_PASSWORD=... VA_READONLY_DATABASE_URL=...
 # optional: VA_CONNECT_TIMEOUT_S (seconds to wait for a connection, default 10, max 300)
 va load --download                         # or: va load --source Online_Retail.xlsx
 va profile-db                              # metric totals, with and without exact duplicates
+va docs ingest corpus/synthetic            # then: va docs search "how long do refunds take"
 va verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise
 va verify examples/11_known_limit_share_of_global_total.json   # exit 1 on purpose: a known limit
 ```

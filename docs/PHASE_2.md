@@ -84,3 +84,44 @@ network, so it can be built and tested in full here.
   counterweight, and no accuracy claim is made from the synthetic set alone.
 - Hostile documents can only be tested against the hostile documents we think of.
 - `VERIFIED_QUOTE` still means only "the text was there".
+
+## Slice 2a as built
+
+- `src/verified_analyst/documents/`: `chunker.py` (pure), `store.py` (ingest, search, stored
+  passages), `metrics.py` (pure), `schema.sql`. Commands: `va docs ingest | search | eval`.
+- Passage ids are `doc-key#ordinal.sha10`. `va verify` resolves them from the store, recomputes the
+  chunk hash, checks the chunk against its document, and **ignores any passage text written in the
+  answer file** (it says so on stderr). A forged passage, an edited document, an id for text that
+  has since changed, and a chunk altered behind the store are all `UNSUPPORTED`; each has a test.
+  Two of those tests fail when the store lookup is removed.
+- The SQL guard still allows `analytics.*` only; tests prove model SQL cannot name `docs.*`.
+  The read-only role can read `docs` and cannot write to it.
+- Keyword search matches any content word of the question and ranks by cover density
+  (`mode=any`). The all-words mode (`mode=all`) is kept for quoted phrases and returns nothing for
+  most sentence questions.
+
+### Measured here, with the caveats that matter
+
+Mechanics check on the 21 author-written dev questions over the 14-document synthetic corpus, run
+in the build container (20 scored, 1 with no answer in the corpus). Chunk size 800 characters.
+
+| Text-search config | Mode | recall@1 | recall@3 | recall@5 | MRR | nDCG@5 |
+|---|---|---|---|---|---|---|
+| english | any | 0.90 | 0.95 | 1.00 | 0.93 | 0.95 |
+| english | all | 0.30 | 0.30 | 0.30 | 0.30 | 0.30 |
+| simple | any | 0.80 | 1.00 | 1.00 | 0.89 | 0.92 |
+| simple | all | 0.05 | 0.05 | 0.05 | 0.05 | 0.05 |
+
+What this does and does not show. The corpus is small and the questions share wording with it, so
+the any-word rows sit near the ceiling and **cannot rank a better retrieval method over a worse
+one**. The one clear finding is that all-words matching fails on sentence questions. The defaults
+(`english`, `any`) were chosen on these dev questions, so they are tuned to them. The one question
+with no answer in the corpus still returned passages, as expected from any-word matching: keyword
+search has no way to say "nothing relevant". Nothing here is a claim about real documents, and the
+held-out file has not been scored.
+
+### Next
+
+2b needs a pgvector image (the compose file uses plain `postgres:16`), a harder and larger corpus
+so that methods can be told apart, and your documents ingested locally. Both are decisions for the
+owner; see the questions in the hand-over message.

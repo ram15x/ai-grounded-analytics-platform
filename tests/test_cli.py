@@ -75,6 +75,27 @@ def test_invalid_answer_file_is_a_clean_error(tmp_path, monkeypatch, capsys):
     assert "error" in capsys.readouterr().err
 
 
+def test_a_malformed_answer_file_never_opens_a_database_connection(tmp_path, monkeypatch, capsys):
+    """Validation comes before any connection. On Windows a connect to `localhost` once hung this
+    test for 130 s because the file was only checked after the catalogue query."""
+    import verified_analyst.cli as cli
+
+    def no_connection(*a, **k):
+        raise AssertionError("opened a database connection for an invalid answer file")
+
+    monkeypatch.setattr(cli, "catalogue", no_connection)
+    monkeypatch.setattr(cli, "execute_guarded", no_connection)
+    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
+    for name, text in {
+        "plain.json": '{"prose": "x", "claims": [{"id": 1}]}',
+        "template.json": '{"template": "x {a}", "claims": [{"id": 1}]}',
+    }.items():
+        bad = tmp_path / name
+        bad.write_text(text)
+        assert main(["verify", str(bad)]) == 2
+        assert "error" in capsys.readouterr().err
+
+
 @pytest.mark.db
 def test_profile_db_reports_duplicates_effect(warehouse):
     from verified_analyst.cli import profile_db  # noqa: PLC0415

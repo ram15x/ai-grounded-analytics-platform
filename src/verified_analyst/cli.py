@@ -55,6 +55,13 @@ def catalogue(layer, readonly_url: str) -> dict[str, set[str]]:
 def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
     layer = load_semantic_layer()
     raw = json.loads(path.read_text(encoding="utf-8"))
+    # Validate the file BEFORE any database connection: a malformed answer must fail at once and
+    # never wait on a connection (on Windows a connect to `localhost` can hang for minutes).
+    tdoc = doc = None
+    if isinstance(raw, dict) and is_template_doc(raw):
+        tdoc = TemplateAnswer.model_validate(raw)
+    else:
+        doc = AnswerDoc.model_validate(raw)
 
     def shadow(mq):
         cq = compile_query(layer, mq)
@@ -62,11 +69,10 @@ def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
         return ExecutedQuery("shadow", cq.sql, res.columns, res.rows, metric_query=mq)
 
     known = catalogue(layer, readonly_url)
-    if isinstance(raw, dict) and is_template_doc(raw):
-        tdoc = TemplateAnswer.model_validate(raw)
+    if tdoc is not None:
         executed = {q.id: _execute(layer, readonly_url, q) for q in tdoc.queries}
         return verify_template(layer, tdoc, executed, shadow, known)
-    doc = AnswerDoc.model_validate(raw)
+    assert doc is not None
     executed = {q.id: _execute(layer, readonly_url, q) for q in doc.queries}
     return verify_answer(layer, doc, executed, shadow, known)
 

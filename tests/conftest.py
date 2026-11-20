@@ -69,6 +69,25 @@ def pytest_collection_modifyitems(config, items):
         item.add_marker(skip)
 
 
+@pytest.fixture(autouse=True)
+def _no_outbound_network(monkeypatch):
+    """Python-level sockets may only reach loopback or unix sockets. Tests never use the network;
+    Postgres goes through libpq, which does not use these sockets."""
+    import socket
+
+    real_connect = socket.socket.connect
+
+    def guarded(self, address):
+        if self.family == socket.AF_UNIX or (
+            isinstance(address, tuple) and str(address[0]) in ("127.0.0.1", "::1", "localhost")
+        ):
+            return real_connect(self, address)
+        raise AssertionError(f"tests must not use the network (tried {address!r})")
+
+    monkeypatch.setattr(socket.socket, "connect", guarded)
+    monkeypatch.setattr(socket.socket, "connect_ex", lambda self, address: guarded(self, address))
+
+
 @pytest.fixture(scope="session")
 def raw_fixture() -> pd.DataFrame:
     return read_raw(FIXTURE)

@@ -1,0 +1,65 @@
+# Router configuration. Model IDs live here and nowhere in code (ADR-0003).
+#
+# EVERY value below is UNVERIFIED: nothing in this repository has made a real provider call.
+# - Limits (rpm, tpd) are copied from docs/RESEARCH.md. Groq's table does not say whether the
+#   free or the developer column applies to a free account. Gemini and OpenRouter limits were not
+#   found; they are left out, so those providers get no token bucket until someone measures them.
+# - bucket.fraction = 0.5 means the router plans to use about half of a documented limit.
+# - Model IDs: the Groq ID is the string quoted in RESEARCH.md and has not been checked against
+#   Groq's live model list. The other two start with REPLACE and make the adapter refuse to call
+#   until a real, current ID is entered (RESEARCH.md notes Gemini model names churn).
+# - Keys come from the environment: GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY.
+
+providers:
+  groq:
+    kind: groq
+    hosted: true
+    env_key: GROQ_API_KEY
+    timeout_s: 30
+    rpm: 30          # UNVERIFIED (RESEARCH.md: 30 RPM)
+    tpd: 200000      # UNVERIFIED (RESEARCH.md: 200K TPD)
+    models:
+      default: openai/gpt-oss-20b   # UNVERIFIED ID
+  gemini:
+    kind: gemini
+    hosted: true
+    env_key: GEMINI_API_KEY
+    timeout_s: 30
+    models:
+      default: REPLACE-WITH-CURRENT-GEMINI-FLASH-MODEL-ID
+  openrouter:
+    kind: openrouter
+    hosted: true
+    env_key: OPENROUTER_API_KEY
+    timeout_s: 30
+    models:
+      default: REPLACE-WITH-A-CURRENT-FREE-MODEL-ID
+
+# Provider order per task (PHASE_1C.md section b). The local 3-4B tier for `route` is not built.
+tasks:
+  plan: [groq, gemini, openrouter]
+  compose: [groq, gemini, openrouter]
+  repair: [groq, gemini, openrouter]
+
+# Data sensitivity: hosted providers only ever see datasets tagged public. A dataset that is not
+# listed here is treated as internal (fail closed).
+datasets:
+  analytics.sales_lines: public   # UCI Online Retail, CC BY 4.0
+
+retry:
+  max_retries: 3          # per provider per call
+  base_s: 1.0
+  cap_s: 20.0
+  jitter: 0.5
+  max_retry_after_s: 30   # a longer retry-after falls through to the next provider instead
+
+breaker:
+  consecutive_429: 3
+  cooldown_s: 60
+
+bucket:
+  fraction: 0.5
+  max_wait_s: 10          # a longer wait for the bucket falls through to the next provider
+
+budget:
+  per_run_tokens: 30000   # UNVERIFIED assumption (PHASE_1C.md section b)

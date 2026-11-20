@@ -30,8 +30,7 @@ class Dimension(BaseModel):
     synonyms: list[str] = Field(default_factory=list)
     enumerable: bool = False  # small closed set: the verifier may load all its values
     # other ways a sentence may name a value, keyed by the value as stored: {"United Kingdom":
-    # ["UK"]}. The binder uses them only to RECOGNISE a mention (never to accept a row on
-    # its own: an alias that names the cited row is AMBIGUOUS, see context.py).
+    # ["UK"]}. The binder treats an alias exactly like the value it stands for (context.py).
     value_aliases: dict[str, list[str]] = Field(default_factory=dict)
 
 

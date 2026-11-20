@@ -15,8 +15,8 @@ Everything is deterministic string matching over the semantic layer's own vocabu
 heuristic with documented limits (docs/VERIFIER_LIMITS.md): it can be fooled by phrasing that puts
 two row names around one number ("France and Germany together £X") and it cannot see synonyms the
 layer does not list ("UK" for "United Kingdom"); in those cases it answers AMBIGUOUS, not VERIFIED.
-The one use of a listed alias (value_aliases) is a veto: a metric's implicit scope ("merchandise
-units") is not honoured when the same sentence also names a scope by alias that the query lacks.
+A name the layer lists as an alias of a dimension value (value_aliases: "UK" for "United
+Kingdom") is the same mention as that value, everywhere in this module.
 """
 
 from __future__ import annotations
@@ -210,11 +210,22 @@ def _dim_mentions(layer: SemanticLayer, dim: str, universe: Iterable[Any], text:
     spec = layer.dimensions[dim]
     if spec.type == "date":
         return day_mentions(text, offset) if dim == "day" else month_mentions(text, offset)
-    phrases = {}
+    phrases: dict[tuple[str, ...], str] = {}
     for v in universe:
         toks = tuple(_norm_value(v).split())
         if toks:
             phrases[toks] = _norm_value(v)
+    # A value alias from the layer ("UK") is the same mention as the value it stands for
+    # ("United Kingdom"): same key, so every rule below treats the two alike. An alias is only
+    # read when its value is in play, exactly as the value itself is, and never overrides a name.
+    present = {_norm_value(v) for v in universe}
+    for canonical, aliases in spec.value_aliases.items():
+        if _norm_value(canonical) not in present:
+            continue
+        for alias in aliases:
+            toks = tuple(_norm_value(alias).split())
+            if toks and toks not in phrases:
+                phrases[toks] = _norm_value(canonical)
     return find_phrases(text, phrases, offset)
 
 
@@ -225,33 +236,6 @@ def _implicit_scope_covers(layer: SemanticLayer, metric: str | None, dim: str, k
         return False
     declared = layer.metrics[metric].implicit_scopes.get(dim, [])
     return key in {_norm_value(v) for v in declared}
-
-
-def _alias_outside_query(
-    layer: SemanticLayer, prose: str, sent: tuple[int, int], filters: dict[str, Any],
-    grouped: set[str],
-) -> tuple[str, str] | None:  # fmt: skip
-    """A value alias from the layer ("UK" for "United Kingdom") named in the sentence for a
-    dimension the query neither groups by nor filters to that value. Used only as a veto on an
-    implicit-scope exemption: the binder does not otherwise recognise aliases (documented limit),
-    and recognising them everywhere would also reject sentences like "The UK is 60% of the
-    total" that verify today."""
-    for dim, spec in layer.dimensions.items():
-        if not spec.value_aliases or dim in grouped:
-            continue
-        flt = filters.get(dim)
-        allowed = _filter_allowed(flt) if flt else None
-        allowed_keys = {_norm_value(a) for a in allowed} if allowed else set()
-        phrases = {}
-        for canonical, aliases in spec.value_aliases.items():
-            for alias in aliases:
-                toks = tuple(_norm_value(alias).split())
-                if toks:
-                    phrases[toks] = _norm_value(canonical)
-        for m in find_phrases(prose[sent[0] : sent[1]], phrases, sent[0]):
-            if m.key not in allowed_keys:
-                return dim, str(m.key)
-    return None
 
 
 def _matches(layer: SemanticLayer, dim: str, key: Any, allowed: Iterable[Any]) -> bool:
@@ -327,14 +311,7 @@ def check_cell_context(
             raise ContextFail(AMBIGUOUS, "ambiguous_scope_reference", dim)
         if allowed_by_filter is None:
             if flt is None and _implicit_scope_covers(layer, metric, dim, key):
-                # e.g. "merchandise units": the metric's own definition is the scope. Not if the
-                # sentence also names a scope by alias that the query does not cover.
-                named = _alias_outside_query(layer, prose, sent, filters, grouped)
-                if named:
-                    raise ContextFail(
-                        UNSUPPORTED, "scope_not_in_query", f"{named[0]}: sentence names {named[1]}"
-                    )
-                continue
+                continue  # e.g. "merchandise units": the metric's own definition is the scope
             raise ContextFail(UNSUPPORTED, "scope_not_in_query", f"{dim}: sentence names {key}")
         if not _matches(layer, dim, key, allowed_by_filter):
             raise ContextFail(UNSUPPORTED, "scope_mismatch", f"{dim}: sentence names {key}")

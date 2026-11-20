@@ -154,10 +154,22 @@ def test_limit_two_numbers_in_one_clause_are_ambiguous_not_guessed():
     assert r.verdicts[0].verdict == "AMBIGUOUS"  # equidistant from both names: not guessed
 
 
-def test_limit_alias_not_in_layer_is_ambiguous_not_verified():
+def test_limit_name_not_in_layer_is_ambiguous_not_verified():
+    prov = cell("qc", "net_revenue", country="United Kingdom")
+    r = run(
+        "Britain net revenue was £4,444.44.", [gbp("£4,444.44", "4444.44", "net revenue", prov)]
+    )
+    assert r.status != "verified" and r.verdicts[0].verdict == "AMBIGUOUS"
+
+
+def test_alias_listed_in_layer_acts_like_the_full_name():
+    """ "UK" is listed as an alias of "United Kingdom" in the layer; see test_aliases.py."""
     prov = cell("qc", "net_revenue", country="United Kingdom")
     r = run("UK net revenue was £4,444.44.", [gbp("£4,444.44", "4444.44", "net revenue", prov)])
-    assert r.status != "verified" and r.verdicts[0].verdict == "AMBIGUOUS"
+    full = run(
+        "United Kingdom net revenue was £4,444.44.", [gbp("£4,444.44", "4444.44", "net", prov)]
+    )
+    assert r.status == full.status == "verified"
 
 
 def test_limit_together_phrasing_can_still_fool_nearest_mention():

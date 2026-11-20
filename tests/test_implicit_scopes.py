@@ -196,7 +196,7 @@ def test_a_filter_on_the_scope_dimension_is_still_judged_by_the_filter_not_the_m
     assert bad.status != "verified" and bad.verdicts[0].reason == "scope_mismatch"
 
 
-# ---- aliases: used only as a veto on the implicit-scope exemption --------------------------------
+# ---- aliases are covered in test_aliases.py; the units-specific cases stay here ------------------
 
 
 def _units_query(qid, **kw):
@@ -211,46 +211,22 @@ def _run_with(extra, prose, claim):
     return Verifier(LAYER, {**QS, **extra}, None, None, KNOWN_K).verify(prose, [claim])
 
 
-def test_the_shipped_layer_lists_uk_for_the_united_kingdom_only():
-    assert LAYER.dimensions["country"].value_aliases == {"United Kingdom": ["UK"]}
-    assert all(not d.value_aliases for n, d in LAYER.dimensions.items() if n != "country")
-
-
-def test_uk_merchandise_units_with_a_united_kingdom_filter_verifies():
+@pytest.mark.parametrize("who", ["UK", "United Kingdom"])
+def test_merchandise_units_with_a_united_kingdom_filter_verifies(who):
     q = _units_query(
         "qu", filters=[{"dimension": "country", "op": "eq", "value": "United Kingdom"}]
     )
-    r = _run_with(
-        {"qu": q},
-        "UK merchandise units were 55.",
-        count_claim("55", "55", cell("qu", "units_sold")),
-    )
+    claim = count_claim("55", "55", cell("qu", "units_sold"))
+    r = _run_with({"qu": q}, f"{who} merchandise units were 55.", claim)
     assert r.status == "verified", [v.as_dict() for v in r.verdicts]
 
 
-def test_uk_merchandise_units_with_a_france_filter_is_unsupported():
+@pytest.mark.parametrize("who", ["UK", "United Kingdom"])
+def test_merchandise_units_with_a_france_filter_is_unsupported(who):
     q = _units_query("qu", filters=[{"dimension": "country", "op": "eq", "value": "France"}])
-    r = _run_with(
-        {"qu": q},
-        "UK merchandise units were 55.",
-        count_claim("55", "55", cell("qu", "units_sold")),
-    )
-    assert r.status != "verified" and r.verdicts[0].reason == "scope_not_in_query"
-
-
-def test_uk_merchandise_units_on_a_country_grouped_row_is_not_verified():
-    prov = cell("qc", "units_sold", country="United Kingdom")
-    r = prose_run("UK merchandise units were 404.", [count_claim("404", "404", prov)])
-    assert r.status != "verified"  # "UK" is not read as the row (documented limit): AMBIGUOUS
-
-
-def test_known_gap_uk_alias_is_still_invisible_for_metrics_without_an_implicit_scope():
-    """NOT fixed here on purpose, and pinned so a change is noticed: 'UK net revenue was X' on a
-    one-row global total verifies, because the binder does not read aliases outside the
-    implicit-scope veto. Recognising them everywhere would also reject 'The UK is 60% of the
-    total' (the shipped examples). See docs/VERIFIER_LIMITS.md."""
-    claim = money_claim("£9,000.09", "9000.09", cell("qt", "net_revenue"), "net revenue")
-    assert prose_run("UK net revenue was £9,000.09.", [claim]).status == "verified"
+    claim = count_claim("55", "55", cell("qu", "units_sold"))
+    r = _run_with({"qu": q}, f"{who} merchandise units were 55.", claim)
+    assert r.status != "verified" and r.verdicts[0].reason == "scope_mismatch"
 
 
 # ---- the 30 adversarial answers, with the scope dimension's values known -------------------------

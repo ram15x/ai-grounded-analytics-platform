@@ -76,8 +76,16 @@ def test_repair_prompt_extends_compose_and_points_at_field_paths():
 
 
 def test_prompt_ids_and_hashes_are_versioned_and_distinct():
-    assert set(PROMPT_TEMPLATES) == {"plan.v0", "plan.v1", "compose.v1", "repair.v1"}
-    assert len(set(prompt_hashes().values())) == 4
+    assert set(PROMPT_TEMPLATES) == {
+        "plan.v0",
+        "plan.v1",
+        "compose.v1",
+        "repair.v1",
+        "route.v1",
+        "compose.v2",
+        "repair.v2",
+    }
+    assert len(set(prompt_hashes().values())) == 7
 
 
 def test_compose_and_repair_requests_carry_their_own_prompt_id():

@@ -151,3 +151,46 @@ matched the warehouse, not that the right question was answered. There is no acc
 comparison across models. The prompts are first drafts (plan.v0 untuned; compose.v1 and repair.v1 written after the first
 real run, not yet run live), so a result describes the model and those prompts together. The report
 lists the exact prompt ids and hashes, and shows the provider's error text for any non-2xx response.
+
+## 6. Document retrieval probes (phase 2b)
+
+These compare keyword, vector, hybrid and reranked search on the 65 dev document questions. They
+never read the held-out file. A hosted embedder or reranker sees only documents marked public, and
+the command refuses before any request if any ingested document is not. Nothing is an accuracy
+claim: the questions and documents have the same author.
+
+Once, with the pgvector image running (docs/DOCKER_PGVECTOR_SWITCH.md), ingest the synthetic corpus
+as public:
+
+```powershell
+va docs ingest corpus\synthetic --sensitivity public
+```
+
+Then run one probe at a time. Keys go in this window only, as in section 1; nothing is saved.
+
+```powershell
+# No network at all: checks the pipeline with the fake embedder and the fake reranker
+va docs probe --embedder fake_256 --reranker fake_overlap
+
+# Gemini embeddings (hosted; needs GEMINI_API_KEY)
+va docs probe --embedder gemini_embedding_2_768 --max-requests 30
+va docs probe --embedder gemini_embedding_001_768 --max-requests 30
+
+# OpenRouter embeddings (hosted; needs OPENROUTER_API_KEY)
+va docs probe --embedder openrouter_text_embedding_3_small --max-requests 30
+
+# A reranker on top (Jina; needs JINA_API_KEY; about 65 requests, paced)
+va docs probe --embedder gemini_embedding_2_768 --reranker jina_reranker_v3_5 --max-requests 80
+
+# On this computer (Ollama running with the model pulled; no key)
+va docs probe --embedder ollama_embeddinggemma
+```
+
+Each run writes `data/live_runs/<time>_docs_<names>/report.json` and `report.md`. Paste back the
+printed table and the `HTTP:` line (status counts, latency); do not paste keys. Exit codes: 0 done,
+2 refused or bad setup (missing key, unknown name, non-public document), 3 auth error (stopped on
+the first one), 4 provider unavailable, rate-limited or request cap reached.
+
+Vectors are stored per model, so a repeat run embeds nothing new and sends only the question
+batches. A failed first call usually means a request shape in `docs/PHASE_2B_ASSUMPTIONS.md` was
+wrong; paste the `Stopped early:` line.

@@ -82,7 +82,9 @@ from the backup into a fresh volume instead of editing data by hand:
 `docker cp .\va_backup.dump verified-analyst-postgres-1:/tmp/va_backup.dump`, then
 `docker exec verified-analyst-postgres-1 pg_restore -U va_admin -d verified_analyst /tmp/va_backup.dump`.
 
-## Not changed here
+## CI
 
-`.github/workflows/ci.yml` still uses the `postgres:16` service image. It moves to the pgvector
-image in the commit that adds the first vector test.
+`.github/workflows/ci.yml` now uses `pgvector/pgvector:pg16` for the Postgres service, because the
+vector tests need the extension. It has not run on GitHub yet; the first run after you push is the
+check. The same variables and health check apply, since the image is the official Postgres image
+plus the extension.

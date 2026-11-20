@@ -17,7 +17,7 @@ jobs:
         python-version: ["3.11", "3.12"]
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           # Throwaway password for an ephemeral CI container; not a secret.
           POSTGRES_PASSWORD: postgres

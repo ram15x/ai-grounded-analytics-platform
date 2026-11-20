@@ -179,7 +179,19 @@ with no answer in the corpus still returned passages, as expected from any-word 
 search has no way to say "nothing relevant". Nothing here is a claim about real documents, and the
 held-out file has not been scored.
 
-### Next
+### 2b as built
 
-2b uses the pgvector image (docs/DOCKER_PGVECTOR_SWITCH.md) and the grown corpus above. Embedding
-and reranker candidates are measured by probe runs the owner executes; see the next section.
+- `documents/vectorstore.py`: embeddings in `docs.chunk_embeddings` keyed by (document, chunk,
+  model id); exact cosine search; the model id includes the model, dimensions and prefixes.
+- `documents/fusion.py`: reciprocal-rank fusion (k=60) and a reranking wrapper (depth 20).
+- `documents/embed_http.py`, `documents/rerank.py`: clients for Gemini, OpenRouter, Ollama, a
+  Jina-style rerank API and a local cross-encoder. No retries; errors map to short kinds; keys are
+  redacted. Request shapes come from provider docs and are untried (docs/PHASE_2B_ASSUMPTIONS.md).
+- `documents/settings.py`, `config/retrieval.yaml`: the candidates. Nothing is chosen yet.
+- `va docs probe`: runs keyword, vector, hybrid and hybrid+rerank on the dev questions and writes a
+  report (docs/LIVE_RUNBOOK.md section 6). Hosted models see only public documents.
+- Tests use fake models and mocked HTTP only; the fake models test mechanics, not quality.
+
+No embedder or reranker has been chosen. That waits for the probe output you run. With questions and
+documents from one author it will show which candidate behaves better on this set, not how any would
+do on real documents. The held-out set is still locked and is not an independent benchmark.

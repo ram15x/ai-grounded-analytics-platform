@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .compiler import MetricQuery
 
@@ -82,6 +82,17 @@ class PassageRef(_Strict):
     span: tuple[int, int]
 
 
+class PassageNumberRef(_Strict):
+    """Placeholder mode only: a number the system listed under a passage label (P2, n3).
+
+    The composer names the passage and the listed number; the system writes the digits from the
+    stored text. It never types the number or the span."""
+
+    kind: Literal["passage_number"] = "passage_number"
+    label: str = Field(pattern=r"^P[0-9]{1,2}$")
+    number: str = Field(pattern=r"^n[0-9]{1,3}$")
+
+
 class ParameterRef(_Strict):
     """A chosen number (top 5, last 30 days) that appears as a literal in the SQL."""
 
@@ -118,7 +129,9 @@ class TemplateClaim(_Strict):
     id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
     label: str = Field(min_length=1, description="What the number measures, in business words")
     unit: Literal["currency", "count", "percent", "percentage_points", "ratio", "number"]
-    provenance: Annotated[CellRef | RowCountRef | DerivedRef, Field(discriminator="kind")]
+    provenance: Annotated[
+        CellRef | RowCountRef | DerivedRef | PassageNumberRef, Field(discriminator="kind")
+    ]
     decimals: int | None = Field(default=None, ge=0, le=6)
     scale: Literal["none", "thousand", "million", "billion"] = "none"
 
@@ -128,6 +141,14 @@ class TemplateClaim(_Strict):
         if isinstance(v, DerivedRef) and any(isinstance(a, LiteralArg) for a in v.args):
             raise ValueError("derived claims in a template may not take literal arguments")
         return v
+
+    @model_validator(mode="after")
+    def _passage_number_is_plain(self) -> TemplateClaim:
+        if isinstance(self.provenance, PassageNumberRef) and (
+            self.decimals is not None or self.scale != "none"
+        ):
+            raise ValueError("a passage number is shown as the passage writes it")
+        return self
 
 
 class QuerySpec(_Strict):

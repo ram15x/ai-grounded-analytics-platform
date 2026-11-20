@@ -28,7 +28,8 @@ from .claims import (
     to_decimal,
 )
 from .compiler import CompileError, MetricQuery, compile_query
-from .context import ContextFail, check_cell_context
+from .context import ContextFail, check_cell_context, sentence_span
+from .documents.binding import check_binding
 from .documents.untrusted import blocked_overlap
 from .extract import ExtractedNumber, extract_numbers
 from .semantic import SemanticLayer, norm_term
@@ -240,7 +241,7 @@ class Verifier:
             self._unit_compatible(item, claim)
             prov = claim.provenance
             if isinstance(prov, PassageRef):
-                return v(VERIFIED_QUOTE, "in_passage", None, self._passage(item, prov))
+                return v(VERIFIED_QUOTE, "in_passage", None, self._passage(item, prov, claim))
             if isinstance(prov, ParameterRef):
                 self._parameter(item, prov)
                 return v(VERIFIED, "sql_parameter")
@@ -464,7 +465,7 @@ class Verifier:
 
     # ---- passages and parameters
 
-    def _passage(self, item: ExtractedNumber, ref: PassageRef) -> str:
+    def _passage(self, item: ExtractedNumber, ref: PassageRef, claim: Claim) -> str:
         if self.passages is None:
             raise _Fail(UNSUPPORTED, "no_passage_store")
         text = self.passages.get(ref.passage_id)
@@ -485,6 +486,10 @@ class Verifier:
                 continue
             tol = item.quantum / 2 if p.quantum <= item.quantum else Decimal(0)
             if abs(p.value - shown) <= tol:
+                a, b = sentence_span(self._prose, item.start, item.end)
+                bad = check_binding(claim.label, self._prose[a:b], text, s + p.start, s + p.end)
+                if bad:
+                    raise _Fail(UNSUPPORTED, bad[0], bad[1])
                 return f"matched {p.text!r}"
         raise _Fail(UNSUPPORTED, "number_not_in_cited_span")
 

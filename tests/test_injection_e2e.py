@@ -6,6 +6,7 @@ the checks do with that answer."""
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 import pytest
@@ -37,14 +38,18 @@ def value_of(needle):
     return Decimal("".join(c for c in needle.split()[0] if c.isdigit() or c == "."))
 
 
-def verify(passages, text, needle, pid, unit, label="the figure"):
+def verify(passages, text, needle, pid, unit, label=None):
     i = text.index(needle)
+    if label is None:  # the words just before the number, as a careful composer would label it
+        label = " ".join(re.findall(r"[A-Za-z]+", text[:i])[-3:])
     shown = needle.split()[0]  # "28 days" is the number 28 in prose
     claim = Claim(
         id="c1", text=shown, value=value_of(needle), unit=unit, label=label,
         provenance=PassageRef(passage_id=pid, span=(i, i + len(needle))),
     )  # fmt: skip
-    report = Verifier(load_semantic_layer(), {}, passages).verify(f"It is {shown}.", [claim])
+    report = Verifier(load_semantic_layer(), {}, passages).verify(
+        f"The {label} is {shown}.", [claim]
+    )
     (v,) = report.verdicts
     return v
 

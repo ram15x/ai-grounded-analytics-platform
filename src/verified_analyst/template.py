@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from .claims import Claim, TemplateAnswer, TemplateClaim
+from .claims import Claim, PassageNumberRef, PassageRef, TemplateAnswer, TemplateClaim
 from .extract import ExtractedNumber, extract_numbers
 from .verifier import (
     UNSUPPORTED,
@@ -178,8 +178,14 @@ def verify_template(
     executed: dict[str, ExecutedQuery],
     shadow: ShadowFn | None = None,
     known_values: dict[str, set[str]] | None = None,
+    passages: Any = None,
 ) -> TemplateReport:
-    verifier = Verifier(layer, executed, None, shadow, known_values)
+    """`passages` is a `documents.numbers.PassageNumbers`: the stored text the composer was shown.
+    Passage numbers are written by the system from it; the verifier still re-checks the span
+    against the store text, the flagged-text rule and the label binder."""
+    verifier = Verifier(
+        layer, executed, passages.stored if passages else None, shadow, known_values
+    )
     issues: list[Issue] = []
     template = answer.template
 
@@ -229,6 +235,25 @@ def verify_template(
             out.append(f"[?{cid}]")
             continue
         used.add(cid)
+        if isinstance(claim.provenance, PassageNumberRef):
+            h = passages.get(claim.provenance.label, claim.provenance.number) if passages else None
+            if h is None:
+                issues.append(Issue("unknown_passage_number", f"{cid}: {claim.provenance.label} "
+                                    f"{claim.provenance.number}"))  # fmt: skip
+                out.append(f"[{cid} unavailable]")
+                continue
+            text, shown = h.item.text, h.item.value
+            out.append(text)
+            seen[cid] = seen.get(cid, 0) + 1
+            placed.append(RenderedClaim(cid, text, start, start + len(text), shown, shown, 0,
+                                        "none", claim.unit))  # fmt: skip
+            synth.append(Claim.model_validate({
+                "id": cid if seen[cid] == 1 else f"{cid}#{seen[cid]}",
+                "text": text, "value": shown, "unit": claim.unit, "label": claim.label,
+                "provenance": PassageRef(passage_id=h.passage_id,
+                                         span=(h.item.start, h.item.end)).model_dump(),
+            }))  # fmt: skip
+            continue
         try:
             res = verifier.resolve(claim.provenance)
             currency = _currency_of(layer, res.metrics)

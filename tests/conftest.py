@@ -144,3 +144,41 @@ def warehouse_factory(tmp_path_factory):
     yield make
     for fn in cleanups:
         fn()
+
+
+@dataclass
+class DocsDb:
+    admin_url: str
+    readonly_url: str
+    role: str
+
+
+@pytest.fixture(scope="session")
+def docs_db():
+    """A scratch database with the `docs` schema filled from corpus/synthetic and a read-only role.
+
+    Tests that change documents use their own `doc_key` and remove it again."""
+    from verified_analyst.documents.store import ingest, read_document
+    from verified_analyst.warehouse.load import setup_readonly_role
+
+    base = os.environ.get("VA_TEST_DATABASE_URL")
+    if not base:
+        pytest.skip("VA_TEST_DATABASE_URL not set")
+    suffix = secrets.token_hex(4)
+    dbname, role = f"va_docs_{suffix}", f"va_docs_ro_{suffix}"
+    password = secrets.token_urlsafe(16)
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{dbname}"')
+    admin_url = make_conninfo(base, dbname=dbname)
+    with psycopg.connect(admin_url) as conn:
+        conn.execute("CREATE SCHEMA analytics; CREATE SCHEMA warehouse")
+        setup_readonly_role(conn, role, password, dbname)
+        for path in sorted((Path(__file__).parent.parent / "corpus" / "synthetic").glob("*.md")):
+            key, title, text = read_document(path)
+            ingest(conn, key, title, path.name, text, reader_role=role)
+    yield DocsDb(admin_url, make_conninfo(base, dbname=dbname, user=role, password=password), role)
+    with psycopg.connect(admin_url, autocommit=True) as c:
+        c.execute(f'DROP OWNED BY "{role}"')
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'DROP DATABASE "{dbname}" WITH (FORCE)')
+        admin.execute(f'DROP ROLE "{role}"')

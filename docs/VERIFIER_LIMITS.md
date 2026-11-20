@@ -22,6 +22,24 @@ Before the check: **30 of 30 falsely accepted** (the verifier trusted the label)
 This is a unit test of 30 specific lies written by the same author as the check, with synthetic data.
 It is not an accuracy claim, and 0/30 does not mean 0% on real model output.
 
+## Implicit scopes (a metric's own definition)
+
+Some metrics already apply a scope: `units_sold` counts merchandise sale lines only. A sentence
+such as "The total merchandise units were X" names the dimension value `merchandise` without the
+query filtering on it, which the scope rule above rejects (`scope_not_in_query`). `semantic/
+metrics.yaml` can declare `implicit_scopes` for a metric (today: `units_sold`, `product_kind:
+[merchandise]`). The binder then accepts that scope word for that metric only, when the query has
+no filter on that dimension. Guards, all tested:
+
+- The layer refuses a declaration unless the metric's `expr` filters on that column and value, the
+  dimension is an enumerable text dimension the metric cannot also group by, and the metric is
+  not a ratio. Ratios do not inherit scopes from their parts.
+- Other values (`non_merchandise`), other metrics ("merchandise gross revenue"), and other scopes
+  in the same sentence (a country, even by the alias "UK") are still `UNSUPPORTED`.
+- Measured on the same 30 adversarial answers, in prose and placeholder form, with and without
+  `product_kind` values loaded: per-case results identical before and after, 0 false accepts.
+  A unit test by the author of the check; not an accuracy claim.
+
 ## Composer conventions this implies
 
 One number per clause (comma or semicolon between numbers); name the row or period in the same
@@ -29,7 +47,13 @@ sentence as the number; use names exactly as in the data or in the layer's metri
 
 ## Known limits (pinned by tests)
 
-- Names are matched literally. "UK" for "United Kingdom" is `AMBIGUOUS`, not verified.
+- Names are matched literally. "UK" for "United Kingdom" is `AMBIGUOUS` when the UK row is the
+  cited row of a country-grouped result. On a global total, or a query filtered to another
+  country, "UK net revenue was £X" is NOT seen and verifies (a false accept, pinned in
+  `tests/test_implicit_scopes.py`; the 30 adversarial answers do not cover it). The layer lists
+  "UK" as an alias of "United Kingdom", but the binder uses it only as a veto on an implicit
+  scope (below): recognising aliases everywhere would also reject "The UK is 60% of the total",
+  which the shipped examples contain and which verifies today. Decision left to the owner.
 - "France and Germany together made £X" attaches X to the nearer name (a false accept).
 - Two numbers in one clause ("France made £A and Germany made £B") can come back `AMBIGUOUS`.
 - Only `month` and `day` periods are recognised; "last quarter", "Q4" and relative dates are not.

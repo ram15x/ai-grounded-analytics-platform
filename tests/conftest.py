@@ -33,13 +33,33 @@ class Warehouse:
     raw: pd.DataFrame
 
 
+def _db_skip_reason() -> str | None:
+    """None when database tests can run; otherwise the reason they are skipped."""
+    base = os.environ.get("VA_TEST_DATABASE_URL")
+    if not base:
+        return (
+            "database tests skipped: set VA_TEST_DATABASE_URL to a Postgres server where the "
+            "user may create databases and roles (see tests/conftest.py)"
+        )
+    try:
+        with psycopg.connect(base, connect_timeout=5):
+            pass
+    except psycopg.Error as exc:
+        first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        return f"database tests skipped: VA_TEST_DATABASE_URL is set but not reachable ({first})"
+    return None
+
+
 def pytest_collection_modifyitems(config, items):
-    if os.environ.get("VA_TEST_DATABASE_URL"):
+    db_items = [i for i in items if "db" in i.keywords]
+    if not db_items:
         return
-    skip = pytest.mark.skip(reason="VA_TEST_DATABASE_URL not set")
-    for item in items:
-        if "db" in item.keywords:
-            item.add_marker(skip)
+    reason = _db_skip_reason()
+    if reason is None:
+        return
+    skip = pytest.mark.skip(reason=reason)
+    for item in db_items:
+        item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

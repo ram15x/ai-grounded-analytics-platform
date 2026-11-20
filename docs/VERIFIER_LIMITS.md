@@ -71,10 +71,14 @@ sentence as the number; use names exactly as in the data or in the layer's metri
 - A true sentence that names a country next to a number from a query that does not cover that
   country is `UNSUPPORTED` (`scope_not_in_query`), alias or full name alike. Example: "The United
   Kingdom is 59.6% of the £17,845.25 total." The total comes from a global query, and the sentence
-  gives the country as its scope. The shipped samples `examples/01_verified.json` and
-  `08_template_verified.json` say "The UK is 59.6% of the £17.8m total"; they verified only while
-  "UK" was invisible, and are now `partially_verified` (the files are unchanged; see
-  `tests/test_cli.py`). This is a conservative false reject, not loosened here.
+  gives the country as its scope. This is a conservative false reject and is not loosened.
+  `examples/11_known_limit_share_of_global_total.json` shows it on purpose ("The UK is 59.6% of the
+  £17,845.25 total": `partially_verified`). Samples 01 and 08 state the same share without naming
+  a country beside the total ("Across all countries net revenue was £17,845.25, and the leader's
+  share of that total is 59.6%") and verify in full with the binder unchanged. Samples 03, 05, 07
+  and 09 still use the old wording, so each shows one extra `UNSUPPORTED` on the total.
+  Backlog, not built: a derived-share rule for sentences that name the country of a share and
+  its global total; to be designed with its own adversarial tests.
 - "France and Germany together made £X" attaches X to the nearer name (a false accept).
 - Two numbers in one clause ("France made £A and Germany made £B") can come back `AMBIGUOUS`.
 - Only `month` and `day` periods are recognised; "last quarter", "Q4" and relative dates are not.

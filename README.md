@@ -66,6 +66,7 @@ export VA_DATABASE_URL=... VA_READONLY_PASSWORD=... VA_READONLY_DATABASE_URL=...
 va load --download                         # or: va load --source Online_Retail.xlsx
 va profile-db                              # metric totals, with and without exact duplicates
 va verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise
+va verify examples/11_known_limit_share_of_global_total.json   # exit 1 on purpose: a known limit
 ```
 
 The sample answers are written against the synthetic fixture (`va load --source tests/fixtures/mini_retail.csv`);

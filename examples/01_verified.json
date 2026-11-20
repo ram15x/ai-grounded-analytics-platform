@@ -1,6 +1,6 @@
 {
   "question": "Which countries earn the most, and how concentrated is revenue?",
-  "prose": "The United Kingdom led with \u00a310,638.54 of net revenue, ahead of EIRE at \u00a33,374.20. The UK is 59.6% of the \u00a317,845.25 total. These are the top 3 countries.",
+  "prose": "The United Kingdom led with \u00a310,638.54 of net revenue, ahead of EIRE at \u00a33,374.20. Across all countries net revenue was \u00a317,845.25, and the leader's share of that total is 59.6%. These are the top 3 countries.",
   "queries": [
     {
       "id": "q_top",

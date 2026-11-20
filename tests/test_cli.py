@@ -10,28 +10,27 @@ from verified_analyst.cli import build_parser, main, run_verify
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
-# Verdicts of the shipped sample answers. Files unchanged. The examples say "The UK is 59.6% of the
-# £17.8m total"; since the layer lists "UK" as an alias of "United Kingdom" the binder reads that
-# sentence like the full-name one, which it has always rejected: the global total £17,845.25 sits
-# in a sentence that names a country the total's query does not cover (scope_not_in_query). Before
-# the alias was read, these examples verified only because "UK" was invisible to the binder.
+# Verdicts of the shipped sample answers. Samples 01 and 08 state the share without naming a country
+# next to the global total, so they verify in full with the binder unchanged. Sample 11 keeps the
+# old wording ("The UK is 59.6% of the £17,845.25 total") on purpose: the binder rejects the total
+# (scope_not_in_query) because the sentence names a country that the total's query does not cover.
+# That is a known, conservative limit (docs/VERIFIER_LIMITS.md). Samples 03, 05, 07 and 09 still
+# carry that sentence, so each shows one extra UNSUPPORTED on the total besides its own defect.
 EXPECTED = {
-    "01_verified.json": (
-        "partially_verified",
-        {"VERIFIED": 3, "VERIFIED_DERIVED": 1, "UNSUPPORTED": 1},
-    ),
+    "01_verified.json": ("verified", {"VERIFIED": 4, "VERIFIED_DERIVED": 1, "UNSUPPORTED": 0}),
     "02_wrong_digit.json": ("partially_verified", {"UNSUPPORTED": 2}),
     "03_unsupported_number.json": ("partially_verified", {"UNSUPPORTED": 2}),
     "04_wrong_metric_label.json": ("partially_verified", {"METRIC_MISMATCH": 1}),
     "05_bad_derivation.json": ("partially_verified", {"DERIVATION_MISMATCH": 1, "UNSUPPORTED": 1}),
     "06_scale_error.json": ("partially_verified", {"UNSUPPORTED": 1}),
     "07_ambiguous_number.json": ("partially_verified", {"AMBIGUOUS": 1, "UNSUPPORTED": 1}),
-    "08_template_verified.json": (
-        "partially_verified",
-        {"VERIFIED": 2, "VERIFIED_DERIVED": 1, "UNSUPPORTED": 1},
-    ),
+    "08_template_verified.json": ("verified", {"VERIFIED": 3, "VERIFIED_DERIVED": 1}),
     "09_template_number_typed_by_model.json": ("partially_verified", {"UNSUPPORTED": 2}),
     "10_template_wrong_row.json": ("partially_verified", {"UNSUPPORTED": 2}),
+    "11_known_limit_share_of_global_total.json": (
+        "partially_verified",
+        {"VERIFIED": 3, "VERIFIED_DERIVED": 1, "UNSUPPORTED": 1},
+    ),
 }
 
 
@@ -62,7 +61,10 @@ def test_example_verdicts(warehouse, name):
 @pytest.mark.db
 def test_exit_codes_and_json_output(warehouse, monkeypatch, capsys):
     monkeypatch.setenv("VA_READONLY_DATABASE_URL", warehouse.readonly_url)
-    assert main(["verify", str(EXAMPLES / "01_verified.json"), "--json"]) == 1
+    assert main(["verify", str(EXAMPLES / "01_verified.json"), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "verified"
+    known_limit = str(EXAMPLES / "11_known_limit_share_of_global_total.json")
+    assert main(["verify", known_limit, "--json"]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "partially_verified"
     assert main(["verify", str(EXAMPLES / "02_wrong_digit.json")]) == 1
 
@@ -114,7 +116,9 @@ def test_profile_db_reports_duplicates_effect(warehouse):
 
 
 @pytest.mark.db
-@pytest.mark.parametrize("name", ["01_verified.json", "08_template_verified.json"])
+@pytest.mark.parametrize(
+    "name", ["11_known_limit_share_of_global_total.json", "09_template_number_typed_by_model.json"]
+)
 def test_the_uk_examples_get_the_same_verdicts_as_their_full_name_wording(
     warehouse, tmp_path, name
 ):
@@ -133,3 +137,17 @@ def test_the_uk_examples_get_the_same_verdicts_as_their_full_name_wording(
     uk, full_name = outcome(EXAMPLES / name), outcome(full)
     assert uk == full_name
     assert any(reason == "scope_not_in_query" for _, _, reason in uk[1])
+
+
+@pytest.mark.db
+def test_sample_11_shows_the_known_limit_and_the_fixed_samples_do_not(warehouse):
+    def reasons(name):
+        r = run_verify(EXAMPLES / name, warehouse.readonly_url)
+        verdicts = r.report.verdicts if hasattr(r, "report") else r.verdicts
+        return {v.reason for v in verdicts}
+
+    assert "scope_not_in_query" in reasons("11_known_limit_share_of_global_total.json")
+    for name in ("01_verified.json", "08_template_verified.json"):
+        assert "scope_not_in_query" not in reasons(name)
+    raw = (EXAMPLES / "11_known_limit_share_of_global_total.json").read_text()
+    assert "KNOWN LIMIT" in raw and "The UK is 59.6%" in raw

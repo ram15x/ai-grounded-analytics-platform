@@ -1,6 +1,6 @@
 {
   "question": "Which countries earn the most, and how concentrated is revenue?",
-  "template": "The United Kingdom led with {uk} of net revenue, ahead of EIRE at {eire}. The UK is {share} of the {total} total.",
+  "template": "The United Kingdom led with {uk} of net revenue, ahead of EIRE at {eire}. Across all countries net revenue was {total}, and the leader's share of that total is {share}.",
   "queries": [
     {
       "id": "q_top",

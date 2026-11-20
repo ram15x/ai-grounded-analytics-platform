@@ -1,0 +1,130 @@
+# Retrieval dev questions over corpus/synthetic. AUTHOR-WRITTEN by the project author, who also
+# wrote the corpus: not an independent benchmark. Each evidence item names a document and a string
+# that must occur in it; a chunk is relevant when it comes from that document and contains the string
+# (case and whitespace ignored). No answer text beyond that anchor is stored.
+description: Retrieval dev questions (tune on these only).
+questions:
+- id: D-01
+  kind: lookup
+  question: "How many days do customers have to return unused merchandise?"
+  evidence:
+  - doc: returns-policy
+    contains: "within 28 days of delivery"
+- id: D-02
+  kind: lookup
+  question: "How long do refunds take after the parcel is scanned in?"
+  evidence:
+  - doc: returns-policy
+    contains: "within 5 working days"
+- id: D-03
+  kind: paraphrase
+  question: "What fee applies if someone sends back an item they have opened but is not broken?"
+  evidence:
+  - doc: returns-policy
+    contains: "restocking fee of 10%"
+- id: D-04
+  kind: lookup
+  question: "What is the UK courier charge for orders under £50?"
+  evidence:
+  - doc: delivery-policy
+    contains: "flat courier charge of £4.95"
+- id: D-05
+  kind: lookup
+  question: "How long does delivery to France take?"
+  evidence:
+  - doc: delivery-policy
+    contains: "7 to 10 working days"
+- id: D-06
+  kind: exact_term
+  question: "What does the POST code on an invoice line mean?"
+  evidence:
+  - doc: delivery-policy
+    contains: "postage code POST"
+- id: D-07
+  kind: lookup
+  question: "What discount do trade customers get on orders above £2,000?"
+  evidence:
+  - doc: wholesale-terms
+    contains: "20% on any single order above £2,000.00"
+- id: D-08
+  kind: lookup
+  question: "When does a trade account go on hold for unpaid invoices?"
+  evidence:
+  - doc: wholesale-terms
+    contains: "unpaid after 45 days"
+- id: D-09
+  kind: lookup
+  question: "What is the supplier lead time in the peak season?"
+  evidence:
+  - doc: supplier-note-giftware
+    contains: "rises to 35 days"
+- id: D-10
+  kind: lookup
+  question: "By what date must peak season orders be placed with the giftware supplier?"
+  evidence:
+  - doc: supplier-note-giftware
+    contains: "no later than 15 September"
+- id: D-11
+  kind: lookup
+  question: "What is the reorder point for fast-moving lines?"
+  evidence:
+  - doc: stock-policy
+    contains: "reorder point of 40 units"
+- id: D-12
+  kind: exact_term
+  question: "Which stock code is the white hanging heart t-light holder?"
+  evidence:
+  - doc: stock-policy
+    contains: "85123A"
+- id: D-13
+  kind: lookup
+  question: "How quickly must complaints be resolved?"
+  evidence:
+  - doc: customer-service-sla
+    contains: "resolved within 3 working days"
+- id: D-14
+  kind: paraphrase
+  question: "Within how many hours should the team answer a customer's first email?"
+  evidence:
+  - doc: customer-service-sla
+    contains: "first reply within 24 hours"
+- id: D-15
+  kind: lookup
+  question: "How is net revenue defined?"
+  evidence:
+  - doc: revenue-definitions
+    contains: "Net revenue is gross sales less cancellations and discounts"
+- id: D-16
+  kind: paraphrase
+  question: "Which invoices are cancellations?"
+  evidence:
+  - doc: revenue-definitions
+    contains: "starts with the letter C"
+- id: D-17
+  kind: lookup
+  question: "What is the last day for UK orders to arrive before Christmas?"
+  evidence:
+  - doc: christmas-peak-memo
+    contains: "18 December for standard delivery"
+- id: D-18
+  kind: lookup
+  question: "What mark-up applies to kitchenware?"
+  evidence:
+  - doc: pricing-memo
+    contains: "1.8 times for kitchenware"
+- id: D-19
+  kind: table
+  question: "How much net revenue did Germany make in the regional review?"
+  evidence:
+  - doc: regional-sales-review
+    contains: "Germany | £41,700"
+- id: D-20
+  kind: lookup
+  question: "How are lines with a unit price of zero treated?"
+  evidence:
+  - doc: data-quality-notes
+    contains: "never counted as sales"
+- id: D-21
+  kind: no_answer
+  question: "What is the company pension contribution rate?"
+  evidence: []

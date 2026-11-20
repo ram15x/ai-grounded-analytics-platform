@@ -1,0 +1,75 @@
+# Retrieval HELD-OUT questions. Same author as the corpus. Rule of docs/HELDOUT.md: nothing that
+# tunes chunking, weights, query handling, prompts or model choice may read this file; it is scored
+# once per frozen configuration by eval/docs/run_heldout.py.
+description: Retrieval held-out questions (score only).
+questions:
+- id: H-D-01
+  kind: paraphrase
+  question: "Is there a time limit for sending goods back, and from which date does it run?"
+  evidence:
+  - doc: returns-policy
+    contains: "counted from the delivery date"
+- id: H-D-02
+  kind: conflict
+  question: "How many days did customers have to return goods before March 2011?"
+  evidence:
+  - doc: returns-policy-2010
+    contains: "within 14 days of delivery"
+- id: H-D-03
+  kind: paraphrase
+  question: "Do gift vouchers qualify for a refund?"
+  evidence:
+  - doc: returns-policy
+    contains: "Gift cards and personalised items cannot be returned"
+- id: H-D-04
+  kind: lookup
+  question: "What is charged per extra kilogram on parcels to Germany above 10 kg?"
+  evidence:
+  - doc: delivery-policy
+    contains: "£1.20"
+- id: H-D-05
+  kind: lookup
+  question: "What is the smallest first order that opens a trade account?"
+  evidence:
+  - doc: wholesale-terms
+    contains: "at least £250.00"
+- id: H-D-06
+  kind: paraphrase
+  question: "How much notice must the supplier give before changing prices?"
+  evidence:
+  - doc: supplier-note-giftware
+    contains: "60 days written notice"
+- id: H-D-07
+  kind: exact_term
+  question: "What kind of product is stock code 22423?"
+  evidence:
+  - doc: stock-policy
+    contains: "regency cake stand (stock code 22423)"
+- id: H-D-08
+  kind: lookup
+  question: "What share of first replies should meet the 24-hour target?"
+  evidence:
+  - doc: customer-service-sla
+    contains: "at least 90%"
+- id: H-D-09
+  kind: paraphrase
+  question: "Why does the sales count differ between order lines and orders?"
+  evidence:
+  - doc: revenue-definitions
+    contains: "counted once per invoice number"
+- id: H-D-10
+  kind: lookup
+  question: "How many parcels per day does the warehouse aim to dispatch in the peak weeks?"
+  evidence:
+  - doc: christmas-peak-memo
+    contains: "1,400 parcels per day"
+- id: H-D-11
+  kind: paraphrase
+  question: "What is the largest allowed promotion and how long may it run?"
+  evidence:
+  - doc: pricing-memo
+    contains: "may not exceed 30% off the list price"
+- id: H-D-12
+  kind: no_answer
+  question: "What is the CEO's salary?"
+  evidence: []

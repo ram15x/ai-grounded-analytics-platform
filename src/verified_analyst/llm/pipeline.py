@@ -69,6 +69,8 @@ class QuestionRun:
     verification: dict[str, Any] | None = None
     # for an abstain: who abstained and with what words (see run_question)
     abstain_detail: dict[str, Any] | None = None
+    route: str = ""  # data | documents | both ("" when the question was not routed)
+    passage_labels: dict[str, str] = field(default_factory=dict)  # label -> passage id shown
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +82,8 @@ class QuestionRun:
             "plan_failures": self.plan_failures,
             "repairs_used": self.repairs_used,
             "abstain_detail": self.abstain_detail,
+            "route": self.route,
+            "passage_labels": self.passage_labels,
             "attempts": [
                 {
                     "kind": a.kind,
@@ -172,9 +176,18 @@ def run_question(
     known_values: dict[str, set[str]] | None = None,
     max_repairs: int = MAX_REPAIRS,
     max_tokens: int | None = None,
+    passages: Any = None,
+    passage_prompt: tuple[str, str] | None = None,
+    doc_datasets: tuple[str, ...] = (),
+    skip_plan: bool = False,
+    prior_events: list[dict[str, Any]] | None = None,
 ) -> QuestionRun:
+    """`passages` (PassageNumbers) and `passage_prompt` (rendered block, figure listing) switch on
+    document answers; `skip_plan` is the documents-only route (no query is planned or run)."""
     result = QuestionRun(question, "abstain", run=run)
+    result.events.extend(prior_events or [])
     dataset = layer.source.relation
+    datasets = (() if skip_plan else (dataset,)) + doc_datasets
     mq: MetricQuery | None = None
     executed: dict[str, ExecutedQuery] = {}
     plan_error: str | None = None
@@ -210,7 +223,7 @@ def run_question(
             return abstain("provider_error")
 
     while True:
-        if mq is None:  # ---- plan, compile, guard, execute ----
+        if mq is None and not skip_plan:  # ---- plan, compile, guard, execute ----
             got = call(plan_request(layer, question, plan_error))
             if isinstance(got, QuestionRun):
                 return got
@@ -256,9 +269,10 @@ def run_question(
                 question,
                 result.restatement,
                 executed,
-                (dataset,),
+                datasets,
                 previous,
                 problems if previous is not None else None,
+                passage_prompt,
             )
         )
         if isinstance(got, QuestionRun):
@@ -277,7 +291,7 @@ def run_question(
             answer = TemplateAnswer(
                 question=question,
                 template=out.template,
-                queries=[QuerySpec(id=QUERY_ID, metric_query=mq)],
+                queries=[QuerySpec(id=QUERY_ID, metric_query=mq)] if mq else [],
                 claims=out.claims,
             )
         except (ValueError, ValidationError) as exc:
@@ -285,7 +299,7 @@ def run_question(
             result.attempts.append(Attempt(kind, "schema_failure", problems=problems))
         else:
             cev["schema_ok"] = True
-            rep = verify_template(layer, answer, executed, shadow, known_values)
+            rep = verify_template(layer, answer, executed, shadow, known_values, passages)
             nums = rep.report.verdicts
             n_good = sum(v.verdict in GOOD for v in nums)
             cev["typed_digit"] = typed_digit(rep)

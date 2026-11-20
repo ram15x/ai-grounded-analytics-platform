@@ -48,3 +48,26 @@ class ComposeOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     template: str = Field(min_length=1)
     claims: list[TemplateClaim] = Field(default_factory=list)
+
+
+ROUTE_ABSTAIN_REASONS = (
+    "ambiguous",  # cannot tell whether the question is about the data, the documents or both
+    "out_of_scope",
+    "forecast",
+    "causal",
+    "personal_data",
+)
+
+
+class RouteOutput(BaseModel):
+    """Which sources answer the question. `abstain` is the router declining to decide."""
+
+    model_config = ConfigDict(extra="forbid")
+    route: Literal["data", "documents", "both", "abstain"]
+    reason: Literal["ambiguous", "out_of_scope", "forecast", "causal", "personal_data"] | None = (
+        None
+    )
+
+    def model_post_init(self, __context: object) -> None:
+        if (self.route == "abstain") != (self.reason is not None):
+            raise ValueError("give a reason exactly when the route is abstain")

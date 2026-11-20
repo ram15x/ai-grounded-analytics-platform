@@ -48,6 +48,7 @@ providers:
 
 # Provider order per task (PHASE_1C.md section b). The local 3-4B tier for `route` is not built.
 tasks:
+  route: [groq, gemini, openrouter]
   plan: [groq, gemini, openrouter]
   compose: [groq, gemini, openrouter]
   repair: [groq, gemini, openrouter]
@@ -56,6 +57,8 @@ tasks:
 # listed here is treated as internal (fail closed).
 datasets:
   analytics.sales_lines: public   # UCI Online Retail, CC BY 4.0
+  docs.public: public             # passages from documents ingested with sensitivity=public
+  # docs.internal is deliberately not listed: untagged means internal, so hosted providers refuse
 
 retry:
   max_retries: 3          # per provider per call

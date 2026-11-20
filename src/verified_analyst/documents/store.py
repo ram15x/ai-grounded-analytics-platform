@@ -251,6 +251,19 @@ def resolve_passages(readonly_url: str, passage_ids: list[str]) -> dict[str, str
     return out
 
 
+def document_sensitivities(readonly_url: str, doc_keys: list[str]) -> dict[str, str]:
+    """Stored sensitivity per document key; a key that is not found is not in the result."""
+    if not doc_keys:
+        return {}
+    with psycopg.connect(readonly_url, **connect_kwargs(readonly_url)) as conn:
+        conn.read_only = True
+        rows = conn.execute(
+            "SELECT doc_key, sensitivity FROM docs.documents WHERE doc_key = ANY(%s)",
+            (sorted(set(doc_keys)),),
+        )
+        return {r[0]: r[1] for r in rows.fetchall()}
+
+
 def all_chunks(readonly_url: str) -> list[tuple[str, int, str]]:
     """(doc_key, ordinal, text) of every chunk, in a fixed order. For label checks and metrics."""
     with psycopg.connect(readonly_url, **connect_kwargs(readonly_url)) as conn:

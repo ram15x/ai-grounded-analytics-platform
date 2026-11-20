@@ -171,6 +171,31 @@ def cmd_profile_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cassettes_check(args: argparse.Namespace) -> int:
+    from .llm.cassette import (  # noqa: PLC0415
+        check_cassettes,
+        layer_hash,
+        render_check,
+        schema_hash,
+        warehouse_content_hash,
+    )
+    from .llm.prompts import prompt_hashes  # noqa: PLC0415
+
+    wh = args.warehouse_hash
+    if wh is None and os.environ.get("VA_READONLY_DATABASE_URL"):
+        wh = warehouse_content_hash(readonly_database_url())
+    usage = json.loads(Path(args.usage).read_text("utf-8")) if args.usage else None
+    result = check_cassettes(
+        Path(args.dir),
+        {"layer": layer_hash(), "schema": schema_hash(), "warehouse": wh},
+        prompt_hashes(),
+        usage=usage,
+        max_age_days=args.max_age_days,
+    )
+    print(json.dumps(result, indent=2) if args.json else render_check(result))
+    return 0 if result["ok"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="va", description="Verified Analyst (deterministic core)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -190,6 +215,17 @@ def build_parser() -> argparse.ArgumentParser:
         "profile-db", help="metric totals from the loaded warehouse, with/without duplicates"
     )
     pd_.set_defaults(fn=cmd_profile_db)
+    cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
+    cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
+    cc = cs_sub.add_parser(
+        "check", help="list stale, unused, missing and old cassette entries (no network)"
+    )
+    cc.add_argument("dir", help="cassette directory, for example tests/cassettes/<suite>")
+    cc.add_argument("--usage", help="usage.json written by a replay run (for unused/missing)")
+    cc.add_argument("--max-age-days", type=float, default=None)
+    cc.add_argument("--warehouse-hash", default=None, help="else computed from the database")
+    cc.add_argument("--json", action="store_true")
+    cc.set_defaults(fn=cmd_cassettes_check)
     return p
 
 

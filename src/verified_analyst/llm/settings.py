@@ -1,7 +1,7 @@
 """Router configuration, loaded from config/router.yaml. Model IDs live only there.
 
-Every limit in the file is UNVERIFIED (see the comments in the file and
-docs/PHASE_1C1_ASSUMPTIONS.md)."""
+Every limit in the file is UNVERIFIED unless its comment in the file says where it was seen
+(see the comments in the file and docs/PHASE_1C1_ASSUMPTIONS.md)."""
 
 from __future__ import annotations
 
@@ -27,6 +27,10 @@ class ProviderSettings(_M):
     timeout_s: float = Field(default=30, gt=0, le=300)
     rpm: float | None = Field(default=None, gt=0)  # documented requests per minute (UNVERIFIED)
     tpd: float | None = Field(default=None, gt=0)  # documented tokens per day (UNVERIFIED)
+    tpm: float | None = Field(default=None, gt=0)  # documented tokens per minute (UNVERIFIED)
+    # Sent as `reasoning_effort` on every request to this provider, only when set. UNVERIFIED:
+    # whether a given Groq model accepts it, and which values, is not known. Groq only for now.
+    reasoning_effort: str | None = Field(default=None, pattern=r"^[a-z]{1,16}$")
     models: dict[str, str] = Field(default_factory=dict)  # task or "default" -> model id
 
     def model_for(self, task: str) -> str:
@@ -59,7 +63,7 @@ class BudgetSettings(_M):
 
 
 class ProbeSettings(_M):
-    max_requests: int = Field(default=25, ge=1, le=25)  # hard ceiling of 25 per probe run
+    max_requests: int = Field(default=25, ge=1, le=60)  # default cap; hard ceiling 60 per run
     token_cap: int = Field(default=60_000, gt=0)  # across the whole probe run
 
 
@@ -86,6 +90,11 @@ class RouterSettings(_M):
                 raise ValueError(f"{name}: a non-hosted provider needs an endpoint")
             if p.hosted and p.kind != "fake" and not p.env_key:
                 raise ValueError(f"{name}: a hosted provider needs env_key")
+            if p.reasoning_effort and p.kind != "groq":
+                raise ValueError(
+                    f"{name}: reasoning_effort is only wired for groq; no parameter name has "
+                    f"been checked for {p.kind}"
+                )
         return self
 
     def sensitivity_of(self, datasets: tuple[str, ...]) -> str:

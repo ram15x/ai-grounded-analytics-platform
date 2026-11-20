@@ -64,6 +64,11 @@ class TokenBucket:
         self._refill()
         self.level -= amount
 
+    def give_back(self, amount: float) -> None:
+        """Return an over-reservation. Never lifts the level above capacity."""
+        self._refill()
+        self.level = min(self.capacity, self.level + amount)
+
 
 def estimate_tokens(req: LLMRequest) -> int:
     """Conservative pre-call estimate: prompt characters / 4 plus the completion allowance."""
@@ -100,6 +105,7 @@ class Router:
         self.rng = rng or random.Random()
         self._rpm: dict[str, TokenBucket] = {}
         self._tpd: dict[str, TokenBucket] = {}
+        self._tpm: dict[str, TokenBucket] = {}
         self._consec_429: dict[str, int] = {}
         self._open_until: dict[str, float] = {}
         frac = settings.bucket.fraction
@@ -110,6 +116,9 @@ class Router:
             if p.tpd:
                 cap = p.tpd * frac
                 self._tpd[name] = TokenBucket(cap, cap / 86400.0, clock)
+            if p.tpm:
+                cap = p.tpm * frac
+                self._tpm[name] = TokenBucket(cap, cap / 60.0, clock)
 
     # ---- public ----
     def new_run(self, run_id: str, token_cap: int | None = None) -> RunContext:
@@ -143,10 +152,11 @@ class Router:
             return self._replay(req, run, eligible)
         attempts: list[dict] = []
         for name in eligible:
-            resp = self._try_provider(name, req, run, attempts)
+            preq = self._for_provider(name, req)
+            resp = self._try_provider(name, preq, run, attempts)
             if resp is not None:
                 if self.cassette is not None:
-                    self.cassette.record(name, resp.model, req, resp)
+                    self.cassette.record(name, resp.model, preq, resp)
                 return resp
         raise AllProvidersFailed(attempts)
 
@@ -160,9 +170,10 @@ class Router:
             except ConfigError:
                 continue
             tried.append(name)
-            hit = self.cassette.lookup(name, model, req)
+            preq = self._for_provider(name, req)
+            hit = self.cassette.lookup(name, model, preq)
             if hit is not None:
-                run.add(self._record(req, hit, "cassette", 0, 0.0))
+                run.add(self._record(preq, hit, "cassette", 0, 0.0))
                 return hit
         raise self.cassette.miss_error(req, tried)
 
@@ -191,15 +202,16 @@ class Router:
             return None
         retry = self.settings.retry
         wait_ms = 0.0
+        reserved = estimate_tokens(req)
         for attempt in range(retry.max_retries + 1):
-            wait = self._bucket_wait(name, estimate_tokens(req))
+            wait = self._bucket_wait(name, reserved)
             if wait > self.settings.bucket.max_wait_s:
                 fail("throttled", model, attempt=attempt)
                 return None
             if wait > 0:
                 self.sleep(wait)
                 wait_ms += wait * 1000
-            self._bucket_take(name, estimate_tokens(req))
+            self._bucket_take(name, reserved)
             start = self.clock()
             try:
                 resp = provider.complete(req, model, cfg.timeout_s)
@@ -244,10 +256,20 @@ class Router:
             self._consec_429[name] = 0
             rec = self._record(req, resp, "ok", attempt, wait_ms)
             run.add(rec)
+            if not rec.tokens_estimated:  # settle the reservation against what the provider said
+                self._bucket_settle(name, reserved - (rec.prompt_tokens + rec.completion_tokens))
             return rec_to_response(resp, rec)
         return None
 
     # ---- helpers ----
+    def _for_provider(self, name: str, req: LLMRequest) -> LLMRequest:
+        """The request as this provider will see it: its configured reasoning effort, if any,
+        becomes part of the request (and so of the cassette key)."""
+        effort = self.settings.providers[name].reasoning_effort
+        if effort and req.reasoning_effort != effort:
+            return dataclasses.replace(req, reasoning_effort=effort)
+        return req
+
     def _record(
         self, req: LLMRequest, resp: LLMResponse, outcome: str, attempt: int, wait_ms: float
     ) -> CallRecord:
@@ -280,15 +302,29 @@ class Router:
         waits = [0.0]
         if name in self._rpm:
             waits.append(self._rpm[name].wait_needed(1))
-        if name in self._tpd:
-            waits.append(self._tpd[name].wait_needed(tokens))
+        for buckets in (self._tpm, self._tpd):
+            if name in buckets:
+                waits.append(buckets[name].wait_needed(tokens))
         return max(waits)
 
     def _bucket_take(self, name: str, tokens: float) -> None:
         if name in self._rpm:
             self._rpm[name].take(1)
-        if name in self._tpd:
-            self._tpd[name].take(tokens)
+        for buckets in (self._tpm, self._tpd):
+            if name in buckets:
+                buckets[name].take(tokens)
+
+    def _bucket_settle(self, name: str, surplus: float) -> None:
+        """A call reserved `estimate` tokens up front. When the response reports real usage, give
+        back the part that was not used, or take the extra if it was more. 429s and other
+        failures keep their full reservation (the safe side: it is not known whether the
+        provider counted them)."""
+        for buckets in (self._tpm, self._tpd):
+            if name in buckets:
+                if surplus >= 0:
+                    buckets[name].give_back(surplus)
+                else:
+                    buckets[name].take(-surplus)
 
     def breaker_state(self, name: str) -> str:
         return "open" if self._open_until.get(name, 0) > self.clock() else "closed"

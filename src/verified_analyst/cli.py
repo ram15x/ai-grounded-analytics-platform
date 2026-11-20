@@ -260,6 +260,16 @@ def cmd_live_probe(args: argparse.Namespace) -> int:
     return 3 if out["stopped_on_auth"] else 0
 
 
+def _request_cap(text: str) -> int:
+    try:
+        n = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number: {text!r}") from None
+    if not 1 <= n <= 60:
+        raise argparse.ArgumentTypeError("must be between 1 and 60")
+    return n
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="va", description="Verified Analyst (deterministic core)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -303,7 +313,10 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--provider", required=True)
     lp.add_argument("--model", required=True)
     lp.add_argument("--out-dir", help="default data/live_runs/<time>_<provider>_<model>")
-    lp.add_argument("--max-requests", type=int, default=25, help="at most 25")
+    lp.add_argument(
+        "--max-requests", type=_request_cap, default=None, metavar="N",
+        help="HTTP request cap for the run, 1 to 60 (default: the config value, 25)",
+    )  # fmt: skip
     lp.add_argument("--token-cap", type=int, default=None, help="lowers the config cap only")
     lp.add_argument("--max-tokens", type=int, default=None, help="completion allowance per call")
     lp.add_argument("--quota-check", action="store_true", help="3 extra requests, see the report")

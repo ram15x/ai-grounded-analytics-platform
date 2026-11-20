@@ -25,6 +25,7 @@ from verified_analyst.llm.fake import FakeProvider
 from verified_analyst.llm.providers import GeminiProvider, GroqProvider, OpenRouterProvider
 from verified_analyst.llm.router import Router, TokenBucket, estimate_tokens
 from verified_analyst.llm.settings import load_router_settings
+from verified_analyst.llm.transport import HttpResponse
 from verified_analyst.llm.types import (
     AllProvidersFailed,
     BudgetExceeded,
@@ -465,3 +466,105 @@ def test_shipped_config_refuses_to_call_with_placeholder_models():
     with pytest.raises(AllProvidersFailed):
         router.call(req(datasets=("analytics.sales_lines",)), router.new_run("x"))
     assert t["gemini"].calls == [] and t["openrouter"].calls == []
+
+
+# ---- tokens per minute, settled against real usage ----
+
+
+def tpm_cfg(tpm, max_wait=200):
+    cfg = settings(bucket={"fraction": 0.5, "max_wait_s": max_wait})
+    cfg.providers["groq"].tpm = tpm
+    return cfg
+
+
+def test_tpm_bucket_is_sized_at_half_the_limit_and_refills_over_a_minute():
+    router, *_ = rig(tpm_cfg(8000))
+    b = router._tpm["groq"]
+    assert b.capacity == 4000 and b.refill_per_s == pytest.approx(4000 / 60)
+    assert "gemini" not in router._tpm  # no configured limit: no bucket
+
+
+def test_an_unused_part_of_the_reservation_is_given_back_after_the_response():
+    r = req(max_tokens=100)
+    est = estimate_tokens(r)
+    router, run, _, _ = rig(tpm_cfg(240), groq=[ok_openai("{}", 10, 5)])  # capacity 120
+    router.call(r, run)
+    # reserved `est`, used 15, so about 120 - 15 remains (no time has passed on the fake clock)
+    assert router._tpm["groq"].level == pytest.approx(120 - 15)
+    assert est > 15  # the reservation really was larger than the use
+
+
+def test_usage_above_the_reservation_is_charged_and_the_next_call_waits():
+    r = req(max_tokens=100)
+    router, run, tr, clock = rig(
+        tpm_cfg(240), groq=[ok_openai("{}", 100, 100), ok_openai("{}", 10, 5)]
+    )  # capacity 120, refill 2 tokens/s
+    router.call(r, run)  # reserves about 103, really used 200
+    level = router._tpm["groq"].level
+    assert level == pytest.approx(120 - 200)
+    router.call(r, run)
+    need = estimate_tokens(r)
+    assert clock.slept == [pytest.approx((need - level) / 2.0)]
+    assert len(tr["groq"].calls) == 2
+
+
+def test_tpm_wait_beyond_the_cap_falls_through_to_the_next_provider():
+    r = req(max_tokens=100)
+    router, run, tr, clock = rig(
+        tpm_cfg(240, max_wait=5), groq=[ok_openai("{}", 100, 100)], gemini=[ok_gemini()]
+    )
+    assert router.call(r, run).provider == "groq"
+    assert router.call(r, run).provider == "gemini"  # groq would need a long wait
+    assert clock.slept == [] and any(x.outcome == "throttled" for x in run.records)
+
+
+def test_a_request_larger_than_the_minute_bucket_is_throttled_not_sent():
+    cfg = tpm_cfg(100)  # capacity 50 tokens, below any estimate
+    router, run, tr, _ = rig(cfg, gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"
+    assert tr["groq"].calls == []
+
+
+def test_estimated_usage_keeps_the_full_reservation():
+    r = req(max_tokens=100)
+    est = estimate_tokens(r)
+    no_usage = HttpResponse(200, b'{"choices": [{"message": {"content": "{}"}}]}')
+    router, run, _, _ = rig(tpm_cfg(240), groq=[no_usage])
+    router.call(r, run)
+    assert run.records[0].tokens_estimated
+    assert router._tpm["groq"].level == pytest.approx(120 - est)
+
+
+def test_the_shipped_config_has_the_observed_groq_minute_limit_and_no_reasoning_effort():
+    s = load_router_settings(ROOT / "config" / "router.yaml")
+    assert s.providers["groq"].tpm == 8000
+    assert all(p.reasoning_effort is None for p in s.providers.values())  # UNVERIFIED: not set
+
+
+# ---- reasoning_effort from config ----
+
+
+def test_configured_reasoning_effort_is_sent_to_groq_and_only_then():
+    cfg = settings()
+    cfg.providers["groq"].reasoning_effort = "low"
+    router, run, tr, _ = rig(cfg, groq=[ok_openai()])
+    router.call(req(), run)
+    assert tr["groq"].calls[0]["body"]["reasoning_effort"] == "low"
+    router, run, tr, _ = rig(settings(), groq=[ok_openai()])
+    router.call(req(), run)
+    assert "reasoning_effort" not in tr["groq"].calls[0]["body"]
+
+
+def test_reasoning_effort_on_another_provider_is_a_config_error():
+    from pydantic import ValidationError
+
+    from verified_analyst.llm.settings import RouterSettings
+
+    cfg = settings().model_dump()
+    cfg["providers"]["gemini"]["reasoning_effort"] = "low"
+    with pytest.raises(ValidationError, match="only wired for groq"):
+        RouterSettings.model_validate(cfg)
+    cfg["providers"]["gemini"]["reasoning_effort"] = None
+    cfg["providers"]["groq"]["reasoning_effort"] = "Low; drop table"  # not a plain word
+    with pytest.raises(ValidationError):
+        RouterSettings.model_validate(cfg)

@@ -57,6 +57,7 @@ def parse_retry_after(value: str | None) -> float | None:
 class HostedProvider(Provider):
     hosted = True
     default_endpoint = ""
+    accepts_reasoning_effort = False  # only adapters whose parameter name is known set this
 
     def __init__(
         self,
@@ -103,6 +104,8 @@ class HostedProvider(Provider):
             raise SensitivityRefusal(f"{self.name}: refusing a request that is not tagged public")
         if not model or model.startswith(PLACEHOLDER_PREFIX):
             raise ConfigError(f"{self.name}: model id for task {req.task!r} is not configured")
+        if req.reasoning_effort and not self.accepts_reasoning_effort:
+            raise ConfigError(f"{self.name}: reasoning_effort is not wired for this adapter")
         key = self._key()
         body = json.dumps(self._body(req, model)).encode("utf-8")
         start = self.clock()
@@ -176,6 +179,8 @@ class _OpenAICompatible(HostedProvider):
         }
         if req.json_mode:
             body["response_format"] = {"type": "json_object"}
+        if req.reasoning_effort:  # UNVERIFIED: sent only when configured
+            body["reasoning_effort"] = req.reasoning_effort
         return body
 
     def _extract(self, data: Any) -> tuple[str, int, int, str, bool, int]:
@@ -190,6 +195,7 @@ class _OpenAICompatible(HostedProvider):
 
 
 class GroqProvider(_OpenAICompatible):
+    accepts_reasoning_effort = True  # UNVERIFIED: the parameter name and values are a guess
     default_endpoint = "https://api.groq.com/openai/v1/chat/completions"  # UNVERIFIED
 
 

@@ -60,6 +60,7 @@ def test_key_is_stable_and_changes_with_every_component():
         "temperature": make_key("groq", "m", dataclasses.replace(r, temperature=0.7), CTX),
         "max_tokens": make_key("groq", "m", dataclasses.replace(r, max_tokens=5), CTX),
         "json_mode": make_key("groq", "m", dataclasses.replace(r, json_mode=False), CTX),
+        "effort": make_key("groq", "m", dataclasses.replace(r, reasoning_effort="low"), CTX),
         "prompt_hash": make_key("groq", "m", dataclasses.replace(r, prompt_hash="x"), CTX),
         "layer": make_key("groq", "m", r, dataclasses.replace(CTX, layer_hash="x")),
         "schema": make_key("groq", "m", r, dataclasses.replace(CTX, schema_hash="x")),
@@ -311,3 +312,14 @@ def test_cli_cassettes_check_on_an_empty_directory(tmp_path, capsys, monkeypatch
     monkeypatch.delenv("VA_READONLY_DATABASE_URL", raising=False)
     assert main(["cassettes", "check", str(Path(tmp_path) / "nothing")]) == 0
     assert "entries: 0" in capsys.readouterr().out
+
+
+def test_a_request_without_reasoning_effort_keeps_its_old_key_material():
+    from verified_analyst.llm.cassette import normalise_request
+
+    r = req(datasets=PUB)
+    assert "reasoning_effort" not in normalise_request(r)
+    assert (
+        normalise_request(dataclasses.replace(r, reasoning_effort="low"))["reasoning_effort"]
+        == "low"
+    )

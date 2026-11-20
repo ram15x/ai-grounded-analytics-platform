@@ -75,7 +75,7 @@ class CassetteContext:
 
 
 def normalise_request(req: LLMRequest) -> dict[str, Any]:
-    return {
+    out = {
         "task": req.task,
         "messages": [[r, c] for r, c in req.messages],
         "json_mode": req.json_mode,
@@ -84,6 +84,9 @@ def normalise_request(req: LLMRequest) -> dict[str, Any]:
         "schema_name": req.schema_name,
         "prompt_id": req.prompt_id,
     }
+    if req.reasoning_effort is not None:  # only when set, so existing recordings keep their keys
+        out["reasoning_effort"] = req.reasoning_effort
+    return out
 
 
 def make_key(provider: str, model: str, req: LLMRequest, ctx: CassetteContext) -> str:

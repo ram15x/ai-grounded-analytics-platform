@@ -18,6 +18,14 @@ providers:
     timeout_s: 30
     rpm: 30          # UNVERIFIED (RESEARCH.md: 30 RPM)
     tpd: 200000      # UNVERIFIED (RESEARCH.md: 200K TPD)
+    # Seen once, 2026-11-20, in the response headers of 24 requests to openai/gpt-oss-20b:
+    # x-ratelimit-limit-tokens: 8000. That it is per MINUTE is inferred from the header name and
+    # from reset-tokens values of 1 to 56 seconds, not from documentation. It applies to this
+    # key and model, may differ for others, and may differ from what a plan change gives.
+    tpm: 8000
+    # reasoning_effort: low   # UNVERIFIED and NOT SET: no real call has sent it. Whether Groq
+    #                         # accepts it for this model, and with which values, is unknown.
+    #                         # It is sent only if you uncomment it, and then only to Groq.
     models:
       default: openai/gpt-oss-20b   # UNVERIFIED ID
   gemini:
@@ -60,12 +68,14 @@ breaker:
 bucket:
   fraction: 0.5
   max_wait_s: 10          # a longer wait for the bucket falls through to the next provider
+                          # (a probe has no fallback and waits up to 120 s instead)
 
 budget:
   per_run_tokens: 30000   # UNVERIFIED assumption (PHASE_1C.md section b)
 
 # `va live probe`: hard limits for one probe run. max_requests counts every HTTP request sent,
-# retries included, and can never exceed 25. token_cap is across the whole run. UNVERIFIED sizing.
+# retries included. The default is 25; `va live probe --max-requests N` can raise it to 60, the
+# hard ceiling. token_cap is across the whole run. UNVERIFIED sizing.
 probe:
   max_requests: 25
   token_cap: 60000

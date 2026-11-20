@@ -334,3 +334,29 @@ def test_adapter_requests_reach_the_transport_with_keys_only_in_auth_headers(mon
     assert req_.get_header("User-agent").startswith("verified-analyst/")
     assert KEYS["GROQ_API_KEY"] not in req_.get_header("User-agent")
     assert KEYS["GROQ_API_KEY"] in req_.get_header("Authorization")
+
+
+# ---- reasoning_effort: sent only when configured, and only where the name is wired ----
+
+
+def test_groq_sends_reasoning_effort_only_when_the_request_carries_it():
+    p, t = make(GroqProvider, "GROQ_API_KEY", [ok_openai(), ok_openai()])
+    p.complete(public(), "model-x", 5)
+    p.complete(dataclasses.replace(public(), reasoning_effort="low"), "model-x", 5)
+    assert "reasoning_effort" not in t.calls[0]["body"]
+    assert t.calls[1]["body"]["reasoning_effort"] == "low"
+
+
+@pytest.mark.parametrize(
+    ("cls", "env_key", "ok"),
+    [
+        (OpenRouterProvider, "OPENROUTER_API_KEY", ok_openai),
+        (GeminiProvider, "GEMINI_API_KEY", ok_gemini),
+    ],
+    ids=["openrouter", "gemini"],
+)
+def test_adapters_without_a_known_parameter_name_refuse_reasoning_effort(cls, env_key, ok):
+    p, t = make(cls, env_key, [ok()])
+    with pytest.raises(ConfigError):
+        p.complete(dataclasses.replace(public(), reasoning_effort="low"), "model-x", 5)
+    assert t.calls == []  # nothing was sent

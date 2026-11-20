@@ -2,8 +2,9 @@
 
 `list_models` and `run_probe` are the only code in this repository that is meant to reach a real
 provider, and only when invoked by `va live ...` with a key in the environment. Tests mock the
-transport. Hard limits: at most 25 HTTP requests per probe run (retries included), a token cap
-from config, and a stop on the first 401/403. Output is raw per-model numbers with n, never an
+transport. Hard limits: at most 60 HTTP requests per probe run (retries included; 25 unless the
+owner passes --max-requests), a token cap from config, and a stop on the first 401/403.
+Output is raw per-model numbers with n, never an
 accuracy claim and never a ranking. A key is redacted from everything printed or written.
 """
 
@@ -49,7 +50,8 @@ from .transport import (
 )
 from .types import PUBLIC, LLMRequest, ProviderError, SensitivityRefusal
 
-HARD_MAX_REQUESTS = 25
+HARD_MAX_REQUESTS = 60  # per probe run; the default cap is 25 (config `probe.max_requests`)
+PROBE_BUCKET_MAX_WAIT_S = 120.0  # a probe has one provider and no fallback, so it waits
 ERROR_BODY_CHARS = 300
 _sleep: Callable[[float], None] = time.sleep  # tests replace this
 
@@ -335,7 +337,7 @@ class ProbeOptions:
     provider: str
     model: str
     out_dir: Path
-    max_requests: int = HARD_MAX_REQUESTS
+    max_requests: int | None = None  # None: the config default (25); at most HARD_MAX_REQUESTS
     token_cap: int | None = None
     max_tokens: int | None = None
     quota_check: bool = False
@@ -363,7 +365,12 @@ def probe_settings(base: RouterSettings, opts: ProbeOptions) -> RouterSettings:
     s = base.model_copy(deep=True)
     s.providers[opts.provider].models = {"default": opts.model}
     s.tasks = {t: [opts.provider] for t in ("plan", "compose", "repair")}
-    s.probe.max_requests = min(opts.max_requests, s.probe.max_requests, HARD_MAX_REQUESTS)
+    if opts.max_requests is not None:
+        if not 1 <= opts.max_requests <= HARD_MAX_REQUESTS:
+            raise ConfigError(f"--max-requests must be between 1 and {HARD_MAX_REQUESTS}")
+        s.probe.max_requests = opts.max_requests
+    # one provider, no fallback: waiting for the token bucket is better than abstaining
+    s.bucket.max_wait_s = max(s.bucket.max_wait_s, PROBE_BUCKET_MAX_WAIT_S)
     if opts.token_cap:
         s.probe.token_cap = min(opts.token_cap, s.probe.token_cap)
     return s
@@ -531,6 +538,13 @@ def build_report(
                 "token_cap": s.probe.token_cap,
                 "max_tokens": opts.max_tokens or 1024,
             },
+            "bucket": {
+                "fraction": s.bucket.fraction,
+                "tokens_per_minute": s.providers[opts.provider].tpm,
+                "requests_per_minute": s.providers[opts.provider].rpm,
+                "max_wait_s": s.bucket.max_wait_s,
+            },
+            "reasoning_effort_sent": s.providers[opts.provider].reasoning_effort,
             "scope": "one model, public data only; raw results; no accuracy claim, no ranking",
             "prompt_note": "prompts are first drafts, not tuned or proven "
             f"({', '.join(sorted(prompt_hashes()))}): "
@@ -579,6 +593,11 @@ def render_report(rep: dict[str, Any]) -> str:
         f"Note: {h['prompt_note']}.",
         f"Caps: {h['caps']['max_requests']} requests, {h['caps']['token_cap']} tokens, "
         f"max_tokens {h['caps']['max_tokens']} per call.",
+        f"Client-side buckets at {h['bucket']['fraction']:.0%} of the configured limits "
+        f"(tokens/minute {h['bucket']['tokens_per_minute'] or 'not set'}, "
+        f"requests/minute {h['bucket']['requests_per_minute'] or 'not set'}); waits up to "
+        f"{h['bucket']['max_wait_s']:g} s for a bucket. reasoning_effort sent: "
+        f"{h['reasoning_effort_sent'] or 'no (not configured)'}.",
         "",
         "## Run",
         f"- stopped: {st['reason']}; questions completed (n={st['questions_completed']})"

@@ -39,6 +39,7 @@ class LLMRequest:
     prompt_hash: str = ""
     schema_name: str = ""
     sensitivity: str = INTERNAL
+    reasoning_effort: str | None = None  # stamped by the router from the provider's config
 
     def prompt_chars(self) -> int:
         return sum(len(c) for _, c in self.messages)

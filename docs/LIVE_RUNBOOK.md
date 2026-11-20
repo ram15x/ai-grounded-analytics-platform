@@ -42,16 +42,25 @@ configured in `config\router.yaml` (for example `openai/gpt-oss-20b` on Groq) ar
 For OpenRouter it lists zero-price models only; add `--all` for every ID. Pick one model ID per
 provider from this output before probing.
 
-## 3. Probe one model at a time (at most 25 requests each)
+## 3. Probe one model at a time (25 requests by default, at most 60)
 
 ```powershell
 va live probe --provider groq --model openai/gpt-oss-20b --quota-check
 ```
 
-`--quota-check` spends 3 of the 25 requests on one good request, one deliberately invalid one and one
+`--quota-check` spends 3 of the request cap on one good request, one deliberately invalid one and one
 good one, to see whether a failed request changes the remaining-requests header. Leave it off to use
-all 25 on the battery. The run stops at once on the first 401/403, at 25 requests, or at the token cap
-in `config\router.yaml` (`probe.token_cap`). Optional: `--max-tokens 2048` if the report shows
+the whole cap on the battery. The cap is 25 requests unless you pass `--max-requests N` (1 to 60;
+anything else is refused). The run stops at once on the first 401/403, at the request cap, or at the
+token cap in `config\router.yaml` (`probe.token_cap`, 60000; `--token-cap` can only lower it).
+
+The probe now paces itself with a client-side tokens-per-minute bucket (`tpm: 8000` for Groq in
+`config\router.yaml`, used at 50%) and waits up to 120 s for it, so a run takes longer than the
+first one did (a full 10-question battery can take 10 to 20 minutes) and should hit fewer 429s. The
+report header prints the bucket settings and whether `reasoning_effort` was sent. It is not sent
+unless you add `reasoning_effort: low` under the Groq provider in the config; whether Groq accepts it
+for this model is UNKNOWN, so try it as its own run and paste back the status counts and the error
+text, which the report now shows for any non-2xx response. Optional: `--max-tokens 2048` if the report shows
 `length` among the finish reasons, `--token-cap N` to lower the cap, `--no-record` to skip cassettes.
 
 Repeat with IDs taken from step 2 (replace the angle-bracket parts):

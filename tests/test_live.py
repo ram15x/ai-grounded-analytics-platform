@@ -219,7 +219,7 @@ def test_counting_transport_counts_caps_and_captures_headers():
 
 
 def test_counting_transport_never_exceeds_the_hard_ceiling():
-    assert CountingTransport(lambda *a: None, max_requests=1000).max_requests == 25
+    assert CountingTransport(lambda *a: None, max_requests=1000).max_requests == 60
 
 
 @pytest.mark.parametrize("code", [401, 403])
@@ -282,11 +282,26 @@ def test_probe_is_pinned_to_one_provider_and_one_model(tmp_path):
     assert s.tasks == {t: ["groq"] for t in ("plan", "compose", "repair")}
 
 
-def test_probe_limits_can_only_be_lowered(tmp_path):
-    s = probe_settings(settings(), opts(tmp_path, max_requests=1000, token_cap=10**9))
-    assert s.probe.max_requests == 25 and s.probe.token_cap == 60_000
-    s = probe_settings(settings(), opts(tmp_path, max_requests=7, token_cap=500))
-    assert s.probe.max_requests == 7 and s.probe.token_cap == 500
+def test_request_cap_defaults_to_25_can_be_raised_to_60_and_never_past_it(tmp_path):
+    assert probe_settings(settings(), opts(tmp_path)).probe.max_requests == 25
+    assert probe_settings(settings(), opts(tmp_path, max_requests=60)).probe.max_requests == 60
+    assert probe_settings(settings(), opts(tmp_path, max_requests=7)).probe.max_requests == 7
+    for bad in (61, 1000, 0, -3):
+        with pytest.raises(ConfigError, match="between 1 and 60"):
+            probe_settings(settings(), opts(tmp_path, max_requests=bad))
+
+
+def test_the_token_cap_can_only_be_lowered(tmp_path):
+    s = probe_settings(settings(), opts(tmp_path, token_cap=10**9))
+    assert s.probe.token_cap == 60_000
+    assert probe_settings(settings(), opts(tmp_path, token_cap=500)).probe.token_cap == 500
+
+
+def test_a_probe_waits_for_the_bucket_longer_than_the_router_default(tmp_path):
+    s = probe_settings(settings(bucket={"fraction": 0.5, "max_wait_s": 10}), opts(tmp_path))
+    assert s.bucket.max_wait_s == 120
+    s = probe_settings(settings(bucket={"fraction": 0.5, "max_wait_s": 500}), opts(tmp_path))
+    assert s.bucket.max_wait_s == 500  # never lowered
 
 
 @pytest.mark.parametrize(
@@ -297,11 +312,21 @@ def test_probe_rejects_bad_targets(tmp_path, kw):
         probe_settings(settings(), opts(tmp_path, **kw))
 
 
-def test_the_shipped_config_has_a_probe_section_at_or_below_25():
+def test_the_shipped_config_defaults_the_probe_to_25_requests():
     from verified_analyst.llm.settings import load_router_settings
 
     s = load_router_settings()
-    assert s.probe.max_requests <= 25 and s.probe.token_cap > 0
+    assert s.probe.max_requests == 25 and s.probe.token_cap > 0
+
+
+def test_the_config_file_cannot_raise_the_probe_cap_above_60():
+    from pydantic import ValidationError
+
+    from verified_analyst.llm.settings import ProbeSettings
+
+    assert ProbeSettings(max_requests=60).max_requests == 60
+    with pytest.raises(ValidationError):
+        ProbeSettings(max_requests=61)
 
 
 def test_probe_questions_are_the_first_ten_expressible_t1_questions():
@@ -641,3 +666,36 @@ def test_probe_cli_refuses_without_a_key(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr("verified_analyst.cli.catalogue", lambda *a: {})
     code = main(["live", "probe", "--provider", "groq", "--model", "x", "--out-dir", str(tmp_path)])
     assert code == 2 and "GROQ_API_KEY" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["61", "0", "-1", "many"])
+def test_cli_rejects_a_request_cap_outside_1_to_60(value, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["live", "probe", "--provider", "groq", "--model", "x", "--max-requests", value])
+    assert exc.value.code == 2
+    assert "--max-requests" in capsys.readouterr().err
+
+
+@pytest.mark.db
+def test_probe_with_a_cap_of_60_is_allowed_and_reported(env, tmp_path):
+    out = probe(env, Model(), tmp_path, qs=load_probe_questions()[:2], max_requests=60)
+    assert out["report"]["header"]["caps"]["max_requests"] == 60
+    assert "Caps: 60 requests" in out["markdown"]
+
+
+@pytest.mark.db
+def test_report_states_the_bucket_and_whether_reasoning_effort_was_sent(env, tmp_path):
+    cfg = settings(datasets={"analytics.sales_lines": "public"})
+    cfg.providers["groq"].tpm = 8000
+    out = probe(env, Model(), tmp_path, cfg=cfg, qs=load_probe_questions()[:1])
+    h = out["report"]["header"]
+    assert h["bucket"]["tokens_per_minute"] == 8000 and h["reasoning_effort_sent"] is None
+    assert (
+        "tokens/minute 8000" in out["markdown"] and "reasoning_effort sent: no" in out["markdown"]
+    )
+    cfg.providers["groq"].reasoning_effort = "low"
+    m = Model()
+    out = probe(env, m, tmp_path / "b", cfg=cfg, qs=load_probe_questions()[:1])
+    assert out["report"]["header"]["reasoning_effort_sent"] == "low"
+    assert {r["body"].get("reasoning_effort") for r in m.requests} == {"low"}
+    assert "reasoning_effort sent: low" in out["markdown"]

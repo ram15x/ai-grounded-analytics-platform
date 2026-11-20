@@ -45,17 +45,20 @@ candidates:
 
 ## Evidence (dev questions only)
 
-Numbers the owner has reported in chat are quoted as given. Everything else is to be pasted from the
-probe's `report.md` before the held-out run; a blank cell is not a result.
+Values below are copied from the probe reports named in the source column.
 
 | embedder | method | recall@1 | MRR | source |
 |---|---|---|---|---|
-| gemini-embedding-2 | vector-only | 0.88 | 0.93 | owner, chat |
-| gemini-embedding-2 | default hybrid (baseline) | 0.71 | 0.82 | owner, chat |
-| gemini-embedding-2 | B | OWNER TO PASTE | OWNER TO PASTE | report.md |
-| bge-small-en-v1.5 | vector-only | OWNER TO PASTE | OWNER TO PASTE | report.md |
-| bge-small-en-v1.5 | default hybrid (baseline) | OWNER TO PASTE | OWNER TO PASTE | report.md |
-| bge-small-en-v1.5 | B | OWNER TO PASTE | OWNER TO PASTE | report.md |
+| gemini-embedding-2 | vector-only | 0.885 | 0.927 | `data\live_runs\20261120_234517_docs_gemini_embedding_2_768\report.md`, fusion table |
+| gemini-embedding-2 | default hybrid (baseline) | 0.712 | 0.820 | same |
+| gemini-embedding-2 | B (k=10 depth=20 kw 0.25) | 0.865 | 0.911 | same |
+| bge-small-en-v1.5 | vector-only | 0.827 | 0.878 | `data\live_runs\20261120_234404_docs_local_bge_small_en_v15\report.md`, fusion table |
+| bge-small-en-v1.5 | default hybrid (baseline) | 0.673 | 0.780 | same |
+| bge-small-en-v1.5 | B (k=10 depth=20 kw 0.25) | 0.808 | 0.868 | same |
+
+All six cells are on the 52 scored dev questions and were read from the two report files by the
+project's CTO review, not typed from memory. The first Gemini table (0.88 / 0.93 vector, 0.71 / 0.82
+hybrid) agrees with these to two decimals.
 
 ## Caveats
 
@@ -79,8 +82,18 @@ probe's `report.md` before the held-out run; a blank cell is not a result.
    differences. It records each embedder in `data/heldout_ledger.jsonl` and refuses a second run
    for the same embedder. (Deleting that file by hand defeats this; it is a guard against
    accidents, not against the owner.)
-3. This ADR sets no decision rule. Changing the shipped default is a separate decision, made by
-   the owner after reading the per-question output.
+3. Decision rule, fixed here BEFORE any held-out scoring (no `data/heldout_ledger.jsonl` exists at
+   the time of writing). The held-out set has 12 questions, so it can only veto, never prove:
+   - B replaces the baseline as the shipped default only if, on BOTH embedders, B's held-out MRR is
+     at least the baseline's and B ranks the first relevant passage worse than the baseline on at
+     most one question.
+   - A (vector-only) is preferred over B only if A's held-out MRR beats B's by more than 0.03 on
+     BOTH embedders. Otherwise B is kept, so the keyword side stays available for identifiers and
+     codes, which this synthetic corpus under-represents.
+   - If B fails its test against the baseline on either embedder, the default stays as it is and
+     the failure is recorded as a finding. The rule is not changed after seeing the output.
+   - Whatever happens, the result is reported as "did not contradict the dev finding on 12 held-out
+     questions", never as an accuracy figure.
 
 ## Consequences
 

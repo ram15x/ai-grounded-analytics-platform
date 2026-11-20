@@ -1,0 +1,112 @@
+# Embedder and reranker candidates for `va docs probe`. Nothing here has been called: every entry
+# is a candidate to be MEASURED, and every value is UNVERIFIED unless a comment says where it was
+# read. No accuracy claim is made for any of them.
+#
+# Keys come from the environment only: GEMINI_API_KEY, OPENROUTER_API_KEY, JINA_API_KEY.
+# A model name that starts with REPLACE makes the client refuse to call.
+#
+# Hosted entries only ever see documents marked `public` at ingest (`va docs ingest --sensitivity
+# public`); the probe refuses to send anything else. Local entries see everything.
+#
+# Names and request shapes below were read from the providers' own pages on 2026-11-20 and not
+# tried: Gemini (ai.google.dev/gemini-api/docs/embeddings), OpenRouter
+# (openrouter.ai/docs/api-reference/embeddings), Ollama (docs.ollama.com/api/embed), Jina
+# (jina.ai/reranker). Free-tier limits and prices were NOT found for Gemini, OpenRouter and Cohere;
+# Jina's page says free keys are limited to 100 RPM and 100K TPM.
+
+embedders:
+  # Gemini's page names gemini-embedding-2 as recommended: 128-3072 dimensions, default 3072,
+  # sizes 768/1536/3072 recommended, task given in the text (no taskType), auto-normalised when
+  # truncated, 8,192 input tokens.
+  gemini_embedding_2_768:
+    kind: gemini
+    hosted: true
+    env_key: GEMINI_API_KEY
+    model: gemini-embedding-2
+    dims: 768
+    task_style: prompt
+    timeout_s: 60
+  # gemini-embedding-001: taskType supported, 2,048 input tokens, must be normalised by hand when
+  # not 3072-dimensional.
+  gemini_embedding_001_768:
+    kind: gemini
+    hosted: true
+    env_key: GEMINI_API_KEY
+    model: gemini-embedding-001
+    dims: 768
+    task_style: task_type
+    normalize: true
+    timeout_s: 60
+  # OpenRouter lists openai/text-embedding-3-small among example embedding models. Whether it is
+  # free, and whether `dimensions` is accepted, was not found: send_dimensions stays false.
+  openrouter_text_embedding_3_small:
+    kind: openai_compat
+    hosted: true
+    env_key: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    model: openai/text-embedding-3-small
+    timeout_s: 60
+  # Local, through Ollama on this computer (`ollama pull <name>` first). embeddinggemma is the
+  # model the Ollama page uses in its example. Use 127.0.0.1, not localhost: on Windows localhost
+  # tries ::1 first and can hang.
+  ollama_embeddinggemma:
+    kind: ollama
+    hosted: false
+    base_url: http://127.0.0.1:11434
+    model: embeddinggemma
+    timeout_s: 120
+  # Other local candidates, UNVERIFIED (names and prefixes from memory, not from a page read for
+  # this project). Check `ollama list` / the model card before trusting either.
+  ollama_nomic_embed_text:
+    kind: ollama
+    hosted: false
+    base_url: http://127.0.0.1:11434
+    model: nomic-embed-text
+    document_prefix: "search_document: "
+    query_prefix: "search_query: "
+    timeout_s: 120
+  ollama_bge_m3:
+    kind: ollama
+    hosted: false
+    base_url: http://127.0.0.1:11434
+    model: bge-m3
+    timeout_s: 120
+  # The deterministic test embedder. It is NOT a candidate: it only exercises the plumbing.
+  fake_256:
+    kind: fake
+    hosted: false
+    dims: 256
+
+rerankers:
+  # Jina's page lists jina-reranker-v3.5 as the current text reranker (v3 and
+  # jina-reranker-v2-base-multilingual also listed) and a free key with limits of 100 RPM and
+  # 100K TPM. The response body was NOT shown on the page: results[].index / relevance_score is
+  # assumed from the common rerank shape and may need fixing at the first call.
+  jina_reranker_v3_5:
+    kind: rerank_api
+    hosted: true
+    env_key: JINA_API_KEY
+    url: https://api.jina.ai/v1/rerank
+    model: jina-reranker-v3.5
+    depth: 20
+  jina_reranker_v2_base_multilingual:
+    kind: rerank_api
+    hosted: true
+    env_key: JINA_API_KEY
+    url: https://api.jina.ai/v1/rerank
+    model: jina-reranker-v2-base-multilingual
+    depth: 20
+  # A local cross-encoder through the optional `sentence-transformers` package (pip install
+  # sentence-transformers; downloads the model on first use). The model name is UNVERIFIED.
+  local_bge_reranker_v2_m3:
+    kind: cross_encoder
+    hosted: false
+    model: BAAI/bge-reranker-v2-m3
+    depth: 20
+  fake_overlap:
+    kind: fake
+    hosted: false
+    depth: 20
+
+probe:
+  max_requests: 60   # default cap for one `va docs probe` run; hard ceiling 150

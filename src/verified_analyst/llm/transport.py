@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -85,6 +86,25 @@ def urllib_transport(
 ) -> HttpResponse:
     if not url.startswith("https://"):
         raise TransportError("only https URLs are allowed")
+    return _fetch(
+        urllib.request.Request(url, data=body, headers=headers, method="POST"),  # noqa: S310
+        timeout,
+    )
+
+
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def loopback_transport(
+    url: str, headers: dict[str, str], body: bytes, timeout: float
+) -> HttpResponse:
+    """POST to a model server on this computer only (for example Ollama). Plain http is allowed
+    for loopback addresses and nowhere else; credentials in the URL are refused."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "http" or parts.hostname not in _LOOPBACK_HOSTS:
+        raise TransportError("only loopback http addresses are allowed here")
+    if parts.username or parts.password:
+        raise TransportError("credentials in a URL are not allowed")
     return _fetch(
         urllib.request.Request(url, data=body, headers=headers, method="POST"),  # noqa: S310
         timeout,

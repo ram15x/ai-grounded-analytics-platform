@@ -25,7 +25,13 @@ from typing import Any
 from ..semantic import default_path
 from .types import PUBLIC, CassetteLeak, CassetteMiss, LLMRequest, LLMResponse
 
-KEY_ENV_VARS = ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY")
+KEY_ENV_VARS = (
+    "GROQ_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "JINA_API_KEY",
+    "COHERE_API_KEY",
+)
 LEAK_PATTERNS = [
     re.compile(r"Bearer\s+\S{8,}", re.I),
     re.compile(r"\bx-goog-api-key\b", re.I),

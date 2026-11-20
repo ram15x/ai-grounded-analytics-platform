@@ -52,3 +52,26 @@ def test_missing_file_is_a_config_error(tmp_path):
 def test_loopback_transport_refuses_other_targets(url):
     with pytest.raises(TransportError):
         loopback_transport(url, {}, b"{}", 1.0)
+
+
+def test_local_candidates_are_registered_as_not_hosted_with_dims():
+    s = load_retrieval_settings()
+    small, base = s.embedders["local_bge_small_en_v15"], s.embedders["local_bge_base_en_v15"]
+    assert (small.kind, small.hosted, small.dims, small.model) == (
+        "local",
+        False,
+        384,
+        "BAAI/bge-small-en-v1.5",
+    )
+    assert (base.kind, base.hosted, base.dims) == ("local", False, 768)
+    assert not any(e.kind == "ollama" for e in s.embedders.values())
+
+
+def test_the_local_dependency_is_an_optional_extra_not_a_core_one():
+    import tomllib
+    from pathlib import Path
+
+    meta = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text("utf-8"))
+    core = " ".join(meta["project"]["dependencies"]).lower()
+    assert "fastembed" not in core and "sentence-transformers" not in core
+    assert any("fastembed" in d for d in meta["project"]["optional-dependencies"]["local"])

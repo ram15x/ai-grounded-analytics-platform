@@ -9,6 +9,7 @@ redacted (llm.live.safe_error_body); the request, with the key, is never logged.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -244,11 +245,63 @@ class OllamaEmbedder(_Base):
         return self._finish(vectors, len(texts))
 
 
+class LocalEmbedder(_Base):
+    """Runs a small embedding model on this computer's CPU through the `fastembed` package (ONNX,
+    no daemon, no network after the weights are on disk). Install with `pip install -e ".[local]"`.
+
+    The package, its API (`TextEmbedding(model_name=..., cache_dir=...)` and `.embed(texts)`), the
+    model names and their sizes were written from memory and are UNVERIFIED
+    (docs/PHASE_2B_ASSUMPTIONS.md). The first load may download the model files, so a one-line
+    notice is printed before the load. Nothing loads until a probe asks for an embedding."""
+
+    def __init__(self, name, s, env, transport=None, library=None, notice=None):
+        super().__init__(name, s, env, transport, urllib_transport)
+        self._library = library  # a callable (model_name, cache_dir) -> object with .embed(texts)
+        self._notice = notice or (lambda line: print(line, file=sys.stderr, flush=True))
+        self._model: Any = None
+
+    def _load(self) -> Any:
+        if self._model is not None:
+            return self._model
+        factory = self._library
+        if factory is None:
+            try:
+                from fastembed import TextEmbedding  # noqa: PLC0415
+            except ImportError as exc:
+                raise EmbeddingError(
+                    "config", 'fastembed is not installed (pip install -e ".[local]")'
+                ) from exc
+
+            def factory(model, cache_dir):
+                return TextEmbedding(model_name=model, cache_dir=cache_dir)
+
+        self._notice(
+            f"loading local model {self.s.model}: the first use may download its files "
+            "from the internet and can take a few minutes; later runs use the saved copy"
+        )
+        try:
+            self._model = factory(self.s.model, self.s.cache_dir)
+        except Exception as exc:  # the library's own errors (download, unknown name) vary
+            raise EmbeddingError("load_failed", f"{type(exc).__name__}: {str(exc)[:200]}") from exc
+        return self._model
+
+    def _call(self, texts: Sequence[str], kind: Kind) -> list[list[float]]:
+        model = self._load()
+        try:
+            raw = list(model.embed([self._text(t, kind) for t in texts]))
+            vectors = [[float(x) for x in v] for v in raw]
+        except Exception as exc:
+            raise EmbeddingError("malformed", f"local model failed: {type(exc).__name__}") from exc
+        return self._finish(vectors, len(texts))
+
+
 def build_embedder(
     name: str,
     s: EmbedderSettings,
     env: Mapping[str, str],
     transport: Callable | None = None,
+    library: Callable | None = None,
+    notice: Callable[[str], None] | None = None,
 ):
     from verified_analyst.documents.embed import FakeEmbedder  # noqa: PLC0415
 
@@ -258,5 +311,8 @@ def build_embedder(
         "openai_compat": OpenAICompatEmbedder,
         "gemini": GeminiEmbedder,
         "ollama": OllamaEmbedder,
+        "local": LocalEmbedder,
     }[s.kind]
+    if s.kind == "local":
+        return LocalEmbedder(name, s, env, transport, library, notice)
     return cls(name, s, env, transport)

@@ -132,6 +132,8 @@ def run_probe(
     rerank_transport: Transport | None = None,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.perf_counter,
+    local_library: Callable | None = None,
+    notice: Callable[[str], None] | None = None,
 ) -> ProbeResult:
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if embedder_name not in settings.embedders:
@@ -149,8 +151,8 @@ def run_probe(
     emb_ct: CountingTransport | None = None
     rr_ct: CountingTransport | None = None
     embedder: Embedder
-    if es.kind == "fake":
-        embedder = build_embedder(embedder_name, es, env)
+    if es.kind in ("fake", "local"):
+        embedder = build_embedder(embedder_name, es, env, library=local_library, notice=notice)
     else:
         inner = embed_transport or (loopback_transport if es.kind == "ollama" else urllib_transport)
         emb_ct = _counting(inner, cap, env)
@@ -248,7 +250,9 @@ def run_probe(
         stop, code = {"kind": "request_cap", "detail": str(exc)}, 4
     except EmbeddingError as exc:
         stop = {"kind": exc.kind, "detail": str(exc)}
-        code = 3 if exc.kind == "auth" else 2 if exc.kind in ("config", "no_key") else 4
+        code = (
+            3 if exc.kind == "auth" else 2 if exc.kind in ("config", "no_key", "load_failed") else 4
+        )
     report["stop"] = stop
     report["http"] = {"embedder": _summary(emb_ct), "reranker": _summary(rr_ct)}
     return ProbeResult(report, code)

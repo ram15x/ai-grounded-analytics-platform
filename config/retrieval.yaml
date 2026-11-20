@@ -46,31 +46,29 @@ embedders:
     base_url: https://openrouter.ai/api/v1
     model: openai/text-embedding-3-small
     timeout_s: 60
-  # Local, through Ollama on this computer (`ollama pull <name>` first). embeddinggemma is the
-  # model the Ollama page uses in its example. Use 127.0.0.1, not localhost: on Windows localhost
-  # tries ::1 first and can hang.
-  ollama_embeddinggemma:
-    kind: ollama
+  # Local models on this computer's CPU through the optional `fastembed` package (ONNX, no
+  # daemon): pip install -e ".[local]". Package name, model names, dimensions, sizes and the query
+  # prefix are ALL from memory and UNVERIFIED. The first use may download the model files (the
+  # probe prints a notice first); nothing downloads unless you run the probe command.
+  # bge-small-en-v1.5: 384 dimensions, roughly 70 MB of files (UNVERIFIED).
+  local_bge_small_en_v15:
+    kind: local
     hosted: false
-    base_url: http://127.0.0.1:11434
-    model: embeddinggemma
-    timeout_s: 120
-  # Other local candidates, UNVERIFIED (names and prefixes from memory, not from a page read for
-  # this project). Check `ollama list` / the model card before trusting either.
-  ollama_nomic_embed_text:
-    kind: ollama
+    model: BAAI/bge-small-en-v1.5
+    dims: 384
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    normalize: true
+    batch_size: 32
+  # A larger base-size model: bge-base-en-v1.5, 768 dimensions, roughly 400 MB (UNVERIFIED), and
+  # slower on CPU. Whether fastembed lists this exact name is unconfirmed.
+  local_bge_base_en_v15:
+    kind: local
     hosted: false
-    base_url: http://127.0.0.1:11434
-    model: nomic-embed-text
-    document_prefix: "search_document: "
-    query_prefix: "search_query: "
-    timeout_s: 120
-  ollama_bge_m3:
-    kind: ollama
-    hosted: false
-    base_url: http://127.0.0.1:11434
-    model: bge-m3
-    timeout_s: 120
+    model: BAAI/bge-base-en-v1.5
+    dims: 768
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    normalize: true
+    batch_size: 16
   # The deterministic test embedder. It is NOT a candidate: it only exercises the plumbing.
   fake_256:
     kind: fake

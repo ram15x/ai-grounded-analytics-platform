@@ -274,3 +274,95 @@ def test_fake_reranker_prefers_overlap():
         "refund policy days", ["shipping rates", "refund policy is 30 days"]
     )
     assert b > a
+
+
+# ------------------------------------------------------------------ local (fastembed) embedder
+
+
+def local_settings(**kw):
+    d = dict(
+        kind="local",
+        hosted=False,
+        model="some/model",
+        dims=8,
+        batch_size=2,
+        normalize=True,
+        query_prefix="Q: ",
+    )
+    return EmbedderSettings(**{**d, **kw})
+
+
+class FakeLibrary:
+    """Stands in for fastembed.TextEmbedding: records what it was asked; plain-list vectors."""
+
+    def __init__(self):
+        self.loads, self.seen = [], []
+
+    def __call__(self, model, cache_dir):
+        self.loads.append((model, cache_dir))
+        outer = self
+
+        class Model:
+            def embed(self, texts):
+                outer.seen.append(list(texts))
+                return (iter([float(len(t)) + i for i in range(8)]) for t in texts)
+
+        return Model()
+
+
+def test_local_embedder_loads_once_prints_one_notice_and_batches():
+    from verified_analyst.documents.embed_http import LocalEmbedder
+
+    lib, notes = FakeLibrary(), []
+    e = LocalEmbedder("l", local_settings(cache_dir="/tmp/m"), {}, library=lib, notice=notes.append)
+    assert not lib.loads and not notes  # nothing happens at construction
+    out = e.embed(["a", "bb", "ccc"], "query")
+    e.embed(["d"], "document")
+    assert lib.loads == [("some/model", "/tmp/m")] and len(notes) == 1
+    assert "download" in notes[0] and "some/model" in notes[0]
+    assert lib.seen[0] == ["Q: a", "Q: bb"] and lib.seen[2] == [
+        "d"
+    ]  # batches of 2, prefix on queries
+    assert len(out) == 3 and math.isclose(sum(x * x for x in out[0]), 1.0)
+
+
+def test_local_embedder_missing_package_is_a_config_error(monkeypatch):
+    import sys
+
+    from verified_analyst.documents.embed_http import LocalEmbedder
+
+    monkeypatch.setitem(sys.modules, "fastembed", None)  # makes `import fastembed` fail
+    with pytest.raises(EmbeddingError) as ei:
+        LocalEmbedder("l", local_settings(), {}, notice=lambda s: None).embed(["x"], "document")
+    assert ei.value.kind == "config" and '".[local]"' in str(ei.value)
+
+
+def test_local_embedder_load_and_run_failures_are_mapped():
+    from verified_analyst.documents.embed_http import LocalEmbedder
+
+    def boom(model, cache_dir):
+        raise OSError("no route to host " + "x" * 500)
+
+    with pytest.raises(EmbeddingError) as ei:
+        LocalEmbedder("l", local_settings(), {}, library=boom, notice=lambda s: None).embed(
+            ["x"], "document"
+        )
+    assert ei.value.kind == "load_failed" and len(str(ei.value)) < 300
+
+    class Bad:
+        def __call__(self, m, c):
+            return type("M", (), {"embed": lambda self, t: [[1.0] * 3 for _ in t]})()
+
+    with pytest.raises(EmbeddingError):  # wrong dimensions
+        LocalEmbedder("l", local_settings(), {}, library=Bad(), notice=lambda s: None).embed(
+            ["x"], "document"
+        )
+
+
+def test_local_settings_rules_and_build():
+    with pytest.raises(ValueError):
+        local_settings(hosted=True)
+    with pytest.raises(ValueError):
+        local_settings(dims=None)
+    assert type(build_embedder("l", local_settings(), {})).__name__ == "LocalEmbedder"
+    assert build_embedder("l", local_settings(), {}).hosted is False

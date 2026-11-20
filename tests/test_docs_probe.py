@@ -264,3 +264,42 @@ def test_cli_unknown_embedder_exits_2(monkeypatch, capsys):
     monkeypatch.setenv("VA_READONLY_DATABASE_URL", "postgresql://x/y")
     assert main(["docs", "probe", "--embedder", "nope"]) == 2
     assert "unknown embedder" in capsys.readouterr().err
+
+
+@pytest.mark.db
+def test_probe_runs_a_local_embedder_through_an_injected_library(vector_db):
+    st = RetrievalSettings(
+        embedders={
+            "loc": EmbedderSettings(
+                kind="local", hosted=False, model="m/x", dims=64, batch_size=32, normalize=True
+            )
+        }
+    )
+    fake = FakeEmbedder(64)
+    loads, notes = [], []
+
+    def library(model, cache_dir):
+        loads.append(model)
+        return type("M", (), {"embed": lambda self, texts: fake.embed(list(texts), "document")})()
+
+    try:
+        res = probe(vector_db, "loc", settings=st, local_library=library, notice=notes.append)
+        assert res.exit_code == 0 and res.report["stop"] is None
+        assert loads == ["m/x"] and len(notes) == 1  # one load, one notice, before any embedding
+        assert res.report["http"]["embedder"] == {"requests": 0}
+        assert res.report["embedder"]["hosted"] is False and "vector" in res.report["methods"]
+    finally:
+        drop_model(vector_db, "loc")
+
+
+@pytest.mark.db
+def test_a_local_model_that_fails_to_load_exits_2_and_is_reported(vector_db):
+    st = RetrievalSettings(
+        embedders={"loc": EmbedderSettings(kind="local", hosted=False, model="m/x", dims=64)}
+    )
+
+    def library(model, cache_dir):
+        raise OSError("cannot download")
+
+    res = probe(vector_db, "loc", settings=st, local_library=library, notice=lambda s: None)
+    assert res.exit_code == 2 and res.report["stop"]["kind"] == "load_failed"

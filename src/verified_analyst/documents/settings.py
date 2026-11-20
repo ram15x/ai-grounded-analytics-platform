@@ -20,7 +20,7 @@ class _M(BaseModel):
 
 
 class EmbedderSettings(_M):
-    kind: Literal["openai_compat", "gemini", "ollama", "fake"]
+    kind: Literal["openai_compat", "gemini", "ollama", "local", "fake"]
     hosted: bool
     model: str = "fake"
     env_key: str | None = None
@@ -35,13 +35,16 @@ class EmbedderSettings(_M):
     task_style: Literal["prompt", "task_type"] = "task_type"
     normalize: bool = False  # L2-normalise what comes back (needed for gemini-embedding-001 < 3072)
     send_dimensions: bool = False  # openai_compat: send `dimensions`; UNVERIFIED for OpenRouter
+    cache_dir: str | None = None  # local: where model files are kept (default: the library's own)
 
     @model_validator(mode="after")
     def _check(self) -> EmbedderSettings:
-        if self.kind not in ("fake", "ollama") and not self.env_key:
+        if self.kind not in ("fake", "ollama", "local") and not self.env_key:
             raise ValueError("a hosted embedder needs env_key")
         if self.kind == "ollama" and self.hosted:
             raise ValueError("an ollama embedder runs on this computer: hosted must be false")
+        if self.kind == "local" and (self.hosted or not self.dims):
+            raise ValueError("a local embedder runs on this computer: hosted false, and dims set")
         if self.kind in ("openai_compat", "ollama") and not self.base_url:
             raise ValueError(f"{self.kind} needs base_url")
         if self.kind in ("openai_compat", "gemini") and not self.hosted:

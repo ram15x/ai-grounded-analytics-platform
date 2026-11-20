@@ -21,6 +21,7 @@ from verified_analyst.llm.fake import FakeProvider
 from verified_analyst.llm.pipeline import run_question
 from verified_analyst.llm.providers import GroqProvider
 from verified_analyst.llm.router import Router
+from verified_analyst.llm.transport import HttpResponse
 from verified_analyst.semantic import load_semantic_layer
 
 pytestmark = pytest.mark.db
@@ -332,3 +333,68 @@ def test_a_derived_percent_of_claim_shaped_like_the_prompt_example_verifies(env)
     assert out.outcome == "verified", [(a.status, a.problems) for a in out.attempts]
     assert out.repairs_used == 0
     assert "%" in out.rendered
+
+
+# ---- a JSON-mode rejection from the provider goes down the repair path ----
+
+
+def jv(generation=""):
+    body = {"error": {"code": "json_validate_failed", "failed_generation": generation,
+                      "message": "Failed to validate JSON."}}  # fmt: skip
+    return HttpResponse(400, json.dumps(body).encode())
+
+
+def over_http(env_, responses):
+    layer, url, known = env_
+    cfg = settings(datasets={"analytics.sales_lines": "public"})
+    cfg.tasks = {t: ["groq"] for t in ("plan", "compose", "repair")}
+    t = MockTransport(responses)
+    router = Router(cfg, {"groq": GroqProvider("groq", "GROQ_API_KEY", transport=t, env=KEYS)})
+    run = router.new_run("http")
+    out = run_question(QUESTION, layer=layer, readonly_url=url, router=router, run=run,
+                       known_values=known)  # fmt: skip
+    return out, t, run
+
+
+def test_two_rejections_of_the_compose_call_become_a_schema_failure_then_a_repair(env):
+    out, t, run = over_http(
+        env,
+        [ok_openai(json.dumps(PLAN)), jv(), jv(), ok_openai(json.dumps(GOOD))],
+    )
+    assert out.outcome == "verified" and out.repairs_used == 1
+    assert [a.status for a in out.attempts] == ["schema_failure", "verified"]
+    assert "rejected the answer as invalid JSON" in out.attempts[0].problems[0]
+    assert len(t.calls) == 4  # plan, compose, compose again (the one retry), repair
+    repair_user = t.calls[3]["body"]["messages"][1]["content"]
+    assert "rejected the answer as invalid JSON" in repair_user
+
+
+def test_one_rejection_then_success_needs_no_repair(env):
+    out, t, _ = over_http(env, [ok_openai(json.dumps(PLAN)), jv(), ok_openai(json.dumps(GOOD))])
+    assert out.outcome == "verified" and out.repairs_used == 0
+    assert len(t.calls) == 3
+
+
+def test_two_rejections_of_the_plan_call_use_the_plan_repair_budget(env):
+    out, t, _ = over_http(
+        env, [jv(), jv(), ok_openai(json.dumps(PLAN)), ok_openai(json.dumps(GOOD))]
+    )
+    assert out.outcome == "verified" and out.plan_failures == 1 and out.repairs_used == 1
+
+
+def test_a_rejection_recorded_with_empty_text_replays_as_a_schema_failure(env, tmp_path, warehouse):
+    layer, url, known = env
+    ctx = CassetteContext(layer_hash(), schema_hash(), warehouse_content_hash(url))
+    cfg = settings(datasets={"analytics.sales_lines": "public"})
+    cfg.tasks = {t: ["groq"] for t in ("plan", "compose", "repair")}
+    t = MockTransport([ok_openai(json.dumps(PLAN)), jv(), jv(), ok_openai(json.dumps(GOOD))])
+    rec = Cassette(tmp_path, "record", ctx, env=KEYS)
+    router = Router(cfg, {"groq": GroqProvider("groq", "GROQ_API_KEY", transport=t, env=KEYS)},
+                    cassette=rec)  # fmt: skip
+    out1 = run_question(QUESTION, layer=layer, readonly_url=url, router=router,
+                        run=router.new_run("r"), known_values=known)  # fmt: skip
+    play = Router(cfg, {}, cassette=Cassette(tmp_path, "replay", ctx, env=KEYS))
+    out2 = run_question(QUESTION, layer=layer, readonly_url=url, router=play,
+                        run=play.new_run("p"), known_values=known)  # fmt: skip
+    assert out1.outcome == out2.outcome == "verified"
+    assert [a.status for a in out2.attempts] == ["schema_failure", "verified"]

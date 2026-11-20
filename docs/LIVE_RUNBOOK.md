@@ -100,6 +100,13 @@ Then close the session's keys:
 Remove-Item Env:GROQ_API_KEY, Env:GEMINI_API_KEY, Env:OPENROUTER_API_KEY
 ```
 
+## JSON-mode rejections
+
+If Groq answers HTTP 400 `json_validate_failed`, the router sends the same request once more (it counts
+as a request against the cap). If that is also rejected, the question goes through the normal repair
+step, and the report's accounting lists `json_rejected` under errors by provider. Whether the retry
+helps is not yet measured; look at `by status` and `json_rejected` counts in the next run.
+
 ## What the report is and is not
 
 Raw numbers for one model with n and a Wilson interval each. "Every number verified" means the numbers

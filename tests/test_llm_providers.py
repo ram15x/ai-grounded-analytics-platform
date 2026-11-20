@@ -360,3 +360,31 @@ def test_adapters_without_a_known_parameter_name_refuse_reasoning_effort(cls, en
     with pytest.raises(ConfigError):
         p.complete(dataclasses.replace(public(), reasoning_effort="low"), "model-x", 5)
     assert t.calls == []  # nothing was sent
+
+
+# ---- json_validate_failed classification (Groq only) ----
+
+
+def _jv(code="json_validate_failed", generation="x"):
+    body = {"error": {"code": code, "failed_generation": generation, "message": "m"}}
+    return HttpResponse(400, json.dumps(body).encode())
+
+
+def test_groq_classifies_json_validate_failed_in_json_mode_only():
+    p, _ = make(GroqProvider, "GROQ_API_KEY", [_jv(generation="{bad"), _jv(), _jv("other")])
+    with pytest.raises(ProviderError) as e:
+        p.complete(public(json_mode=True), "model-x", 5)
+    assert e.value.kind == "json_rejected" and e.value.failed_generation == "{bad"
+    with pytest.raises(ProviderError) as e:
+        p.complete(public(json_mode=False), "model-x", 5)
+    assert e.value.kind == "bad_request"
+    with pytest.raises(ProviderError) as e:
+        p.complete(public(json_mode=True), "model-x", 5)
+    assert e.value.kind == "bad_request"  # a different error code
+
+
+def test_a_huge_failed_generation_is_cut():
+    p, _ = make(GroqProvider, "GROQ_API_KEY", [_jv(generation="y" * 50000)])
+    with pytest.raises(ProviderError) as e:
+        p.complete(public(), "model-x", 5)
+    assert len(e.value.failed_generation) == 4000

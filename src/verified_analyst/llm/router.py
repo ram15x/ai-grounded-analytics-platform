@@ -24,6 +24,7 @@ from .providers import ADAPTERS, Provider
 from .settings import RouterSettings
 from .types import (
     INTERNAL,
+    JSON_REJECTED,
     PUBLIC,
     RATE_LIMIT,
     RETRYABLE,
@@ -203,7 +204,9 @@ class Router:
         retry = self.settings.retry
         wait_ms = 0.0
         reserved = estimate_tokens(req)
-        for attempt in range(retry.max_retries + 1):
+        json_rejects = 0
+        attempt = 0
+        while attempt <= retry.max_retries:
             wait = self._bucket_wait(name, reserved)
             if wait > self.settings.bucket.max_wait_s:
                 fail("throttled", model, attempt=attempt)
@@ -237,6 +240,22 @@ class Router:
                 )
                 attempts.append({"provider": name, "outcome": exc.kind, "attempt": attempt})
                 wait_ms = 0.0
+                if exc.kind == JSON_REJECTED:
+                    # JSON mode refused the model's own output. Same request once more (it does
+                    # not use up the normal retry budget, but it is a real HTTP request and the
+                    # probe's request cap counts it). A second refusal is handed to the caller as
+                    # a response whose text fails to parse, so it goes down the repair path.
+                    self._consec_429[name] = 0
+                    json_rejects += 1
+                    if json_rejects == 1:
+                        continue
+                    return LLMResponse(
+                        text=exc.failed_generation or "",
+                        provider=name,
+                        model=model,
+                        latency_ms=elapsed,
+                        finish_reason=JSON_REJECTED,
+                    )
                 if exc.kind == RATE_LIMIT:
                     n = self._consec_429.get(name, 0) + 1
                     self._consec_429[name] = n
@@ -252,6 +271,7 @@ class Router:
                     return None
                 wait_ms += delay * 1000
                 self.sleep(delay)
+                attempt += 1
                 continue
             self._consec_429[name] = 0
             rec = self._record(req, resp, "ok", attempt, wait_ms)

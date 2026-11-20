@@ -20,6 +20,7 @@ from .types import (
     BAD_REQUEST,
     BLOCKED,
     INTERNAL,
+    JSON_REJECTED,
     MALFORMED,
     NETWORK,
     NO_KEY,
@@ -33,6 +34,7 @@ from .types import (
 )
 
 PLACEHOLDER_PREFIX = "REPLACE"
+MAX_FAILED_GENERATION_CHARS = 4000  # bounds what a rejected output can add to a repair prompt
 
 
 class Provider(ABC):
@@ -116,10 +118,16 @@ class HostedProvider(Provider):
         except TransportError as exc:
             raise ProviderError(NETWORK, str(exc)) from exc
         latency_ms = (self.clock() - start) * 1000.0
-        return self._to_response(resp, model, latency_ms, key)
+        return self._to_response(resp, model, latency_ms, key, req.json_mode)
+
+    def _json_rejection(self, resp: HttpResponse) -> str | None:
+        """For a JSON-mode HTTP 400 that means "your output was not valid JSON": the text the
+        model produced (maybe empty). None for any other 400. Only adapters that know the
+        provider's wording override this."""
+        return None
 
     def _to_response(
-        self, resp: HttpResponse, model: str, latency_ms: float, key: str
+        self, resp: HttpResponse, model: str, latency_ms: float, key: str, json_mode: bool = False
     ) -> LLMResponse:
         status = resp.status
         if status == 429:
@@ -133,6 +141,13 @@ class HostedProvider(Provider):
             raise ProviderError(AUTH, f"HTTP {status}", status=status)
         if status == 408 or status >= 500:
             raise ProviderError(SERVER, f"HTTP {status}", status=status)
+        if status == 400 and json_mode:
+            rejected = self._json_rejection(resp)
+            if rejected is not None:
+                raise ProviderError(
+                    JSON_REJECTED, "HTTP 400 json_validate_failed", status=400,
+                    failed_generation=rejected,
+                )  # fmt: skip
         if status != 200:
             raise ProviderError(BAD_REQUEST, f"HTTP {status}", status=status)
         try:
@@ -196,6 +211,19 @@ class _OpenAICompatible(HostedProvider):
 
 class GroqProvider(_OpenAICompatible):
     accepts_reasoning_effort = True  # UNVERIFIED: the parameter name and values are a guess
+
+    def _json_rejection(self, resp: HttpResponse) -> str | None:
+        # Seen once on 2026-11-20 (assumptions row 33): HTTP 400, error.code "json_validate_failed",
+        # error.failed_generation "" (empty). Other Groq 400s keep the plain bad_request path.
+        try:
+            err = json.loads(resp.body.decode("utf-8")).get("error")
+        except (UnicodeDecodeError, ValueError, AttributeError):
+            return None
+        if not isinstance(err, dict) or err.get("code") != "json_validate_failed":
+            return None
+        fg = err.get("failed_generation")
+        return fg[:MAX_FAILED_GENERATION_CHARS] if isinstance(fg, str) else ""
+
     default_endpoint = "https://api.groq.com/openai/v1/chat/completions"  # UNVERIFIED
 
 

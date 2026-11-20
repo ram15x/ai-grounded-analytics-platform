@@ -699,3 +699,29 @@ def test_report_states_the_bucket_and_whether_reasoning_effort_was_sent(env, tmp
     assert out["report"]["header"]["reasoning_effort_sent"] == "low"
     assert {r["body"].get("reasoning_effort") for r in m.requests} == {"low"}
     assert "reasoning_effort sent: low" in out["markdown"]
+
+
+def _jv():
+    body = {"error": {"code": "json_validate_failed", "failed_generation": "", "message": "m"}}
+    return status(400, body=json.dumps(body).encode())
+
+
+@pytest.mark.db
+def test_a_json_rejection_retry_is_a_counted_request_and_the_question_still_verifies(env, tmp_path):
+    m = Model(statuses=[None, _jv()])  # plan ok, first compose rejected, the retry answers
+    out = probe(env, m, tmp_path, qs=load_probe_questions()[:1])
+    rep = out["report"]
+    assert rep["http"]["requests_sent"] == 3 and len(m.requests) == 3
+    assert rep["http"]["by_status"] == {"200": 2, "400": 1}
+    assert rate_of(out, "questions with every number verified")["k"] == 1
+    assert rate_of(out, "questions that needed at least one repair")["k"] == 0
+    assert rep["http"]["error_bodies"][0]["status"] == 400
+
+
+@pytest.mark.db
+def test_the_request_cap_stops_a_question_between_a_rejection_retry_and_its_repair(env, tmp_path):
+    m = Model(statuses=[None, _jv(), _jv()])  # plan ok, compose rejected twice -> a repair needed
+    out = probe(env, m, tmp_path, qs=load_probe_questions()[:1], max_requests=3)
+    assert out["report"]["http"]["requests_sent"] == 3  # plan, compose, its one retry; no fourth
+    assert "request cap" in out["report"]["stop"]["reason"]
+    assert out["report"]["accounting"]["by_provider"]["groq"]["errors"] == {"json_rejected": 2}

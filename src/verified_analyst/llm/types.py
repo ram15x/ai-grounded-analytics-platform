@@ -15,6 +15,7 @@ NETWORK = "network"
 MALFORMED = "malformed"
 AUTH = "auth"
 BAD_REQUEST = "bad_request"
+JSON_REJECTED = "json_rejected"  # JSON mode made the provider refuse the model's own output
 BLOCKED = "blocked"
 NO_KEY = "no_key"
 CONFIG = "config"
@@ -75,12 +76,14 @@ class ProviderError(LLMError):
         *,
         status: int | None = None,
         retry_after: float | None = None,
+        failed_generation: str | None = None,
     ):
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
         self.detail = detail
         self.status = status
         self.retry_after = retry_after
+        self.failed_generation = failed_generation
 
 
 class SensitivityRefusal(LLMError):

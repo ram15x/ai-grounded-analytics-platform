@@ -29,6 +29,7 @@ from .prompts import compose_request, plan_request
 from .router import Router
 from .schemas import ComposeOutput, PlanOutput
 from .types import (
+    JSON_REJECTED,
     AllProvidersFailed,
     BudgetExceeded,
     CassetteMiss,
@@ -122,6 +123,7 @@ def _json(text: str) -> Any:
     return json.loads(text)
 
 
+REJECTED_TEXT = "the provider rejected the answer as invalid JSON (it did not parse)"
 TYPED_DIGIT_CODES = {"digit_outside_placeholder", "digits_in_unrecognised_form", "non_ascii_digit"}
 
 
@@ -205,6 +207,8 @@ def run_question(
             }  # fmt: skip
             result.events.append(ev)
             try:
+                if got.finish_reason == JSON_REJECTED:
+                    raise ValueError(REJECTED_TEXT)
                 raw = _json(got.text)
                 ev["json_ok"] = True
                 plan = PlanOutput.model_validate(raw)
@@ -252,6 +256,8 @@ def run_question(
         }  # fmt: skip
         result.events.append(cev)
         try:
+            if got.finish_reason == JSON_REJECTED:
+                raise ValueError(REJECTED_TEXT)
             raw = _json(got.text)
             cev["json_ok"] = True
             out = ComposeOutput.model_validate(raw)

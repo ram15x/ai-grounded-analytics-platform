@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import random
 from pathlib import Path
 
@@ -568,3 +569,82 @@ def test_reasoning_effort_on_another_provider_is_a_config_error():
     cfg["providers"]["groq"]["reasoning_effort"] = "Low; drop table"  # not a plain word
     with pytest.raises(ValidationError):
         RouterSettings.model_validate(cfg)
+
+
+# ---- Groq json_validate_failed (HTTP 400): one retry, then the text goes to the repair path ----
+
+
+def jv(generation="", code="json_validate_failed"):
+    body = {"error": {"message": "Failed to validate JSON.", "type": "invalid_request_error",
+                      "code": code, "failed_generation": generation}}  # fmt: skip
+    return status(400, body=json.dumps(body).encode())
+
+
+def test_json_validate_failed_is_retried_once_with_the_same_request_and_can_succeed():
+    router, run, tr, clock = rig(groq=[jv(), ok_openai('{"a": 1}')])
+    r = router.call(req(), run)
+    assert r.text == '{"a": 1}' and r.finish_reason != "json_rejected"
+    assert len(tr["groq"].calls) == 2
+    assert tr["groq"].calls[0]["body"] == tr["groq"].calls[1]["body"]  # same request
+    assert [x.outcome for x in run.records] == ["json_rejected", "ok"]
+    assert clock.slept == []
+
+
+def test_a_second_json_validate_failed_is_returned_as_unparseable_text_not_an_error():
+    router, run, tr, _ = rig(groq=[jv(), jv("{ half a json")])
+    r = router.call(req(), run)
+    assert (r.text, r.finish_reason, r.provider) == ("{ half a json", "json_rejected", "groq")
+    assert len(tr["groq"].calls) == 2  # exactly one retry, never a third request
+    assert [x.outcome for x in run.records] == ["json_rejected", "json_rejected"]
+
+
+def test_the_empty_failed_generation_seen_on_groq_comes_back_as_empty_text():
+    router, run, tr, _ = rig(groq=[jv(""), jv("")])
+    assert router.call(req(), run).text == ""
+
+
+def test_the_json_retry_does_not_use_up_the_normal_retry_budget():
+    cfg = settings(retry={"max_retries": 0})
+    router, run, tr, _ = rig(cfg, groq=[jv(), ok_openai()])
+    assert router.call(req(), run).finish_reason != "json_rejected"
+    assert len(tr["groq"].calls) == 2
+
+
+def test_the_json_retry_can_be_followed_by_a_normal_server_retry():
+    router, run, tr, clock = rig(groq=[jv(), status(500), ok_openai()])
+    router.call(req(), run)
+    assert [x.outcome for x in run.records] == ["json_rejected", "server", "ok"]
+
+
+@pytest.mark.parametrize(
+    "resp",
+    [
+        jv(code="model_not_found"),  # another 400 from Groq
+        status(400, body=b"not json"),
+        status(400, body=b"{}"),
+    ],
+    ids=["other_code", "not_json", "empty_object"],
+)
+def test_other_400s_are_still_not_retried(resp):
+    router, run, tr, _ = rig(groq=[resp], gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"  # fell through, groq not retried
+    assert len(tr["groq"].calls) == 1
+    assert run.records[0].outcome == "bad_request"
+
+
+def test_a_json_validate_failed_400_without_json_mode_is_not_retried():
+    router, run, tr, _ = rig(groq=[jv()], gemini=[ok_gemini()])
+    assert router.call(req(json_mode=False), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 1 and run.records[0].outcome == "bad_request"
+
+
+def test_only_adapters_that_know_the_wording_classify_it():
+    router, run, tr, _ = rig(openrouter_only(), openrouter=[jv()], gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"
+    assert len(tr["openrouter"].calls) == 1 and run.records[0].outcome == "bad_request"
+
+
+def openrouter_only():
+    cfg = settings()
+    cfg.tasks = {t: ["openrouter", "gemini"] for t in ("route", "plan", "compose", "repair")}
+    return cfg

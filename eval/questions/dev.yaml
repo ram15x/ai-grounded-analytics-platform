@@ -1,0 +1,286 @@
+# Phase 1c-0 gold set, first 15 questions (tier T1). Author-written.
+description: Tier T1 dev questions (15 of 60). AUTHOR-WRITTEN by the project author; not an independent
+  benchmark. Gold values come from eval/gold/t1.py (pandas over the RAW file); no value is stored here.
+questions:
+- id: T1-01
+  tier: T1
+  author_written: true
+  question: What was total gross revenue (sales before cancellations and discounts)?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Gross revenue = sum of Quantity x UnitPrice over sale rows. Postage and fee codes are included.
+  gold_fn: gross_revenue
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - gross_revenue
+- id: T1-02
+  tier: T1
+  author_written: true
+  question: How much revenue was cancelled in total?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Cancelled revenue = minus the sum of Quantity x UnitPrice over cancellation rows, shown as a positive
+    number.
+  gold_fn: cancelled_revenue
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - cancelled_revenue
+- id: T1-03
+  tier: T1
+  author_written: true
+  question: What was the total value of discounts given?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A discount row: StockCode is ''D'' and UnitPrice > 0.'
+  - Discount amount = minus the sum of Quantity x UnitPrice over discount rows, shown as a positive number.
+  gold_fn: discount_amount
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - discount_amount
+- id: T1-04
+  tier: T1
+  author_written: true
+  question: What was net revenue overall?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - 'A discount row: StockCode is ''D'' and UnitPrice > 0.'
+  - Net revenue = sum of Quantity x UnitPrice over sale, cancellation and discount rows.
+  gold_fn: net_revenue
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - net_revenue
+- id: T1-05
+  tier: T1
+  author_written: true
+  question: How many units were sold in total?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Units sold = sum of Quantity over ALL sale rows, whatever the stock code (postage, fees and manual
+    lines included).
+  gold_fn: units_sold
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - units_sold
+  declared_rule_difference: Author's plain reading counts units on every sale row. The semantic layer
+    counts merchandise stock codes only. Expected to differ if the file has sale rows with non-merchandise
+    codes; owner to decide which rule is right.
+- id: T1-06
+  tier: T1
+  author_written: true
+  question: How many orders were placed?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Orders = number of distinct InvoiceNo among sale rows.
+  gold_fn: order_count
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - order_count
+- id: T1-07
+  tier: T1
+  author_written: true
+  question: How many distinct customers bought something?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Customers = number of distinct CustomerID among sale rows. Rows with a missing CustomerID are not
+    counted.
+  gold_fn: active_customers
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - active_customers
+- id: T1-08
+  tier: T1
+  author_written: true
+  question: What was the average order value?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Average order value = gross revenue divided by the number of orders.
+  gold_fn: average_order_value
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - aov
+- id: T1-09
+  tier: T1
+  author_written: true
+  question: What was average revenue per customer?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Revenue per customer = sum of Quantity x UnitPrice over sale rows that HAVE a CustomerID, divided
+    by the number of distinct such CustomerIDs.
+  gold_fn: revenue_per_customer
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - revenue_per_customer
+- id: T1-10
+  tier: T1
+  author_written: true
+  question: What share of gross revenue was cancelled?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Cancellation rate = cancelled revenue divided by gross revenue, shown as a fraction (0.10 means 10
+    percent).
+  gold_fn: cancellation_rate
+  unit: ratio
+  decimals: 4
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - cancellation_rate
+- id: T1-11
+  tier: T1
+  author_written: true
+  question: What was gross revenue from merchandise only (excluding postage, fees and manual lines)?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Merchandise = StockCode is exactly five digits optionally followed by up to three capital letters.
+  gold_fn: merchandise_gross_revenue
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: true
+  metric_query:
+    metrics:
+    - gross_revenue
+    filters:
+    - dimension: product_kind
+      op: eq
+      value: merchandise
+- id: T1-12
+  tier: T1
+  author_written: true
+  question: How many invoice lines were sales?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Count of sale rows.
+  gold_fn: sale_line_count
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: false
+  not_expressible_reason: No catalogue metric counts invoice lines.
+- id: T1-13
+  tier: T1
+  author_written: true
+  question: How many different products were sold?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Count of distinct StockCode among sale rows.
+  gold_fn: distinct_products_sold
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: false
+  not_expressible_reason: No catalogue metric counts distinct products.
+- id: T1-14
+  tier: T1
+  author_written: true
+  question: How many invoices were cancelled?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - Count of distinct InvoiceNo among cancellation rows.
+  gold_fn: cancelled_invoice_count
+  unit: count
+  decimals: 0
+  expressible_as_metric_query: false
+  not_expressible_reason: No catalogue metric counts cancelled invoices.
+- id: T1-15
+  tier: T1
+  author_written: true
+  question: What was net revenue from customers we can identify?
+  rules:
+  - Use every row of the raw file as given. Exact duplicate rows are NOT removed.
+  - Money is Quantity x UnitPrice in GBP, as recorded.
+  - Rows with UnitPrice <= 0 are never counted as sales, cancellations or discounts.
+  - 'A sale row: InvoiceNo does not start with ''C'', Quantity > 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - 'A cancellation row: InvoiceNo starts with ''C'', Quantity < 0, UnitPrice > 0, and StockCode is not
+    ''D''.'
+  - 'A discount row: StockCode is ''D'' and UnitPrice > 0.'
+  - Only rows with a CustomerID. Net revenue = sum of Quantity x UnitPrice over sale, cancellation and
+    discount rows.
+  gold_fn: identified_net_revenue
+  unit: GBP
+  decimals: 2
+  expressible_as_metric_query: false
+  not_expressible_reason: No filter operator selects rows with a non-null customer_id.

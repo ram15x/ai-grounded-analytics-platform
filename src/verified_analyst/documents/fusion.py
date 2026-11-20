@@ -14,15 +14,26 @@ from verified_analyst.documents.store import Hit
 RRF_K = 60  # the constant from the original RRF paper; a measured choice, not tuned here
 
 
-def rrf(rankings: Sequence[Sequence[str]], k: int = RRF_K) -> list[tuple[str, float]]:
-    """Fused (key, score), best first. Ties break by the earliest list, then position."""
+def rrf(
+    rankings: Sequence[Sequence[str]],
+    k: int = RRF_K,
+    weights: Sequence[float] | None = None,
+) -> list[tuple[str, float]]:
+    """Fused (key, score), best first. Ties break by the earliest list, then position.
+
+    `weights` (one per list, default all 1) scale each list's contribution; equal weights give
+    the plain RRF of the original paper."""
+    if weights is None:
+        weights = [1.0] * len(rankings)
+    if len(weights) != len(rankings) or any(w < 0 for w in weights):
+        raise ValueError("one non-negative weight per ranking is required")
     scores: dict[str, float] = {}
     first_seen: dict[str, tuple[int, int]] = {}
     for li, ranking in enumerate(rankings):
         for pos, key in enumerate(ranking):
             if key in scores and first_seen[key][0] == li:
                 continue  # a key repeated inside one list counts once
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + pos + 1)
+            scores[key] = scores.get(key, 0.0) + weights[li] / (k + pos + 1)
             first_seen.setdefault(key, (li, pos))
     return sorted(scores.items(), key=lambda kv: (-kv[1], first_seen[kv[0]]))
 
@@ -30,20 +41,32 @@ def rrf(rankings: Sequence[Sequence[str]], k: int = RRF_K) -> list[tuple[str, fl
 Search = Callable[[str, int], list[Hit]]
 
 
-def fuse_hits(lists: Sequence[Sequence[Hit]], k: int, rrf_k: int = RRF_K) -> list[Hit]:
+def fuse_hits(
+    lists: Sequence[Sequence[Hit]],
+    k: int,
+    rrf_k: int = RRF_K,
+    weights: Sequence[float] | None = None,
+) -> list[Hit]:
     by_id: dict[str, Hit] = {}
     for hits in lists:
         for h in hits:
             by_id.setdefault(h.passage_id, h)
-    fused = rrf([[h.passage_id for h in hits] for hits in lists], rrf_k)
+    fused = rrf([[h.passage_id for h in hits] for hits in lists], rrf_k, weights)
     return [replace(by_id[pid], score=score) for pid, score in fused[:k]]
 
 
-def hybrid(keyword: Search, vector: Search, depth: int = 50) -> Search:
-    """Keyword and vector search to `depth` each, fused by RRF."""
+def hybrid(
+    keyword: Search,
+    vector: Search,
+    depth: int = 50,
+    rrf_k: int = RRF_K,
+    weights: Sequence[float] | None = None,
+) -> Search:
+    """Keyword and vector search to `depth` each, fused by (optionally weighted) RRF.
+    Weights are (keyword, vector)."""
 
     def search(query: str, k: int) -> list[Hit]:
-        return fuse_hits([keyword(query, depth), vector(query, depth)], k)
+        return fuse_hits([keyword(query, depth), vector(query, depth)], k, rrf_k, weights)
 
     return search
 

@@ -108,6 +108,28 @@ class Claim(_Strict):
         return to_decimal(v)
 
 
+class TemplateClaim(_Strict):
+    """A claim in placeholder mode. There is NO text and NO value: the system renders the number.
+
+    The composer chooses which cell or derivation backs the placeholder, the unit it is shown in,
+    and optionally decimals and a scale. It never writes the digits.
+    """
+
+    id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+    label: str = Field(min_length=1, description="What the number measures, in business words")
+    unit: Literal["currency", "count", "percent", "percentage_points", "ratio", "number"]
+    provenance: Annotated[CellRef | RowCountRef | DerivedRef, Field(discriminator="kind")]
+    decimals: int | None = Field(default=None, ge=0, le=6)
+    scale: Literal["none", "thousand", "million", "billion"] = "none"
+
+    @field_validator("provenance")
+    @classmethod
+    def _no_literals(cls, v: Any) -> Any:
+        if isinstance(v, DerivedRef) and any(isinstance(a, LiteralArg) for a in v.args):
+            raise ValueError("derived claims in a template may not take literal arguments")
+        return v
+
+
 class QuerySpec(_Strict):
     """How a query in the answer was produced.
 
@@ -146,3 +168,12 @@ class AnswerDoc(_Strict):
     queries: list[QuerySpec] = Field(default_factory=list)
     passages: list[Passage] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
+
+
+class TemplateAnswer(_Strict):
+    """Placeholder-mode answer: prose with `{claim_id}` placeholders instead of numbers."""
+
+    question: str = ""
+    template: str
+    queries: list[QuerySpec] = Field(default_factory=list)
+    claims: list[TemplateClaim] = Field(default_factory=list)

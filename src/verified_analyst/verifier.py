@@ -121,6 +121,17 @@ class _Cell:
     row: tuple[Any, ...]
 
 
+ResolveFailure = _Fail  # public name: raised by Verifier.resolve when a provenance cannot resolve
+
+
+@dataclass
+class Resolved:
+    """A provenance resolved to a value, with the metrics (if any) of the cells it came from."""
+
+    value: Decimal
+    metrics: list[str]
+
+
 ShadowFn = Callable[[MetricQuery], ExecutedQuery]
 CONFLICTING_DIRECTIONS = {"up": 1, "down": -1}
 
@@ -170,6 +181,26 @@ class Verifier:
             report.verdicts.append(self._check(item, claim, prose_values))
         report.dropped_claims = [c.id for c in remaining]
         return report
+
+    def resolve(self, prov: CellRef | RowCountRef | DerivedRef) -> Resolved:
+        """Resolve a cell, row count or derived provenance to its recomputed value (Decimal).
+
+        Used by the placeholder renderer: the value shown to the reader comes from here, never
+        from the composer. Derived claims may not take literal arguments in this mode.
+        """
+        if isinstance(prov, DerivedRef):
+            if any(isinstance(a, LiteralArg) for a in prov.args):
+                raise _Fail(UNSUPPORTED, "literal_argument_not_allowed_in_template")
+            value = self._derive(prov, set())
+            args = prov.args
+        else:
+            value = self._arg(prov, set())
+            args = [prov]
+        metrics: list[str] = []
+        for a in args:
+            if isinstance(a, CellRef) and a.column in self.layer.metrics:
+                metrics.append(a.column)
+        return Resolved(value, metrics)
 
     # ------------------------------------------------------------- reconciliation
 

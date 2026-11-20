@@ -939,7 +939,7 @@ def test_every_abstain_prints_the_planners_words_and_the_catalogue_in_the_prompt
     md = out["markdown"]
     assert "## Abstains (raw)" in md and "reason code 'ambiguous'" in md
     assert "the planner replied" in md and all(n in md for n in ab["catalogue_metrics"])
-    assert ab["plan_prompt_id"] == "plan.v0" and "plan_failures" in out["report"]["questions"][0]
+    assert ab["plan_prompt_id"] == "plan.v1" and "plan_failures" in out["report"]["questions"][0]
 
 
 @pytest.mark.db
@@ -960,13 +960,16 @@ def test_a_run_with_no_abstain_has_no_abstain_section(env, tmp_path):
     assert "## Abstains" not in out["markdown"]
 
 
-def test_the_catalogue_text_holds_names_units_and_dimensions_only():
-    """The report says the prompt has no definitions or synonyms. Guard that statement."""
+def test_the_catalogue_text_holds_names_units_descriptions_synonyms_and_dimensions():
+    """The report says the plan.v1 prompt has descriptions and synonyms. Guard that statement."""
     from verified_analyst.llm.prompts import catalogue_text
 
     cat = json.loads(catalogue_text(load_semantic_layer()))
     assert set(cat) == {"metrics", "dimensions"}
-    assert all(set(m) == {"unit", "dimensions"} for m in cat["metrics"].values())
+    assert all(
+        set(m) == {"unit", "description", "synonyms", "dimensions"} for m in cat["metrics"].values()
+    )
+    assert all(set(d) == {"description", "synonyms"} for d in cat["dimensions"].values())
 
 
 @pytest.mark.db

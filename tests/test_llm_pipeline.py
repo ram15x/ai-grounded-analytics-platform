@@ -122,8 +122,8 @@ def test_abstain_budget_before_any_call(env):
 
 
 def test_abstain_budget_after_the_plan_call(env):
-    # enough for the plan call, not for the compose call
-    out, fake, run = go({"plan": [PLAN], "compose": [GOOD]}, env, token_cap=1500)
+    # enough for the plan call (its catalogue now carries descriptions and synonyms), not compose
+    out, fake, run = go({"plan": [PLAN], "compose": [GOOD]}, env, token_cap=2200)
     assert (out.outcome, out.reason) == ("abstain", "budget")
     assert [r.task for r in fake.requests] == ["plan"]
     assert run.tokens_used > 0

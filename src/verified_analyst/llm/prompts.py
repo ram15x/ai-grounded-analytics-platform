@@ -1,9 +1,11 @@
-"""Prompt templates. plan.v0 is the untuned minimum. compose.v1 and repair.v1 replace v0 after the
-first real probe (Groq, 2026-11-20) found every v0 compose/repair answer failed the schema: the v1
-text states the exact claim and provenance shapes, the allowed units and the row_key format, and
-carries one worked example on a made-up dataset that no dev question uses. They are a first
-draft shaped by that single run, not tuned or proven. Any change to a template changes its hash
-and therefore invalidates every cassette recorded with it."""
+"""Prompt templates. plan.v0 is the untuned minimum, kept so cassettes recorded with it still
+check. plan.v1 adds metric and dimension descriptions and synonyms to the catalogue, taken from
+the semantic layer, after the second Groq probe's "ambiguous" abstain on a merchandise-units
+question. compose.v1 and repair.v1 replaced v0 after the first Groq probe (2026-11-20), where
+every v0 compose/repair answer failed the schema: they state the exact claim and provenance
+shapes, the allowed units and the row_key format, and carry one worked example on a made-up
+dataset. All are first drafts shaped by single runs, not tuned or proven. Any change to a
+template changes its hash and so invalidates every cassette recorded with it."""
 
 from __future__ import annotations
 
@@ -77,6 +79,11 @@ The North's closed tickets were {c3} of the South's.", "claims": [\
 {"kind": "cell", "query_id": "q1", "column": "tickets_closed", "row_key": {"region": "North"}}, \
 {"kind": "cell", "query_id": "q1", "column": "tickets_closed", "row_key": {"region": "South"}}\
 ]}}]}"""
+PLAN_SYSTEM_V1 = (
+    PLAN_SYSTEM
+    + "\nEach metric and dimension in the catalogue has a description and a list of synonyms: "
+    "match the words of the question against the names, descriptions and synonyms."
+)
 REPAIR_SYSTEM = (
     COMPOSE_SYSTEM
     + """
@@ -86,21 +93,50 @@ that is wrong (for example claims.0.unit) and what is wrong with it. Return the 
 JSON object, in the same shape, changing only what the problems require."""
 )
 
+# plan.v0 stays so cassettes recorded with it still check; the pipeline now uses plan.v1.
 PROMPT_TEMPLATES = {
     "plan.v0": PLAN_SYSTEM,
+    "plan.v1": PLAN_SYSTEM_V1,
     "compose.v1": COMPOSE_SYSTEM,
     "repair.v1": REPAIR_SYSTEM,
 }
+ACTIVE_PROMPT_IDS = ("plan.v1", "compose.v1", "repair.v1")
 
 
 def prompt_hashes() -> dict[str, str]:
     return {pid: sha256_text(text) for pid, text in PROMPT_TEMPLATES.items()}
 
 
-def catalogue_text(layer: SemanticLayer) -> str:
+def active_prompt_hashes() -> dict[str, str]:
+    """The prompts the pipeline sends today (what a report should name)."""
+    return {pid: sha256_text(PROMPT_TEMPLATES[pid]) for pid in ACTIVE_PROMPT_IDS}
+
+
+def catalogue_text_v0(layer: SemanticLayer) -> str:
+    """The plan.v0 catalogue: names, units and allowed dimensions only. Frozen."""
     metrics = {n: {"unit": m.unit, "dimensions": list(m.allowed_dimensions)}
                for n, m in layer.metrics.items()}  # fmt: skip
     return json.dumps({"metrics": metrics, "dimensions": sorted(layer.dimensions)}, sort_keys=True)
+
+
+def catalogue_text(layer: SemanticLayer) -> str:
+    """The plan.v1 catalogue: every metric and dimension with its description and synonyms,
+    taken word for word from the semantic layer (nothing is written for the prompt). SQL
+    expressions and column names are not included. Built from the layer object only."""
+    metrics = {
+        n: {
+            "unit": m.unit,
+            "description": m.description,
+            "synonyms": list(m.synonyms),
+            "dimensions": list(m.allowed_dimensions),
+        }
+        for n, m in layer.metrics.items()
+    }
+    dims = {
+        n: {"description": d.description, "synonyms": list(d.synonyms)}
+        for n, d in layer.dimensions.items()
+    }
+    return json.dumps({"metrics": metrics, "dimensions": dims}, sort_keys=True)
 
 
 def plan_request(layer: SemanticLayer, question: str, error: str | None = None) -> LLMRequest:
@@ -109,10 +145,10 @@ def plan_request(layer: SemanticLayer, question: str, error: str | None = None) 
         user += f"\nYour previous plan failed: {error}\nReturn a corrected plan."
     return LLMRequest(
         task="plan",
-        messages=(("system", PLAN_SYSTEM), ("user", user)),
-        datasets=(),  # the catalogue holds names, not data
-        prompt_id="plan.v0",
-        prompt_hash=prompt_hashes()["plan.v0"],
+        messages=(("system", PLAN_SYSTEM_V1), ("user", user)),
+        datasets=(),  # the catalogue holds names and definitions, not data
+        prompt_id="plan.v1",
+        prompt_hash=prompt_hashes()["plan.v1"],
         schema_name="PlanOutput",
     )
 

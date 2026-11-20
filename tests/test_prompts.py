@@ -76,8 +76,8 @@ def test_repair_prompt_extends_compose_and_points_at_field_paths():
 
 
 def test_prompt_ids_and_hashes_are_versioned_and_distinct():
-    assert set(PROMPT_TEMPLATES) == {"plan.v0", "compose.v1", "repair.v1"}
-    assert len(set(prompt_hashes().values())) == 3
+    assert set(PROMPT_TEMPLATES) == {"plan.v0", "plan.v1", "compose.v1", "repair.v1"}
+    assert len(set(prompt_hashes().values())) == 4
 
 
 def test_compose_and_repair_requests_carry_their_own_prompt_id():
@@ -139,3 +139,79 @@ def test_problems_are_capped_and_each_message_is_cut():
 
 def test_non_pydantic_errors_give_one_short_line():
     assert schema_problems(ValueError("not JSON\nsecond line")) == ["schema_failure: not JSON"]
+
+
+# ---- plan.v1 ----
+
+
+def test_plan_v0_is_frozen_and_kept_for_old_cassettes():
+    from verified_analyst.llm.cassette import sha256_text
+
+    assert sha256_text(PROMPT_TEMPLATES["plan.v0"]) == (
+        "f627489111a83c410774d1987f11c94fe1bac6575e714e80da070544d1707f28"
+    )
+
+
+def test_the_pipeline_sends_plan_v1_and_the_report_names_only_active_prompts():
+    from verified_analyst.llm.prompts import active_prompt_hashes, plan_request
+    from verified_analyst.semantic import load_semantic_layer
+
+    r = plan_request(load_semantic_layer(), "q")
+    assert r.prompt_id == "plan.v1" and r.prompt_hash == prompt_hashes()["plan.v1"]
+    assert r.messages[0][1] == PROMPT_TEMPLATES["plan.v1"]
+    assert PROMPT_TEMPLATES["plan.v1"].startswith(PROMPT_TEMPLATES["plan.v0"])
+    assert set(active_prompt_hashes()) == {"plan.v1", "compose.v1", "repair.v1"}
+
+
+def test_the_v1_catalogue_is_the_semantic_layers_own_words_nothing_added():
+    import json
+
+    from verified_analyst.llm.prompts import catalogue_text
+    from verified_analyst.semantic import load_semantic_layer
+
+    layer = load_semantic_layer()
+    cat = json.loads(catalogue_text(layer))
+    assert set(cat) == {"metrics", "dimensions"} and set(cat["metrics"]) == set(layer.metrics)
+    for name, m in layer.metrics.items():
+        assert cat["metrics"][name] == {
+            "unit": m.unit,
+            "description": m.description,
+            "synonyms": m.synonyms,
+            "dimensions": m.allowed_dimensions,
+        }
+    for name, d in layer.dimensions.items():
+        assert cat["dimensions"][name] == {"description": d.description, "synonyms": d.synonyms}
+    text = catalogue_text(layer)
+    assert "COALESCE" not in text and "l.line_type" not in text  # no SQL, no column names
+
+
+def test_the_v1_catalogue_carries_what_the_merchandise_units_question_needs():
+    import json
+
+    from verified_analyst.llm.prompts import catalogue_text
+    from verified_analyst.semantic import load_semantic_layer
+
+    cat = json.loads(catalogue_text(load_semantic_layer()))
+    units = cat["metrics"]["units_sold"]
+    assert "merchandise" in units["description"] and "units" in units["synonyms"]
+
+
+def test_v0_catalogue_is_still_available_unchanged_in_shape():
+    import json
+
+    from verified_analyst.llm.prompts import catalogue_text_v0
+    from verified_analyst.semantic import load_semantic_layer
+
+    cat = json.loads(catalogue_text_v0(load_semantic_layer()))
+    assert set(cat) == {"metrics", "dimensions"}
+    assert all(set(m) == {"unit", "dimensions"} for m in cat["metrics"].values())
+
+
+def test_prompt_building_reads_no_question_file():
+    """The catalogue is built from the semantic layer only; the prompt module never opens a file
+    of questions (dev or held-out)."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "src/verified_analyst/llm/prompts.py").read_text()
+    for needle in ("open(", "read_text", "yaml", "eval/", "questions", "held"):
+        assert needle not in src, needle

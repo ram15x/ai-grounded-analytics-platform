@@ -127,6 +127,14 @@ the body names (allow-listed short strings), not the body. Read "window named: m
 "a limit of 0 was reported" as keyword matches on those names, not as the provider's statement.
 If no names are found the redacted, truncated body is printed as for any other error.
 
+## Plan prompt versions
+
+`plan.v1` is what the pipeline sends now: the same instructions as `plan.v0` plus one sentence
+about descriptions and synonyms, and a catalogue that carries every metric's and dimension's
+description and synonyms word for word from `semantic/metrics.yaml`. `plan.v0` is kept only so
+old cassettes still pass `va cassettes check`. A report names the prompts actually used. The
+catalogue is built from the semantic layer only; it never reads a question file.
+
 ## Abstains in the report
 
 For every question that abstained, the report has an "Abstains (raw)" section. It shows the reason

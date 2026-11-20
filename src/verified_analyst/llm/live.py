@@ -35,7 +35,7 @@ from .cassette import (
     warehouse_content_hash,
 )
 from .pipeline import QuestionRun, run_question
-from .prompts import catalogue_text, plan_request, prompt_hashes
+from .prompts import active_prompt_hashes, catalogue_text, plan_request, prompt_hashes
 from .providers import PLACEHOLDER_PREFIX, build_one
 from .router import Router
 from .settings import RouterSettings
@@ -716,7 +716,7 @@ def build_report(
             "started_utc": started.isoformat(timespec="seconds"),
             "dataset": layer.source.relation,
             "dataset_sensitivity": s.sensitivity_of((layer.source.relation,)),
-            "prompts": prompt_hashes(),
+            "prompts": active_prompt_hashes(),
             "caps": {
                 "max_requests": s.probe.max_requests,
                 "token_cap": s.probe.token_cap,
@@ -731,7 +731,7 @@ def build_report(
             "reasoning_effort_sent": s.providers[opts.provider].reasoning_effort,
             "scope": "one model, public data only; raw results; no accuracy claim, no ranking",
             "prompt_note": "prompts are first drafts, not tuned or proven "
-            f"({', '.join(sorted(prompt_hashes()))}): "
+            f"({', '.join(sorted(active_prompt_hashes()))}): "
             "results describe this model with these prompts together",
         },
         "stop": {"reason": stop_reason, "questions_completed": len(completed), "cut": cut},
@@ -776,8 +776,8 @@ def build_report(
 
 def abstain_section(layer: SemanticLayer, completed: list[QuestionRun]) -> dict[str, Any]:
     """Every abstain with the words behind it, and what the plan prompt's catalogue held. The
-    catalogue text is exactly what `plan_request` puts in the prompt (names, units, allowed
-    dimensions; no definitions or synonyms), so it is the same for every question."""
+    catalogue text is exactly what `plan_request` puts in the prompt (names, units,
+    descriptions, synonyms, allowed dimensions), so it is the same for every question."""
     text = catalogue_text(layer)
     cat = json.loads(text)
     items = [
@@ -789,7 +789,7 @@ def abstain_section(layer: SemanticLayer, completed: list[QuestionRun]) -> dict[
         "plan_prompt_id": plan_request(layer, "x").prompt_id,
         "catalogue_sha256": sha256_text(text),
         "catalogue_metrics": sorted(cat["metrics"]),
-        "catalogue_dimensions": cat["dimensions"],
+        "catalogue_dimensions": sorted(cat["dimensions"]),
         "catalogue": cat,
         "items": items,
     }
@@ -896,8 +896,9 @@ def render_report(rep: dict[str, Any]) -> str:
         lines += [
             "",
             "## Abstains (raw)",
-            f"The plan prompt ({ab['plan_prompt_id']}) holds a catalogue of metric names, units "
-            "and allowed dimensions only, no definitions or synonyms; it is the same for every "
+            f"The plan prompt ({ab['plan_prompt_id']}) holds a catalogue of metric names, units, "
+            "descriptions, synonyms and allowed dimensions (from semantic/metrics.yaml); it is the "
+            "same for every "
             f"question (sha256 {ab['catalogue_sha256'][:12]}).",
             f"- catalogue metrics in the prompt ({len(ab['catalogue_metrics'])}): "
             + ", ".join(ab["catalogue_metrics"]),

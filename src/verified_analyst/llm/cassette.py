@@ -169,6 +169,7 @@ class Cassette:
             finish_reason=entry["response"].get("finish_reason", ""),
             tokens_estimated=tok.get("estimated", False),
             from_cassette=True,
+            reasoning_tokens=tok.get("reasoning", 0),
         )
 
     def miss_error(self, req: LLMRequest, tried: list[str]) -> CassetteMiss:
@@ -196,6 +197,7 @@ class Cassette:
                 "prompt": resp.prompt_tokens,
                 "completion": resp.completion_tokens,
                 "estimated": resp.tokens_estimated,
+                "reasoning": resp.reasoning_tokens,
             },
             "latency_ms": resp.latency_ms,
             "recorded_at": datetime.fromtimestamp(self.now(), UTC).isoformat(timespec="seconds"),

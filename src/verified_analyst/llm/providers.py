@@ -85,8 +85,8 @@ class HostedProvider(Provider):
     def _body(self, req: LLMRequest, model: str) -> dict[str, Any]:
         raise NotImplementedError
 
-    def _extract(self, data: Any) -> tuple[str, int, int, str, bool]:
-        """Return (text, prompt_tokens, completion_tokens, finish_reason, usage_missing)."""
+    def _extract(self, data: Any) -> tuple[str, int, int, str, bool, int]:
+        """Return (text, prompt, completion, finish_reason, usage_missing, reasoning_tokens)."""
         raise NotImplementedError
 
     # -- shared --
@@ -137,7 +137,7 @@ class HostedProvider(Provider):
         except (UnicodeDecodeError, ValueError) as exc:
             raise ProviderError(MALFORMED, "response body is not JSON") from exc
         try:
-            text, p_tok, c_tok, finish, usage_missing = self._extract(data)
+            text, p_tok, c_tok, finish, usage_missing, r_tok = self._extract(data)
         except ProviderError:
             raise
         except (KeyError, IndexError, TypeError, AttributeError) as exc:
@@ -153,6 +153,7 @@ class HostedProvider(Provider):
             latency_ms=latency_ms,
             finish_reason=finish,
             tokens_estimated=usage_missing,
+            reasoning_tokens=r_tok,
         )
 
 
@@ -177,12 +178,15 @@ class _OpenAICompatible(HostedProvider):
             body["response_format"] = {"type": "json_object"}
         return body
 
-    def _extract(self, data: Any) -> tuple[str, int, int, str, bool]:
+    def _extract(self, data: Any) -> tuple[str, int, int, str, bool, int]:
         choice = data["choices"][0]
         text = choice["message"]["content"]
         usage = data.get("usage") or {}
         p, c = _int(usage.get("prompt_tokens")), _int(usage.get("completion_tokens"))
-        return text, p or 0, c or 0, str(choice.get("finish_reason") or ""), p is None or c is None
+        details = usage.get("completion_tokens_details") or {}  # UNVERIFIED field name
+        r = _int(details.get("reasoning_tokens") if isinstance(details, dict) else None) or 0
+        fin = str(choice.get("finish_reason") or "")
+        return text, p or 0, c or 0, fin, p is None or c is None, r
 
 
 class GroqProvider(_OpenAICompatible):
@@ -217,7 +221,7 @@ class GeminiProvider(HostedProvider):
             body["systemInstruction"] = {"parts": [{"text": "\n\n".join(system)}]}
         return body
 
-    def _extract(self, data: Any) -> tuple[str, int, int, str, bool]:
+    def _extract(self, data: Any) -> tuple[str, int, int, str, bool, int]:
         block = (data.get("promptFeedback") or {}).get("blockReason")
         if block:
             raise ProviderError(BLOCKED, f"prompt blocked ({block})")
@@ -226,7 +230,9 @@ class GeminiProvider(HostedProvider):
         text = "".join(p.get("text", "") for p in parts)
         usage = data.get("usageMetadata") or {}
         p, c = _int(usage.get("promptTokenCount")), _int(usage.get("candidatesTokenCount"))
-        return text, p or 0, c or 0, str(cand.get("finishReason") or ""), p is None or c is None
+        r = _int(usage.get("thoughtsTokenCount")) or 0  # UNVERIFIED field name
+        fin = str(cand.get("finishReason") or "")
+        return text, p or 0, c or 0, fin, p is None or c is None, r
 
 
 ADAPTERS: dict[str, type[HostedProvider]] = {
@@ -234,3 +240,9 @@ ADAPTERS: dict[str, type[HostedProvider]] = {
     "gemini": GeminiProvider,
     "openrouter": OpenRouterProvider,
 }
+
+
+def build_one(settings, name: str, **adapter_kwargs: Any) -> HostedProvider:
+    """Instantiate one hosted adapter from the config."""
+    p = settings.providers[name]
+    return ADAPTERS[p.kind](name, p.env_key or "", endpoint=p.endpoint, **adapter_kwargs)

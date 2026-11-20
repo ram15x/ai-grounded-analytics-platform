@@ -261,6 +261,7 @@ class Router:
             0, req.task, resp.provider, resp.model, outcome, attempt=attempt,
             prompt_tokens=p, completion_tokens=c, tokens_estimated=est,
             latency_ms=resp.latency_ms, wait_ms=wait_ms, from_cassette=resp.from_cassette,
+            reasoning_tokens=resp.reasoning_tokens, finish_reason=resp.finish_reason,
         )  # fmt: skip
 
     def _delay(self, exc: ProviderError, attempt: int) -> float:

@@ -155,7 +155,7 @@ def test_record_through_a_real_adapter_stores_no_header_or_key(tmp_path):
         assert word not in low
     entry = json.loads(raw.splitlines()[0])
     assert entry["sensitivity"] == "public" and entry["provider"] == "groq"
-    assert entry["tokens"] == {"prompt": 11, "completion": 3, "estimated": False}
+    assert entry["tokens"] == {"prompt": 11, "completion": 3, "estimated": False, "reasoning": 0}
     assert set(entry["hashes"]) == {"prompt", "layer", "schema", "warehouse"}
     assert entry["request"]["temperature"] == 0.0
     assert entry["recorded_at"].endswith("+00:00")

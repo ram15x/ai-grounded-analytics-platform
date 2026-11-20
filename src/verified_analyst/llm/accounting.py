@@ -23,6 +23,8 @@ class CallRecord:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     tokens_estimated: bool = False
+    reasoning_tokens: int = 0
+    finish_reason: str = ""
     latency_ms: float = 0.0
     wait_ms: float = 0.0  # time slept before this attempt (bucket or backoff)
     retry_after_s: float | None = None
@@ -40,6 +42,13 @@ def percentile(values: list[float], q: float) -> float | None:
     ordered = sorted(values)
     rank = max(1, math.ceil(q / 100 * len(ordered)))
     return ordered[rank - 1]
+
+
+def _count(items) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for i in items:
+        out[i] = out.get(i, 0) + 1
+    return out
 
 
 @dataclass
@@ -82,6 +91,10 @@ class RunContext:
             "run_id": self.run_id,
             "token_cap": self.token_cap,
             "tokens_used": self.tokens_used,
+            "prompt_tokens": sum(r.prompt_tokens for r in ok),
+            "completion_tokens": sum(r.completion_tokens for r in ok),
+            "reasoning_tokens_reported": sum(r.reasoning_tokens for r in ok),
+            "finish_reasons": _count(r.finish_reason or "(none)" for r in ok),
             "calls_ok": len(ok),
             "attempts": len(self.records),
             "tokens_estimated_calls": sum(r.tokens_estimated for r in ok),

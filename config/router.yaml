@@ -63,3 +63,9 @@ bucket:
 
 budget:
   per_run_tokens: 30000   # UNVERIFIED assumption (PHASE_1C.md section b)
+
+# `va live probe`: hard limits for one probe run. max_requests counts every HTTP request sent,
+# retries included, and can never exceed 25. token_cap is across the whole run. UNVERIFIED sizing.
+probe:
+  max_requests: 25
+  token_cap: 60000

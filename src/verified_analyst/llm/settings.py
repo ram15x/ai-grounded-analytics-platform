@@ -58,6 +58,11 @@ class BudgetSettings(_M):
     per_run_tokens: int = Field(default=30_000, gt=0)
 
 
+class ProbeSettings(_M):
+    max_requests: int = Field(default=25, ge=1, le=25)  # hard ceiling of 25 per probe run
+    token_cap: int = Field(default=60_000, gt=0)  # across the whole probe run
+
+
 class RouterSettings(_M):
     providers: dict[str, ProviderSettings]
     tasks: dict[str, list[str]]
@@ -66,6 +71,7 @@ class RouterSettings(_M):
     breaker: BreakerSettings = Field(default_factory=BreakerSettings)
     bucket: BucketSettings = Field(default_factory=BucketSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
+    probe: ProbeSettings = Field(default_factory=ProbeSettings)
 
     @model_validator(mode="after")
     def _check(self) -> RouterSettings:

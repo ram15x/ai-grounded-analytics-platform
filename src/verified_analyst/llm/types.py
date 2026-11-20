@@ -55,6 +55,7 @@ class LLMResponse:
     finish_reason: str = ""
     tokens_estimated: bool = False
     from_cassette: bool = False
+    reasoning_tokens: int = 0  # as reported by the provider, if at all (may be inside completion)
 
     @property
     def total_tokens(self) -> int:

@@ -27,6 +27,20 @@ the reader: no figure is shown unless it matches the warehouse or a stored passa
 - Not yet run: the model-written label test for the document-number binder (built, pre-registered in
   ADR-0013, blocked on free-plan quota).
 
+## Bring your own data (built, lightly tested)
+The system is no longer tied to one dataset. `va serve --workspace` (local only) takes a CSV, TSV or
+Excel file, profiles it, and asks the person what it is and what each number means, using a closed
+set of metric definitions (count, sum, average, min, max, distinct count, one filter). A definition
+is published only if it reproduces a figure the person already knows, recomputed by a separate path.
+Personal-looking columns are never loaded. Data is `internal` by default, so a hosted provider is
+refused; a local Ollama model (no key) or an explicit `public` mark is needed. PDF, Markdown and text
+documents can be attached; only a PDF's existing text layer is read, scans are refused (no OCR).
+A public tryout (`--byok`) gives each visitor one question per difficulty group on the demo data,
+with their own API key used once and never stored.
+Proved on a second, differently shaped synthetic dataset (subscriptions): 6 of 6 known figures
+reconciled and a scripted run was verified. **Not measured:** how well any real model plans questions
+on uploaded data, and whether any local model is usable on a 4 GB GPU.
+
 ## Decisions worth reading
 Pre-registered evals with locked held-out sets (ADR-0009 to 0013), a sensitivity rule so only public
 data reaches hosted models, cassettes so tests never call a network, and an offline gate that fails
@@ -35,4 +49,4 @@ the build if a verified figure has no trace to its stored cell or passage.
 ## Limits
 Verification shows a figure matches its source, not that the source answers the question. The free
 Groq plan caps tokens per day (200,000, measured once), which limits live runs. Nothing is deployed;
-the web view is local and replays recordings.
+the web view is local and replays recordings. Single user, no sign-in.

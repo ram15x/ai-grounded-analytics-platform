@@ -323,3 +323,27 @@ The report has a section "Unusable HTTP 200 replies": for each, the kind (`conte
 tokens and finish reason the provider reported, and the raw body (first 300 characters, key and
 bearer text redacted). Whether the provider sent empty content or an error object is stated from
 that body only (assumptions row 45 stays UNVERIFIED).
+
+## Model-written labels for the binder (ADR-0013)
+
+One live run, public documents only, recorded in cassettes. Do not run it twice: the ledger
+(`data\binder_model_ledger.jsonl`) refuses a second generation. Needs the ADR committed first.
+
+```powershell
+va docs binder-model-labels --provider groq --model <GPT-OSS ID> --seed-run data\live_runs\20261121T064538Z_groq_<model>\report.json
+git add eval\binder_model_labels\labels.yaml
+git commit -m "Binder: model-written labels (one Groq run)"
+va docs binder-model-dev
+```
+
+It sends 8 requests of 10 sentences (about 80 sentences). The dev command scores `current`, `S2` and
+`SL` on the dev half only. Do not open the locked-half claims in the labels file. After the labels
+file is committed and unchanged:
+
+```powershell
+va docs binder-model-locked --candidates current,S2,SL
+```
+
+which refuses unless ADR-0013 and the labels file are committed and unchanged, and runs once. No
+default changes either way.
+

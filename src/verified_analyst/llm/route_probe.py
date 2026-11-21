@@ -11,8 +11,10 @@ cassettes. The held-out router questions are not read by this module or by anyth
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -151,7 +153,8 @@ def call_details(run: RunContext) -> list[dict[str, Any]]:
          "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens,
          "max_tokens": r.max_tokens, "json_mode_off": r.json_mode_off,
          "prompt_tokens": r.prompt_tokens, "raw_body": r.raw_body,
-         "malformed_kind": r.malformed_kind, "max_tokens_doubled": r.max_tokens_doubled}
+         "malformed_kind": r.malformed_kind, "max_tokens_doubled": r.max_tokens_doubled,
+         "note": r.note}
         for r in run.records
     ]  # fmt: skip
 
@@ -323,6 +326,23 @@ def build_router_section(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def rate_limit_rows(runs: list[RunContext]) -> list[dict[str, Any]]:
+    """Every HTTP 429 the router saw: where it came from and what the provider sent."""
+    out = []
+    for r in runs:
+        for c in r.records:
+            if c.outcome == "rate_limit" and c.rate_limit:
+                d = c.rate_limit
+                out.append({
+                    "question": r.run_id, "task": c.task, "provider": c.provider,
+                    "attempt": c.attempt, "body": d["body"],
+                    "retry_after_header": d["retry_after_header"],
+                    "ratelimit_headers": d["ratelimit_headers"],
+                    "limit_named": d["limit_named"],
+                })  # fmt: skip
+    return out
+
+
 def token_guard(runs: list[RunContext], counting: live.CountingTransport) -> dict[str, Any]:
     """Waits for the token bucket and the single wait-and-retry after an HTTP 429, with the
     seconds waited and the basis (Retry-After header or the bucket estimate)."""
@@ -339,6 +359,11 @@ def token_guard(runs: list[RunContext], counting: live.CountingTransport) -> dic
             bool(c["max_tokens_doubled"]) for r in runs for c in call_details(r)
         ),
         "each_wait": waits,
+        "http_429_detail": rate_limit_rows(runs),
+        "http_429_by_limit_named": _counts(
+            [r["limit_named"] or "not named in the body" for r in rate_limit_rows(runs)]
+        ),
+        "provider_events": [{"question": r.run_id, **e} for r in runs for e in r.provider_events],
     }
 
 
@@ -480,6 +505,23 @@ def render_report(rep: dict[str, Any]) -> str:
         f"{tg['rate_limit_retries']} ({tg['rate_limit_retry_seconds']} s); "
         f"requests sent with a doubled allowance: {tg['requests_doubled_allowance']}",
     ]
+    lines += [
+        f"- HTTP 429 by the limit its body names: {json.dumps(tg['http_429_by_limit_named'])} "
+        "(the body is the provider's wording; 'not named' means none of tokens/requests per "
+        "minute/day appeared in the first 300 characters)",
+    ]
+    for r in tg["http_429_detail"]:
+        lines += [
+            f"  - 429 {r['question']} {r['task']} attempt {r['attempt']}: limit named "
+            f"{r['limit_named'] or 'none'}; Retry-After {r['retry_after_header'] or 'not sent'}; "
+            f"x-ratelimit {json.dumps(r['ratelimit_headers'])}",
+            f"    body: {r['body'] or '(empty)'}",
+        ]
+    for e in tg["provider_events"]:
+        lines.append(
+            f"- PROVIDER {e['kind'].upper().replace('_', ' ')} at {e['question']}: {e['reason']}"
+            + (f" (number: {e['retry_after_s']:g} s)" if e.get("retry_after_s") is not None else "")
+        )
     lines += [
         f"  - wait: {w['task']} {w['kind']}{' by ' + w['basis'] if w.get('basis') else ''} "
         f"{w['seconds']} s"
@@ -679,6 +721,9 @@ def run_route_probe(
             runs.append(run)
             used += run.tokens_used
             results.append(res)
+            why_stopped = router.stopped_reason(opts.provider)
+            if why_stopped:  # the provider asked for more than the wait cap: no use going on
+                stop, kind = f"STOPPED, provider given up for the run: {why_stopped}", "rate_limit"
             if which == "router":
                 rows.append({
                     "id": q["id"], "expected": q["route"], "got": got_route(res),
@@ -710,6 +755,8 @@ def run_route_probe(
             if res.outcome == "abstain" and res.reason == "budget":
                 stop = "token cap reached mid-question"
                 break
+            if kind == "rate_limit":
+                break
     except live.AuthStop as exc:
         stop, kind = f"STOPPED on first auth error ({exc})", "auth"
     except (live.ProviderUnavailable, live.ModelGone) as exc:
@@ -726,7 +773,8 @@ def run_route_probe(
         "report": rep, "markdown": md, "out_dir": str(opts.out_dir),
         "cassette": written["cassette"],
         "stopped_on_auth": kind == "auth",
-        "stopped_early": kind in ("provider_unavailable", "model_gone", "sensitivity"),
+        "stopped_early": kind
+        in ("provider_unavailable", "model_gone", "sensitivity", "rate_limit"),
     }  # fmt: skip
 
 
@@ -737,7 +785,9 @@ def _pct(vals: list[int | float], p: int) -> float | None:
     return live.percentile([float(v) for v in vals], p) if vals else None
 
 
-def summarize_effort(rep: dict[str, Any], effort: str) -> dict[str, Any]:
+def summarize_effort(
+    rep: dict[str, Any], effort: str, out: dict[str, Any] | None = None
+) -> dict[str, Any]:
     rows = rep["injection"]["questions"]
     calls = [c for r in rows for c in r["calls"]]
     ok = [c for c in calls if c["outcome"] == "ok"]
@@ -766,10 +816,18 @@ def summarize_effort(rep: dict[str, Any], effort: str) -> dict[str, Any]:
         "token_guard": {k: rep["token_guard"][k] for k in (
             "bucket_waits", "bucket_wait_seconds", "rate_limit_retries", "http_429")},
         "stop": rep["stop"]["reason"],
+        "stop_kind": rep["stop"].get("kind") or "",
+        "http_429_by_limit_named": rep["token_guard"]["http_429_by_limit_named"],
+        "provider_events": rep["token_guard"]["provider_events"],
     }  # fmt: skip
 
 
-def render_compare(summaries: list[dict[str, Any]], opts: RouteProbeOptions) -> str:
+def render_compare(
+    summaries: list[dict[str, Any]],
+    opts: RouteProbeOptions,
+    between: list[dict[str, Any]] = (),  # type: ignore[assignment]
+    not_started: str = "",
+) -> str:
     lines = [
         f"# reasoning_effort compare: {opts.provider} / {opts.model}",
         "",
@@ -813,6 +871,24 @@ def render_compare(summaries: list[dict[str, Any]], opts: RouteProbeOptions) -> 
         lambda s: f"{s['token_guard']['bucket_waits']} / {s['token_guard']['rate_limit_retries']}",
     )
     row("run ended", lambda s: s["stop"])
+    row(
+        "HTTP 429 by limit named in the body",
+        lambda s: json.dumps(s["http_429_by_limit_named"], sort_keys=True),
+    )
+    row(
+        "provider stopped / breaker",
+        lambda s: "; ".join(f"{e['kind']}: {e['reason']}" for e in s["provider_events"]) or "none",
+    )
+    lines.append("")
+    for b in between:
+        lines.append(
+            f"- waited {b['waited_s']:g} s between {b['after']} and {b['before']} "
+            f"(so the second run starts with a fresh minute bucket; basis: {b['basis']}; "
+            f"cap {b['cap_s']:g} s)"
+        )
+    if not_started:
+        lines.append(f"- {not_started}")
+    lines.append("")
     for s in summaries:
         lines += ["", f"## per call, effort {s['effort']} (n={len(s['per_call'])})"]
         lines += [
@@ -829,30 +905,85 @@ def render_compare(summaries: list[dict[str, Any]], opts: RouteProbeOptions) -> 
     return "\n".join(lines) + "\n"
 
 
+FRESH_BUCKET_S = 60.0  # a per-minute bucket is full again 60 s after the last request
+COMPARE_WAIT_CAP_S = 120.0
+
+
+def compare_wait(rep: dict[str, Any], elapsed_s: float) -> tuple[float, str]:
+    """Seconds to wait before the next run so that it starts with a fresh minute bucket: 60 s
+    after the previous run's last request, and at least the longest Retry-After that run was
+    given, never more than 120 s."""
+    seen = []
+    for r in rep["token_guard"]["http_429_detail"]:
+        with contextlib.suppress(TypeError, ValueError):
+            seen.append(float(r["retry_after_header"]))
+    need_bucket = max(0.0, FRESH_BUCKET_S - elapsed_s)
+    longest = max(seen, default=0.0)
+    wait = min(COMPARE_WAIT_CAP_S, max(need_bucket, longest))
+    basis = (
+        f"60 s bucket minus {elapsed_s:.0f} s already passed"
+        if need_bucket >= longest
+        else f"longest Retry-After seen ({longest:g} s)"
+    )
+    return round(wait, 1), basis
+
+
 def run_reasoning_compare(
     settings: RouterSettings,
     opts: RouteProbeOptions,
     efforts: tuple[str, ...] = EFFORTS_COMPARED,
+    *,
+    sleep: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
     **kw: Any,
 ) -> dict[str, Any]:
     """One injection-only run per reasoning_effort setting, each in its own sub-folder, then a
     side-by-side report. The request cap and token cap apply to each run separately."""
     if opts.route_only:
         raise ConfigError("the compare uses the 5 injection questions; not with --route-only")
+    sleep = sleep or live._sleep
+    monotonic = monotonic or time.monotonic
     summaries: list[dict[str, Any]] = []
     outs: dict[str, str] = {}
-    for eff in efforts:
+    between: list[dict[str, Any]] = []
+    not_started = ""
+    prev_rep: dict[str, Any] = {}
+    prev_end = 0.0
+    for i, eff in enumerate(efforts):
+        if i:
+            if summaries[-1]["stop_kind"] or summaries[-1]["stop"] != "all questions run":
+                not_started = (
+                    f"effort {eff} not run: the {efforts[i - 1]} run ended early "
+                    f"({summaries[-1]['stop']}), so a second column would not be comparable"
+                )
+                break
+            wait, basis = compare_wait(prev_rep, monotonic() - prev_end)
+            between.append({"after": efforts[i - 1], "before": eff, "waited_s": wait,
+                            "basis": basis, "cap_s": COMPARE_WAIT_CAP_S})  # fmt: skip
+            sleep(wait)
         sub = replace(opts, out_dir=opts.out_dir / f"effort_{eff}", reasoning_effort=eff,
                       injection_only=True)  # fmt: skip
         out = run_route_probe(settings, sub, **kw)
-        summaries.append(summarize_effort(out["report"], eff))
+        prev_rep, prev_end = out["report"], monotonic()
+        summaries.append(summarize_effort(out["report"], eff, out))
         outs[eff] = out["out_dir"]
         if out["stopped_on_auth"] or out["stopped_early"]:
+            if i + 1 < len(efforts):
+                why = out["report"]["stop"]["reason"]
+                not_started = f"effort {efforts[i + 1]} not run: the {eff} run ended early ({why})"
             break
-    md = render_compare(summaries, opts)
+    md = render_compare(summaries, opts, between, not_started)
     opts.out_dir.mkdir(parents=True, exist_ok=True)
     (opts.out_dir / "compare.md").write_text(md, encoding="utf-8")
     (opts.out_dir / "compare.json").write_text(
-        json.dumps({"summaries": summaries, "runs": outs}, indent=2, sort_keys=True),
+        json.dumps({"summaries": summaries, "runs": outs, "waited_between_runs": between,
+                    "not_started": not_started}, indent=2, sort_keys=True),
         encoding="utf-8")  # fmt: skip
-    return {"summaries": summaries, "markdown": md, "out_dir": str(opts.out_dir), "runs": outs}
+    return {
+        "summaries": summaries,
+        "markdown": md,
+        "out_dir": str(opts.out_dir),
+        "runs": outs,
+        "waited_between_runs": between,
+        "not_started": not_started,
+    }

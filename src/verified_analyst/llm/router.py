@@ -455,6 +455,10 @@ class Router:
         d = min(r.cap_s, r.base_s * (2**attempt))
         return d * (1 - r.jitter) + self.rng.uniform(0, d * r.jitter)
 
+    def stopped_reason(self, name: str) -> str | None:
+        """Why a provider is not used any more in this run, or None."""
+        return self._stopped.get(name)
+
     def _stop_provider(
         self, name: str, run: RunContext, reason: str, retry_after: float | None, named: str | None
     ) -> None:

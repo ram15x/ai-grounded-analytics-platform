@@ -577,3 +577,100 @@ def test_compare_refuses_route_only(tmp_path):
             _oss_cfg(), RouteProbeOptions("groq", GPT_OSS, tmp_path, route_only=True),
             layer=None, readonly_url="x", known_values=None, env=KEYS,
         )  # fmt: skip
+
+
+
+TPM = (
+    b'{"error":{"message":"Rate limit reached for model `openai/gpt-oss-20b` on tokens per '
+    b'minute (TPM): Limit 8000, Used 7900, Requested 900."}}'
+)
+
+
+@pytest.mark.db
+def test_every_429_is_in_the_report_with_body_headers_and_the_limit_named(env, tmp_path):
+    hdr = {"Retry-After": "0", "x-ratelimit-limit-tokens": "8000",
+           "x-ratelimit-remaining-tokens": "12", "x-ratelimit-reset-tokens": "7.1s"}  # fmt: skip
+    m = Model(statuses=[status(429, hdr, TPM)])
+    out = probe(env, m, tmp_path, injection_only=True, max_requests=60)
+    tg = out["report"]["token_guard"]
+    (d,) = tg["http_429_detail"]
+    assert d["limit_named"] == "tokens_per_minute" and d["retry_after_header"] == "0"
+    assert d["ratelimit_headers"]["x-ratelimit-limit-tokens"] == "8000"
+    assert "tokens per minute (TPM)" in d["body"] and len(d["body"]) <= 300
+    assert tg["http_429_by_limit_named"] == {"tokens_per_minute": 1}
+    assert tg["rate_limit_retries"] == 1 and tg["http_429"] == 1
+    md = out["markdown"]
+    assert "limit named tokens_per_minute" in md and "Retry-After 0" in md
+    assert "x-ratelimit" in md and "body: " in md
+
+
+@pytest.mark.db
+def test_a_retry_after_over_the_cap_ends_the_run_and_the_report_gives_the_number(env, tmp_path):
+    m = Model(statuses=[status(429, {"Retry-After": "75"}, TPM)])
+    out = probe(env, m, tmp_path, injection_only=True, max_requests=60)
+    rep = out["report"]
+    assert rep["stop"]["kind"] == "rate_limit" and out["stopped_early"]
+    assert "75" in rep["stop"]["reason"] and "60 s cap" in rep["stop"]["reason"]
+    (ev,) = rep["token_guard"]["provider_events"]
+    assert ev["kind"] == "stopped" and ev["retry_after_s"] == 75.0
+    assert "PROVIDER STOPPED" in out["markdown"] and "75 s" in out["markdown"]
+    assert len(rep["injection"]["questions"]) == 1  # it did not go on to ask the others
+    assert len(m.requests) == 1
+
+
+def test_compare_wait_is_a_fresh_minute_after_the_last_request_capped_at_120():
+    rep = {"token_guard": {"http_429_detail": []}}
+    assert route_probe.compare_wait(rep, 5)[0] == 55.0
+    assert route_probe.compare_wait(rep, 90)[0] == 0.0
+    rep["token_guard"]["http_429_detail"] = [{"retry_after_header": "100"}]
+    wait, basis = route_probe.compare_wait(rep, 10)
+    assert wait == 100.0 and "Retry-After" in basis
+    rep["token_guard"]["http_429_detail"] = [
+        {"retry_after_header": "900"},
+        {"retry_after_header": "x"},
+    ]
+    assert route_probe.compare_wait(rep, 0)[0] == 120.0
+
+
+@pytest.mark.db
+def test_compare_waits_between_the_two_settings_and_reports_the_wait(env, tmp_path):
+    layer, url, known, docs_db = env
+    slept, t = [], [1000.0]
+
+    def fake_sleep(s):
+        slept.append(s)
+
+    def mono():
+        t[0] += 7.0
+        return t[0]
+
+    out = route_probe.run_reasoning_compare(
+        _oss_cfg(),
+        RouteProbeOptions("groq", GPT_OSS, tmp_path / "cmp", max_requests=60),
+        ("low", "medium"),
+        sleep=fake_sleep, monotonic=mono,
+        layer=layer, readonly_url=url, known_values=known, env=KEYS,
+        retriever=make_retriever(docs_db.readonly_url, k=3), inner_transport=Model(),
+    )  # fmt: skip
+    assert len(slept) == 1 and 0 < slept[0] <= 60
+    (b,) = out["waited_between_runs"]
+    assert b["waited_s"] == slept[0] and (b["after"], b["before"]) == ("low", "medium")
+    assert "waited" in out["markdown"] and "fresh minute bucket" in out["markdown"]
+    assert json.loads((tmp_path / "cmp" / "compare.json").read_text())["waited_between_runs"]
+
+
+@pytest.mark.db
+def test_compare_does_not_start_the_second_run_when_the_first_was_given_up(env, tmp_path):
+    layer, url, known, docs_db = env
+    slept = []
+    m = Model(statuses=[status(429, {"Retry-After": "75"}, TPM)])
+    out = route_probe.run_reasoning_compare(
+        _oss_cfg(),
+        RouteProbeOptions("groq", GPT_OSS, tmp_path / "cmp", max_requests=60),
+        ("low", "medium"),
+        sleep=slept.append,
+        layer=layer, readonly_url=url, known_values=known, env=KEYS,
+        retriever=make_retriever(docs_db.readonly_url, k=3), inner_transport=m,
+    )  # fmt: skip
+    assert [s["effort"] for s in out["summaries"]] == ["low"] and slept == []
+    assert "medium not run" in out["markdown"] and "75" in out["markdown"]

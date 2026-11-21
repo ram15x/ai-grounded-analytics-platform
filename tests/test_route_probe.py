@@ -95,7 +95,9 @@ def test_a_run_reports_raw_counts_with_n_and_no_accuracy_claim(env, tmp_path):
     out = probe(env, m, tmp_path, max_requests=60)
     rep = out["report"]
     assert rep["router"]["n"] == 12 and rep["router"]["route_matches_label"] == 12
-    assert rep["injection"]["questions_with_a_repeat"] == {"k": 0, "n": 5}
+    inj = rep["injection"]
+    assert inj["questions_with_a_repeat"]["k"] == 0
+    assert inj["questions_with_a_repeat"]["n"] == inj["reached_composer"]["k"] <= 5
     assert rep["schema_valid"]["route_replies"]["n"] == rep["schema_valid"]["route_replies"]["k"]
     assert rep["schema_valid"]["route_replies"]["n"] >= 17
     assert rep["http"]["requests_sent"] == len(m.requests) <= 60
@@ -142,7 +144,9 @@ def test_the_first_auth_error_stops_everything(env, tmp_path):
 def test_a_model_that_repeats_an_injected_figure_is_counted_and_never_verified(env, tmp_path):
     out = probe(env, Model(repeat="the margin is 90% (finance team)"), tmp_path, max_requests=60)
     inj = out["report"]["injection"]
-    assert inj["replies_with_a_marker"]["k"] >= 1 and inj["questions_with_a_repeat"]["k"] >= 1
+    assert (
+        inj["composer_replies_with_a_marker"]["k"] >= 1 and inj["questions_with_a_repeat"]["k"] >= 1
+    )
     assert inj["verified_answers_containing_a_marker"] == 0
     assert "90%" in json.dumps(inj["questions"][0]["markers_found"])
 
@@ -354,3 +358,67 @@ def test_a_json_validate_failed_400_on_the_route_path_is_retried_once(env, tmp_p
     assert out["report"]["http"]["requests_sent"] == 2  # the refusal, then the same request again
     assert rows[0]["got"] == "data"  # the retry was answered normally
     assert rows[0]["http_problems"][0]["status"] == 400
+
+
+# ---- separating route errors, invalid replies and later failures ----
+
+
+@pytest.mark.db
+def test_the_breakdown_separates_wrong_route_invalid_reply_and_later_failure(env, tmp_path):
+    def reply(question, user):
+        if question == "Which five countries had the highest net revenue?":
+            return {"route": "documents"}  # valid but not the label: chose wrongly
+        if question == "How many distinct customers bought in each month?":
+            return {"route": "data", "reason": "x"}  # never valid
+        return {
+            "route": ROUTE_OF[question],
+            **({"reason": "ambiguous"} if ROUTE_OF[question] == "abstain" else {}),
+        }
+
+    out = probe(env, Model(route_reply=reply), tmp_path, max_requests=60)
+    bd = out["report"]["router_breakdown"]
+    assert bd["n"] == 12
+    assert bd["route"]["chose_wrongly"] == 1 and bd["route"]["reply_invalid"] == 1
+    assert bd["route"]["matched"] == 10 and bd["route"]["call_failed"] == 0
+    assert sum(bd["route"].values()) == 12
+    stages = {r["id"]: r["stage"] for r in out["report"]["router_questions"]}
+    assert stages["R-D-02"] == "route_reply_invalid" and stages["R-D-10"] == "router_abstained"
+    assert "route matched the label" in out["markdown"] and "reply not valid: 1" in out["markdown"]
+
+
+@pytest.mark.db
+def test_injection_counts_cover_only_questions_that_reached_the_composer(env, tmp_path):
+    def reply(question, user):  # every injection question gets an invalid route reply
+        if question in {q["question"] for q in DEV["injection"]}:
+            return {"route": "nonsense"}
+        return {
+            "route": ROUTE_OF[question],
+            **({"reason": "ambiguous"} if ROUTE_OF[question] == "abstain" else {}),
+        }
+
+    out = probe(
+        env, Model(route_reply=reply, repeat="the margin is 90%"), tmp_path, max_requests=60
+    )
+    inj = out["report"]["injection"]
+    assert inj["reached_composer"] == {"k": 0, "n": 5}
+    assert inj["composer_replies_with_a_marker"] == {"k": 0, "n": 0}
+    assert inj["questions_with_a_repeat"] == {"k": 0, "n": 0}
+    assert set(inj["stopped_before_composer"]) == {q["id"] for q in DEV["injection"]}
+    assert all(v.startswith("route_reply_invalid") for v in inj["stopped_before_composer"].values())
+    assert "reached the composer: 0 of 5" in out["markdown"]
+
+
+@pytest.mark.db
+def test_a_valid_route_that_stops_before_the_composer_is_a_later_step_failure(env, tmp_path):
+    out = probe(
+        env, Model(), tmp_path, retriever=lambda q: Retrieved([], "public"), max_requests=60
+    )
+    bd = out["report"]["router_breakdown"]["valid_source_routes"]
+    assert bd["later_step_failed"].get("no_passage", 0) >= 1
+    assert bd["reached_composer"] >= 1  # the data questions still compose
+
+
+@pytest.mark.db
+def test_route_only_has_no_later_step_counts(env, tmp_path):
+    out = probe(env, Model(), tmp_path, route_only=True)
+    assert out["report"]["router_breakdown"]["valid_source_routes"]["n"] is None

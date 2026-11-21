@@ -29,7 +29,7 @@ from .claims import (
 )
 from .compiler import CompileError, MetricQuery, compile_query
 from .context import ContextFail, check_cell_context, sentence_span
-from .documents.binding import check_binding
+from .documents.binding import check_binding, explain
 from .documents.untrusted import blocked_overlap
 from .extract import ExtractedNumber, extract_numbers
 from .semantic import SemanticLayer, norm_term
@@ -489,7 +489,10 @@ class Verifier:
                 a, b = sentence_span(self._prose, item.start, item.end)
                 bad = check_binding(claim.label, self._prose[a:b], text, s + p.start, s + p.end)
                 if bad:
-                    raise _Fail(UNSUPPORTED, bad[0], bad[1])
+                    detail = explain(
+                        bad[0], claim.label, self._prose[a:b], text, s + p.start, s + p.end
+                    )
+                    raise _Fail(UNSUPPORTED, bad[0], detail)
                 return f"matched {p.text!r}"
         raise _Fail(UNSUPPORTED, "number_not_in_cited_span")
 

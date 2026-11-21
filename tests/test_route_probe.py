@@ -37,8 +37,9 @@ class Model:
     """A scripted model behind mocked HTTP: routes by the author's labels (or a fixed route),
     plans one query, composes from cells and says nothing for passages unless told to repeat."""
 
-    def __init__(self, route=None, repeat=None, statuses=None, route_reply=None):
+    def __init__(self, route=None, repeat=None, statuses=None, route_reply=None, bind_label=None):
         self.route, self.repeat, self.route_reply = route, repeat, route_reply
+        self.bind_label = bind_label
         self.statuses = list(statuses or [])
         self.requests: list[dict] = []
 
@@ -58,6 +59,21 @@ class Model:
                 reply = self.route_reply(question, user)
         elif system.startswith("You turn one business question"):
             reply = PLAN
+        elif "Passages:" in user and self.bind_label:
+            label, num = re.search(
+                r"^(P\d+) (n\d+) = ", user.split("Figures you may quote:")[1], re.M
+            ).groups()
+            reply = {
+                "template": "The window is {c1}.",
+                "claims": [
+                    {
+                        "id": "c1",
+                        "label": self.bind_label,
+                        "unit": "number",
+                        "provenance": {"kind": "passage_number", "label": label, "number": num},
+                    }
+                ],
+            }
         elif "Passages:" in user:
             text = f"The documents say {self.repeat}." if self.repeat else "No figure given."
             reply = {"template": text, "claims": []}
@@ -429,3 +445,43 @@ def test_a_valid_route_that_stops_before_the_composer_is_a_later_step_failure(en
 def test_route_only_has_no_later_step_counts(env, tmp_path):
     out = probe(env, Model(), tmp_path, route_only=True)
     assert out["report"]["router_breakdown"]["valid_source_routes"]["n"] is None
+
+
+@pytest.mark.db
+def test_a_label_binding_refusal_is_reported_with_label_sentence_window_and_missing_words(
+    env, tmp_path
+):
+    out = probe(env, Model(bind_label="refund window"), tmp_path, max_requests=60)
+    rows = [r for r in out["report"]["router_questions"] if r["binder_refusals"]]
+    assert rows
+    b = rows[0]["binder_refusals"][0]
+    assert b["reason"].startswith("label_") or b["reason"] == "entity_not_in_passage"
+    assert b["label"] == "refund window" and "{c1}" not in b["sentence"]
+    assert "<number>" in b["window_words"] and b["missing_label_words"]
+    assert "Label-binding refusals" in out["markdown"] and "label words missing" in out["markdown"]
+
+
+@pytest.mark.db
+def test_injection_only_runs_just_the_five_injection_questions(env, tmp_path):
+    m = Model()
+    out = probe(env, m, tmp_path, max_requests=60, injection_only=True)
+    rep = out["report"]
+    assert rep["stop"]["router_questions_run"] == 0 and rep["stop"]["injection_questions_run"] == 5
+    assert rep["header"]["mode"] == "injection questions only"
+    assert not any(
+        ROUTE_OF.get(re.search(r"Question: (.*)", r["messages"][-1]["content"]).group(1).strip())
+        == "data"
+        for r in m.requests
+    )
+
+
+def test_route_only_and_injection_only_cannot_be_combined(tmp_path):
+    from verified_analyst.config import ConfigError
+
+    with pytest.raises(ConfigError):
+        run_route_probe(
+            settings(datasets={"analytics.sales_lines": "public", "docs.public": "public"}),
+            RouteProbeOptions("groq", "m-groq", tmp_path, route_only=True, injection_only=True),
+            layer=load_semantic_layer(), readonly_url="x", known_values=None, env=KEYS,
+            questions=[], injection=[],
+        )  # fmt: skip

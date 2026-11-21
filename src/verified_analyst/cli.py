@@ -441,6 +441,7 @@ def cmd_route_probe(args: argparse.Namespace) -> int:
         max_tokens=args.max_tokens,
         route_only=args.route_only,
         record=args.record,
+        injection_only=args.injection_only,
     )
     out = route_probe.run_route_probe(
         load_router_settings(), opts, layer=layer, readonly_url=url,
@@ -586,6 +587,10 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument(
         "--route-only", action="store_true",
         help="only the route call for the 12 router questions (12 requests, no injection set)",
+    )  # fmt: skip
+    rp.add_argument(
+        "--injection-only", action="store_true",
+        help="only the 5 injection questions (fits under the token cap; not with --route-only)",
     )  # fmt: skip
     rp.add_argument(
         "--record", action="store_true",

@@ -50,3 +50,16 @@ def test_an_empty_label_fails_closed():
 
 def test_calendar_words_are_not_entities():
     assert ok("returns", "Returns in March are 28.", "28") is None
+
+
+def test_explain_gives_label_sentence_window_and_missing_words_cut_to_200():
+    import json
+
+    from verified_analyst.documents.binding import explain
+
+    i, j = at("12")
+    d = json.loads(explain("label_not_in_passage_window", "courier charge " * 30,
+                           "The courier charge is 12. " * 20, TEXT, i, j))  # fmt: skip
+    assert set(d) == {"label", "sentence", "window_words", "missing_label_words"}
+    assert all(len(v) <= 200 for v in d.values())
+    assert "<number>" in d["window_words"] and "courier" in d["missing_label_words"]

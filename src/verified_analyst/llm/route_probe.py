@@ -70,6 +70,7 @@ class RouteProbeOptions:
     max_requests: int | None = None
     token_cap: int | None = None
     max_tokens: int | None = None
+    injection_only: bool = False  # only the 5 injection questions (fits under the token cap)
     route_only: bool = False  # only the route call for each router question (fewest requests)
     record: bool = False  # record cassettes (public data and public documents only)
 
@@ -160,6 +161,21 @@ def json_retries(run: RunContext) -> list[dict[str, Any]]:
             nxt = recs[i + 1] if i + 1 < len(recs) else None
             out.append({"task": r.task, "recovered": bool(nxt and nxt.outcome == "ok"
                                                           and nxt.task == r.task)})  # fmt: skip
+    return out
+
+
+def binder_refusals(res: QuestionRun) -> list[dict[str, Any]]:
+    """Label-binding refusals in any attempt: the reason and, where the verifier kept it, the
+    label, the sentence, the words near the number in the passage and the missing label words."""
+    out = []
+    for n, a in enumerate(res.attempts, 1):
+        for v in a.report.report.verdicts if a.report else []:
+            if v.reason in BINDER_REASONS:
+                try:
+                    d = json.loads(v.detail) if v.detail.startswith("{") else {}
+                except ValueError:
+                    d = {}
+                out.append({"attempt": n, "reason": v.reason, **d})
     return out
 
 
@@ -283,7 +299,8 @@ def build_report(
             "prompts": routed_prompt_hashes(),
             "caps": {"max_requests": s.probe.max_requests, "token_cap": s.probe.token_cap,
                      "max_tokens": opts.max_tokens or 1024},
-            "mode": "route only" if opts.route_only else "route plus full answer",
+            "mode": "route only" if opts.route_only else "injection questions only"
+                    if opts.injection_only else "route plus full answer",
             "recording": opts.record,
             "scope": "one model, dev questions only, public data only; raw counts; no accuracy "
                      "claim, no ranking",
@@ -449,6 +466,18 @@ def render_report(rep: dict[str, Any]) -> str:
             lines.append(
                 f"  - HTTP #{h['seq']} status {h['status']} {h['error'] or ''} {h['body'] or ''}"
             )
+    refusals = [(q["id"], b) for q in [*rep["router_questions"], *inj["questions"]]
+                for b in q["binder_refusals"]]  # fmt: skip
+    if refusals:
+        lines += ["", f"## Label-binding refusals (n={len(refusals)})"]
+    for qid, b in refusals:
+        lines += [
+            f"- {qid}, attempt {b['attempt']}: {b['reason']}",
+            f"  - label: {b.get('label', '?')}",
+            f"  - sentence: {b.get('sentence', '?')}",
+            f"  - window words: {b.get('window_words', '?')}",
+            f"  - label words missing: {b.get('missing_label_words', '?')}",
+        ]
     lines += ["", "Outcomes (not an accuracy figure): "
               + json.dumps(rep["outcomes_not_accuracy"], sort_keys=True)]  # fmt: skip
     lines += ["", "No accuracy claim is made here. Labels are the author's."]
@@ -499,9 +528,10 @@ def run_route_probe(
     inj_rows: list[dict[str, Any]] = []
     stop, kind = "all questions run", None
     used = 0
-    work = [("router", q) for q in questions] + (
-        [] if opts.route_only else [("injection", q) for q in injection]
-    )
+    if opts.route_only and opts.injection_only:
+        raise ConfigError("--route-only and --injection-only cannot be combined")
+    work = [] if opts.injection_only else [("router", q) for q in questions]
+    work += [] if opts.route_only else [("injection", q) for q in injection]
     try:
         for which, q in work:
             if counting.count + (1 if opts.route_only else NEEDED_REQUESTS) > s.probe.max_requests:
@@ -548,6 +578,7 @@ def run_route_probe(
                     "steps_not_valid": step_details(res),
                     "http_problems": http_problems(counting, first_http),
                     "calls": call_details(run), "json_retries": json_retries(run),
+                    "binder_refusals": binder_refusals(res),
                 })  # fmt: skip
             else:
                 comp = [t for task, t in tap.replies[first_reply:] if task in ("compose", "repair")]
@@ -564,6 +595,7 @@ def run_route_probe(
                     "steps_not_valid": step_details(res),
                     "http_problems": http_problems(counting, first_http),
                     "calls": call_details(run), "json_retries": json_retries(run),
+                    "binder_refusals": binder_refusals(res),
                 })  # fmt: skip
             if res.outcome == "abstain" and res.reason == "budget":
                 stop = "token cap reached mid-question"

@@ -15,6 +15,7 @@ See docs/INJECTION.md and docs/VERIFIER_LIMITS.md.
 
 from __future__ import annotations
 
+import json
 import re
 
 WINDOW = 6
@@ -83,3 +84,31 @@ def check_binding(
     if missing:
         return "entity_not_in_passage", ",".join(sorted(missing))
     return None
+
+
+def explain(
+    reason: str, label: str, sentence: str, passage: str, start: int, end: int, cut: int = 200
+) -> str:
+    """JSON text for a refusal: the label, the sentence, the words near the number in the passage,
+    and the label words that are missing (each part cut). For the probe report and for people;
+    nothing decides on it."""
+    want = content(label)
+    near = _window_words(passage, start, end)
+    if reason == "label_not_in_passage_window":
+        missing = (want & content(passage)) - near or want
+    elif reason == "label_not_in_sentence":
+        missing = want - content(sentence)
+    elif reason == "entity_not_in_passage":
+        missing = entities(sentence) - content(passage) - want
+    else:
+        missing = set()
+    window = " ".join(_WORD.findall(passage[:start])[-WINDOW:] + ["<number>"]
+                      + _WORD.findall(passage[end:])[:WINDOW])  # fmt: skip
+    return json.dumps(
+        {
+            "label": label[:cut],
+            "sentence": sentence.strip()[:cut],
+            "window_words": window[:cut],
+            "missing_label_words": ", ".join(sorted(missing))[:cut],
+        }
+    )

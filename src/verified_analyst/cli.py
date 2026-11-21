@@ -696,6 +696,20 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
     sv.set_defaults(fn=cmd_serve)
 
+    rp_ = sub.add_parser("report", help="draft a report, then approve it to write the file")
+    rp_sub = rp_.add_subparsers(dest="report_cmd", required=True)
+    rd = rp_sub.add_parser("draft", help="collect verified answers into a pending report")
+    rd.add_argument("--title", required=True)
+    rd.add_argument("--runs", default="demo/results.json", help="JSON list of question runs")
+    rd.add_argument("--out", default="data/reports/draft.json")
+    rd.set_defaults(fn=cmd_report_draft)
+    ra = rp_sub.add_parser("approve", help="approve a draft by its digest; writes the .md file")
+    ra.add_argument("--draft", default="data/reports/draft.json")
+    ra.add_argument("--who", required=True)
+    ra.add_argument("--digest", required=True)
+    ra.add_argument("--out-dir", default="data/reports")
+    ra.set_defaults(fn=cmd_report_approve)
+
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(
@@ -773,6 +787,36 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     rp.set_defaults(fn=cmd_route_probe)
     return p
+
+
+def cmd_report_draft(args: argparse.Namespace) -> int:
+    import json as _json
+
+    from . import reports
+
+    runs = _json.loads(Path(args.runs).read_text(encoding="utf-8"))
+    rep = reports.draft(args.title, runs)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_json.dumps(rep, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(reports.to_markdown(rep))
+    print(f"pending approval. digest {rep['digest']}; approve with --digest {rep['digest']}")
+    return 0
+
+
+def cmd_report_approve(args: argparse.Namespace) -> int:
+    import json as _json
+
+    from . import reports
+
+    rep = _json.loads(Path(args.draft).read_text(encoding="utf-8"))
+    try:
+        done = reports.approve(rep, args.who, args.digest)
+    except reports.ReportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"wrote {reports.publish(done, Path(args.out_dir))} (nothing was sent anywhere)")
+    return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:

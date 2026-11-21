@@ -63,6 +63,12 @@ mark{background:#E9C46A;color:#1B1A17;padding:0 2px;border-radius:2px}
 .how div{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;font-size:13px}
 .how b{display:block;font:600 14px var(--display);margin-bottom:2px}
 footer{padding:18px 24px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);max-width:110ch}
+.tabs{display:flex;gap:4px;padding:8px 24px 0;border-bottom:1px solid var(--line)}
+.tabs button{font:500 14px var(--body);background:none;border:0;border-bottom:3px solid transparent;padding:8px 12px;cursor:pointer;color:var(--mute)}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.rep h3{font:600 18px var(--display);margin:22px 0 4px}
+.cmd{font:13px var(--mono);background:var(--dark);color:var(--dark-ink);padding:12px 14px;border-radius:6px;overflow-x:auto;white-space:pre}
+.btn{font:500 13px var(--body);border:1px solid var(--ink);background:var(--card);padding:7px 12px;border-radius:4px;cursor:pointer;margin-top:8px}
 .note{font-size:12.5px;color:var(--mute);margin-top:10px}
 @media (max-width:760px){main{grid-template-columns:1fr}nav{border-right:0;border-bottom:1px solid var(--line);max-height:260px}section.view{padding:18px 16px 40px}}
 @media (prefers-reduced-motion:no-preference){.num,.vd{transition:outline .1s}}
@@ -76,6 +82,7 @@ footer{padding:18px 24px;border-top:1px solid var(--line);font-size:12px;color:v
   </div>
   <div class="tally" id="tally" aria-live="polite"></div>
 </header>
+<div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Answers</button><button role="tab" id="t-rep" aria-selected="false">Report draft</button></div>
 <main>
   <nav id="list" aria-label="Questions"></nav>
   <section class="view" id="view" aria-live="polite"></section>
@@ -149,6 +156,23 @@ function view(x){
     document.getElementById('detail').textContent = `${v.verdict}: ${v.text} is ${how}.` + (v.expected?` Warehouse value ${v.expected}.`:'') + (v.detail?` ${v.detail}.`:''); };
   el.querySelectorAll('[data-v]').forEach(n=>{ n.onclick=()=>sel(+n.dataset.v); n.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();sel(+n.dataset.v);} }; });
 }
+function reportView(){
+  const it = STATE.items, ok = it.filter(x=>x.outcome==='verified'), left = it.filter(x=>x.outcome!=='verified');
+  const cmd = 'va report draft --title "Weekly check"\nva report approve --who "<your name>" --digest <digest printed by draft>';
+  let h = `<div class="rep"><p class="qtext">Report draft: Weekly check</p><div class="meta"><span class="chip c-partial">pending approval</span><span>${ok.length} verified answers in, ${left.length} left out</span></div>`;
+  h += ok.map(x=>`<h3>${esc(x.question)}</h3><p>${esc(x.rendered)}</p><p class="note">${verdicts(x).length} number(s) verified</p>`).join('');
+  h += `<h2>Withheld, not in the report</h2><ul>` + left.map(x=>`<li>${esc(x.question)} <span class="note">(${esc(x.reason||'not verified')})</span></li>`).join('') + `</ul>`;
+  h += `<h2>Approve</h2><p>Approval is a named step. It quotes the digest of the draft you read, so an edited draft cannot be approved by mistake. Only then is a Markdown file written. Nothing is emailed or posted.</p><div class="cmd" id="cmd">${esc(cmd)}</div><button class="btn" id="copy">Copy commands</button><p class="note" id="copied"></p></div>`;
+  document.getElementById('view').innerHTML = h;
+  document.getElementById('copy').onclick = async()=>{ try{ await navigator.clipboard.writeText(cmd); document.getElementById('copied').textContent='Copied.'; }catch(e){ document.getElementById('copied').textContent='Copy failed; select the text above.'; } };
+}
+function tab(which){
+  const rep = which==='rep';
+  document.getElementById('t-ask').setAttribute('aria-selected', !rep); document.getElementById('t-rep').setAttribute('aria-selected', rep);
+  document.getElementById('list').style.display = rep?'none':''; document.querySelector('main').style.gridTemplateColumns = rep?'1fr':'';
+  if(rep) reportView(); else render();
+}
+document.getElementById('t-ask').onclick=()=>tab('ask'); document.getElementById('t-rep').onclick=()=>tab('rep');
 async function init(){
   let data = EMBED;
   if(!data){ try{ data = await (await fetch('/api/results')).json(); }catch(e){ data = null; } }

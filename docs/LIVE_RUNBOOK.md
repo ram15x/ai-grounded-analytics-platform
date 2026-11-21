@@ -292,3 +292,21 @@ used to repeat the identical request, which failed 4 of 4 times), for every task
 text that then does not parse is handled as an invalid reply (the route step retries with the errors). The retry is a real HTTP
 request and counts against `--max-requests`. A test now covers it on the route path.
 
+### Why one step made four JSON-off calls (va_next20)
+
+In the injection-only run a compose or repair step showed one `json_rejected` and then four
+`malformed` calls with JSON mode off. Cause (from the code, matching the counts): the JSON-off retry
+got an HTTP 200 whose content was empty; the adapter reports an empty completion as `malformed`,
+`malformed` is a retryable error, and `max_retries` is 3, so the same request went out 1 + 3 = 4
+times. Now: after a JSON refusal a step makes at most 2 requests (the refusal and one JSON-off
+retry); an unusable reply or any other failure of that retry ends the path (text handed back
+unparseable for an empty reply; next provider for other failures). A provider that refuses JSON mode
+twice in a row for one question gets no more requests for that question; the next provider is used
+if the sensitivity rule allows, otherwise the question ends as `provider_error`. A `malformed` reply
+with no JSON refusal before it keeps the normal retries.
+
+The report has a section "Unusable HTTP 200 replies": for each, the kind (`content_empty`,
+`content_null`, `no_content`, `error_object`, `body_not_json`), the prompt, completion and reasoning
+tokens and finish reason the provider reported, and the raw body (first 300 characters, key and
+bearer text redacted). Whether the provider sent empty content or an error object is stated from
+that body only (assumptions row 45 stays UNVERIFIED).

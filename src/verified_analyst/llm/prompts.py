@@ -85,6 +85,17 @@ PLAN_SYSTEM_V1 = (
     + "\nEach metric and dimension in the catalogue has a description and a list of synonyms: "
     "match the words of the question against the names, descriptions and synonyms."
 )
+# plan.v2: plan.v1 plus the shape of a filter and the allowed operators. Opt-in, not active.
+# Written because a real run could not plan "merchandise only" in 3 tries. It is compared with
+# plan.v1 on the dev set before any default change. The reason for that failure was
+# UNVERIFIED when this was written.
+PLAN_SYSTEM_V2 = (
+    PLAN_SYSTEM_V1
+    + '\nA filter is {"dimension": "<dimension name>", "op": "<op>", "value": ...} with op one of '
+    "eq, ne, in, not_in, gt, gte, lt, lte, between (in and not_in take a list, between takes two "
+    'values). Example: {"dimension": "country", "op": "eq", "value": "France"}. Use only these '
+    "three keys."
+)
 REPAIR_SYSTEM = (
     COMPOSE_SYSTEM
     + """
@@ -165,6 +176,7 @@ LABEL_SYSTEM = (
 PROMPT_TEMPLATES = {
     "plan.v0": PLAN_SYSTEM,
     "plan.v1": PLAN_SYSTEM_V1,
+    "plan.v2": PLAN_SYSTEM_V2,
     "compose.v1": COMPOSE_SYSTEM,
     "repair.v1": REPAIR_SYSTEM,
     "route.v1": ROUTE_SYSTEM_V1,
@@ -218,16 +230,18 @@ def catalogue_text(layer: SemanticLayer) -> str:
     return json.dumps({"metrics": metrics, "dimensions": dims}, sort_keys=True)
 
 
-def plan_request(layer: SemanticLayer, question: str, error: str | None = None) -> LLMRequest:
+def plan_request(
+    layer: SemanticLayer, question: str, error: str | None = None, prompt_id: str = "plan.v1"
+) -> LLMRequest:
     user = f"Catalogue: {catalogue_text(layer)}\nQuestion: {question}"
     if error:
         user += f"\nYour previous plan failed: {error}\nReturn a corrected plan."
     return LLMRequest(
         task="plan",
-        messages=(("system", PLAN_SYSTEM_V1), ("user", user)),
+        messages=(("system", PROMPT_TEMPLATES[prompt_id]), ("user", user)),
         datasets=(),  # the catalogue holds names and definitions, not data
-        prompt_id="plan.v1",
-        prompt_hash=prompt_hashes()["plan.v1"],
+        prompt_id=prompt_id,
+        prompt_hash=prompt_hashes()[prompt_id],
         schema_name="PlanOutput",
     )
 

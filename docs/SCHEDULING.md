@@ -27,3 +27,7 @@ equals the gold value; the command exits 1), `withheld`, `no_reply`. It writes `
 `results.json` under `data/e2e_runs/`. Live runs spend free-plan tokens: read the usage line first.
 `--replay` only exercises the plumbing (the recordings do not cover these questions, so every row
 is `no_reply`). The held-out questions are not wired in; they need a locked, one-shot procedure.
+
+`va eval e2e --plan-prompt plan.v2` sends the planner prompt that adds the filter shape (and the
+allowed operators) to plan.v1. It exists to test one hypothesis for the T1-11 plan failure
+(UNVERIFIED). Compare the two prompts on the same dev questions before changing the default.

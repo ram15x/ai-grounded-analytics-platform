@@ -131,6 +131,7 @@ def answer_question(
     known_values: dict[str, set[str]] | None = None,
     max_repairs: int = 2,
     max_tokens: int | None = None,
+    plan_prompt: str = "plan.v1",
 ) -> QuestionRun:
     result = QuestionRun(question, "abstain", run=run)
 
@@ -180,6 +181,7 @@ def answer_question(
         max_tokens=max_tokens,
         skip_plan=route.route == "documents",
         prior_events=result.events,
+        plan_prompt=plan_prompt,
         **kwargs,
     )
     done.route, done.passage_labels = result.route, result.passage_labels

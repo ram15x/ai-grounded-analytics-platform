@@ -189,6 +189,7 @@ def run_question(
     doc_datasets: tuple[str, ...] = (),
     skip_plan: bool = False,
     prior_events: list[dict[str, Any]] | None = None,
+    plan_prompt: str = "plan.v1",
 ) -> QuestionRun:
     """`passages` (PassageNumbers) and `passage_prompt` (rendered block, figure listing) switch on
     document answers; `skip_plan` is the documents-only route (no query is planned or run)."""
@@ -232,7 +233,7 @@ def run_question(
 
     while True:
         if mq is None and not skip_plan:  # ---- plan, compile, guard, execute ----
-            got = call(plan_request(layer, question, plan_error))
+            got = call(plan_request(layer, question, plan_error, plan_prompt))
             if isinstance(got, QuestionRun):
                 return got
             ev: dict[str, Any] = {

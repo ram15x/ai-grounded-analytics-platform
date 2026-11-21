@@ -79,6 +79,7 @@ def test_prompt_ids_and_hashes_are_versioned_and_distinct():
     assert set(PROMPT_TEMPLATES) == {
         "plan.v0",
         "plan.v1",
+        "plan.v2",
         "compose.v1",
         "repair.v1",
         "route.v1",
@@ -87,7 +88,7 @@ def test_prompt_ids_and_hashes_are_versioned_and_distinct():
         "repair.v2",
         "label.v0",
     }
-    assert len(set(prompt_hashes().values())) == 9
+    assert len(set(prompt_hashes().values())) == 10
 
 
 def test_compose_and_repair_requests_carry_their_own_prompt_id():

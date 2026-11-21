@@ -81,6 +81,7 @@ def test_real_hash_helpers_are_hex_and_stable():
     assert set(prompt_hashes()) == {
         "plan.v0",
         "plan.v1",
+        "plan.v2",
         "compose.v1",
         "repair.v1",
         "route.v1",

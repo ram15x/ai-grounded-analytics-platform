@@ -741,6 +741,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="required with --split locked; the run is recorded in a one-shot ledger",
     )
+    e2.add_argument(
+        "--plan-prompt",
+        default="plan.v1",
+        choices=["plan.v1", "plan.v2"],
+        help="plan.v2 adds the filter shape to the prompt (dev comparison only)",
+    )
     e2.add_argument("--only", metavar="IDS", help="dev only: comma-separated question ids to run")
     e2.add_argument("--out-dir", default="data/e2e_runs")
     e2.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
@@ -886,7 +892,7 @@ def _ask_setup(args: argparse.Namespace):
     return layer, url, s, make_router, retrieve, catalogue(layer, url)
 
 
-def _ask_one(question: str, qid: str, setup):
+def _ask_one(question: str, qid: str, setup, plan_prompt: str = "plan.v1"):
     from .llm import route_probe  # noqa: PLC0415
     from .llm.answer import answer_question  # noqa: PLC0415
 
@@ -896,6 +902,7 @@ def _ask_one(question: str, qid: str, setup):
     return answer_question(
         question, layer=layer, readonly_url=url, router=router, run=run, retrieve=retrieve,
         corpus_description=route_probe.CORPUS_DESCRIPTION, known_values=known,
+        plan_prompt=plan_prompt,
     )  # fmt: skip
 
 
@@ -969,7 +976,7 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
             )
         else:
             entry = {"kind": "scalar", "value": str(t1.GOLD_FUNCTIONS[q["gold_fn"]](df))}
-        d = _ask_one(q["question"], q["id"], setup).as_dict()
+        d = _ask_one(q["question"], q["id"], setup, args.plan_prompt).as_dict()
         d["id"] = q["id"]
         if d["reason"] == "provider_error" and args.replay:
             d["outcome"], d["reason"] = "not_recorded", "no_recording"

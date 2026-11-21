@@ -704,6 +704,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sv.add_argument("--model")
     sv.add_argument("--trace-dir", default="data/traces")
+    sv.add_argument(
+        "--byok",
+        action="store_true",
+        help="public tryout: visitors bring their own API key (used once, never stored)",
+    )
     sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
     sv.set_defaults(fn=cmd_serve)
 
@@ -912,6 +917,50 @@ def _ask_setup(args: argparse.Namespace):
 
     retrieve = route_probe.public_only(make_retriever(url, k=3))
     return layer, url, s, make_router, retrieve, catalogue(layer, url)
+
+
+def _byok_ask(question: str, provider: str, model: str | None, key: str) -> dict:
+    """One question with the visitor's own key. The key exists only in `env` below, which is
+    built for this call and dropped with it: it is not written to disk, a trace or a log, and any
+    error text is scrubbed of it before it is returned."""
+    from .llm import route_probe  # noqa: PLC0415
+    from .llm.answer import make_retriever  # noqa: PLC0415
+    from .llm.live import redact  # noqa: PLC0415
+    from .llm.providers import build_one  # noqa: PLC0415
+    from .llm.router import Router  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    base = load_router_settings()
+    env = {base.providers[provider].env_key: key}
+    layer = load_semantic_layer()
+    url = readonly_database_url()
+    try:
+        opts = route_probe.RouteProbeOptions(provider, model or "", Path(os.devnull))
+        s = route_probe.route_settings(base, opts)
+        for rel in (layer.source.relation, "docs.public"):
+            if s.sensitivity_of((rel,)) != "public":
+                return {"outcome": "abstain", "reason": "sensitivity", "rendered": ""}
+        setup = (
+            layer, url, s,
+            lambda: Router(s, {provider: build_one(s, provider, env=env)}),
+            route_probe.public_only(make_retriever(url, k=3)), catalogue(layer, url),
+        )  # fmt: skip
+        d = _ask_one(question, "byok", setup).as_dict()
+    except (ConfigError, LLMError) as exc:
+        return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
+                "error": redact(str(exc), env)}  # fmt: skip
+    d["id"] = "TRY"
+    return json.loads(redact(json.dumps(d, default=str), env))
+
+
+def _byok_models(provider: str, key: str) -> dict:
+    from .llm.live import list_provider_models, redact  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    base = load_router_settings()
+    env = {base.providers[provider].env_key: key}
+    res = list_provider_models(base, provider, env)
+    return json.loads(redact(json.dumps(res, default=str), env))
 
 
 def _ask_one(question: str, qid: str, setup, plan_prompt: str = "plan.v1"):
@@ -1168,6 +1217,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
         out.mkdir(parents=True, exist_ok=True)
         (out / "index.html").write_text(static_page(load_payload()), encoding="utf-8")
         print(f"wrote {out / 'index.html'}")
+        return 0
+    if getattr(args, "byok", False):
+        from .tryout import load_config as load_tryout  # noqa: PLC0415
+
+        cfg = load_tryout()
+        serve(
+            args.port,
+            args.host,
+            byok_fn=_byok_ask,
+            models_fn=_byok_models,
+            tryout_cfg=cfg,
+        )
         return 0
     ask_fn, mode = None, "static"
     if args.replay or args.provider:

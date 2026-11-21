@@ -114,7 +114,11 @@ daemon where it was written).
 The recorded model replies come from real Groq calls and are replayed, not re-run; a question with
 no recording is shown as "no recording", not as a model abstention. See [demo/README.md](demo/README.md).
 
-### Try the verifier
+#### Public tryout (bring your own key)
+
+`va serve --byok` serves a fixed menu of 12 questions (3 easy, 3 medium, 3 hard, 3 of your own) from `config/tryout.yaml`; each visitor may ask one from each group, so a free API key stays inside its limits. The visitor pastes their own key (Groq, OpenRouter or Gemini). It travels in a request header, is used for that one question and is never written to disk, a trace, a log or browser storage; error text is scrubbed of it. The per-visitor allowance is a courtesy limit held in memory against a cookie, not a security control. Difficulty is by question shape, not measured, and "hard" questions may be withheld.
+
+## Try the verifier
 
 ```
 docker compose up -d --wait                # needs POSTGRES_PASSWORD; set VA_PG_PORT if 5432 is taken

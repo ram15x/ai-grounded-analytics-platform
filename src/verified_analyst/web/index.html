@@ -16,6 +16,7 @@
   --display:'Fraunces',Georgia,serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--body)}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -103,6 +104,16 @@ h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin
 .cmd{font:13px var(--mono);background:var(--night);color:var(--night-ink);padding:14px 16px;border-radius:8px;white-space:pre;overflow-x:auto}
 .btn{border:1px solid var(--ink);background:var(--card);padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:500;margin-top:10px}
 .rsec{padding:18px 22px;margin-bottom:12px}.rsec h3{margin:0 0 6px;font:600 17px var(--display)}
+.try{max-width:900px;margin-top:18px;border:1px solid var(--night-line);border-radius:12px;padding:16px 18px;background:#ffffff06}
+.try h3{margin:0 0 4px;font:600 16px var(--display)}.try p{margin:0 0 10px;color:var(--night-mute);font-size:13px}
+.try .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.try select,.try input{background:var(--night2);border:1px solid var(--night-line);color:var(--night-ink);border-radius:8px;padding:8px 10px;font:14px var(--body);min-width:0}
+.try input.key{flex:1;min-width:220px;font-family:var(--mono)}
+.tier{margin-top:12px}.tier h4{margin:0 0 6px;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--night-mute);display:flex;gap:10px}
+.tier h4 .left{color:var(--amber)}.tier h4 .left.zero{color:var(--night-mute)}
+.tier button[data-t]{display:block;width:100%;text-align:left;background:none;border:1px solid var(--night-line);color:var(--night-ink);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13.5px;cursor:pointer}
+.tier button[data-t]:hover:not(:disabled){border-color:var(--ok-glow)}.tier button[data-t]:disabled{opacity:.4;cursor:not-allowed}
+.keynote{font-size:12px;color:var(--night-mute);margin-top:6px}
 @media (max-width:900px){.grid{grid-template-columns:1fr}.hero{padding:0 16px 26px}.wrap{padding:20px 16px 50px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -119,6 +130,7 @@ h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin
   <form class="ask" id="form" autocomplete="off"><input id="q" aria-label="Question" placeholder="Ask a question about the data or the documents" list="qs"><datalist id="qs"></datalist><button class="go" type="submit">Ask</button></form>
   <div class="sugg" id="sugg"></div>
   <div class="hint" id="hint" aria-live="polite"></div>
+  <div class="try" id="try" hidden></div>
   <div class="stats" id="stats"></div>
 </section>
 <div class="wrap" id="app"></div>
@@ -231,6 +243,50 @@ function trustView(){
    <div class="card tile"><b>Placeholders</b><p>The model writes {c1}-style placeholders. A number it types itself is rejected; displayed digits come from the warehouse or a stored passage.</p></div></div>
    <h2>Not claimed</h2><ul><li>No accuracy figure. These are ${S.items.length} development questions, and ${S.items.filter(x=>x.outcome==='not_recorded').length} have no recorded model reply.</li><li>Verification proves a figure matches its source. It does not prove the source answers the question asked.</li><li>Injection obedience was measured on 5 questions with one model. That is not a safety claim.</li></ul>`;
 }
+
+const T = {cfg:null, key:'', provider:'groq', model:''};
+function tryRender(){
+  const c=T.cfg, rem=c.remaining, P=c.providers[T.provider];
+  const tier=(name,title)=>`<div class="tier"><h4>${title}<span class="left ${rem[name]?'':'zero'}">${rem[name]} of ${c.per_visitor[name]} left</span></h4>`+
+    c.questions[name].map((q,i)=>`<button type="button" data-t="${name}" data-i="${i}" ${rem[name]?'':'disabled'}>${esc(q)}</button>`).join('')+'</div>';
+  $('try').innerHTML=`<h3>Try it with your own key</h3>
+   <p>${c.questions.easy.length*3+c.own_slots} questions in total: 3 easy, 3 medium, 3 hard, and ${c.own_slots} of your own. You may ask ${c.per_visitor.easy} from each group, which keeps a free key inside its limits. Your key is sent with each question, used once and never stored on the server or in this browser.</p>
+   <div class="row"><select id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
+   <input class="key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
+   ${P.model?'':`<input id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn" id="lm" style="margin:0;background:none;color:inherit;border-color:var(--night-line)">List models</button>`}</div>
+   <div class="keynote">${esc(P.key_hint||'')} ${esc(P.note||'')}</div><div class="keynote" id="mlist"></div>
+   ${tier('easy','Easy')}${tier('medium','Medium')}${tier('hard','Hard (data and documents together; may be withheld)')}
+   <div class="tier"><h4>Your own question<span class="left ${rem.own?'':'zero'}">${rem.own} of ${c.per_visitor.own} left</span></h4><div class="row"><input id="own" style="flex:1" maxlength="${c.own_max_chars}" placeholder="Ask something about the sales data or the documents" ${rem.own?'':'disabled'}><button type="button" class="go" id="ownbtn" style="padding:8px 16px" ${rem.own?'':'disabled'}>Ask</button></div></div>`;
+  $('prov').onchange=e=>{T.provider=e.target.value;T.model='';tryRender();};
+  $('key').oninput=e=>{T.key=e.target.value;}; if($('model')) $('model').oninput=e=>{T.model=e.target.value;};
+  if($('lm')) $('lm').onclick=listModels;
+  $('try').querySelectorAll('.tier button[data-t]').forEach(b=>b.onclick=()=>tryAsk(b.dataset.t,c.questions[b.dataset.t][+b.dataset.i]));
+  $('ownbtn').onclick=()=>{const v=$('own').value.trim(); if(v) tryAsk('own',v);};
+  $('own').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('ownbtn').click();}};
+}
+async function listModels(){
+  $('mlist').textContent='Asking the provider for its models…';
+  try{ const r=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({provider:T.provider})});
+    const d=await r.json(); const ids=(d.models||d.model_ids||[]).map(m=>m.id||m).slice(0,40);
+    $('mlist').textContent = ids.length? 'Models: '+ids.join(', ') : (d.error||d.status||'No models returned; check the key.'); }
+  catch(e){ $('mlist').textContent='Could not reach the server.'; }
+}
+async function tryAsk(tier,question){
+  if(S.busy) return; if(!T.key){ $('hint').textContent='Paste your own API key first. It is used for this question only.'; return; }
+  const model=($('model')&&$('model').value.trim())||''; if(!T.cfg.providers[T.provider].model && !model){ $('hint').textContent='Choose a model id for this provider (List models).'; return; }
+  S.busy=true; $('hint').textContent='Running the pipeline with your key: route, plan, query, compose, verify…';
+  try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({question,tier,provider:T.provider,model})});
+    const d=await r.json(); if(d.remaining) T.cfg.remaining=d.remaining;
+    if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; }
+    else if(d.reason==='provider_error'){ $('hint').textContent='The provider did not answer (wrong key, a rate limit, or a bad model id). This did not use up your question.'; }
+    else { $('hint').textContent=''; S.items.unshift(d); choose(0); refreshStats(); } }
+  catch(e){ $('hint').textContent='Could not reach the server.'; }
+  S.busy=false; tryRender();
+}
+async function tryInit(){
+  try{ T.cfg=await (await fetch('/api/tryout')).json(); }catch(e){ return; }
+  $('sugg').hidden=true; $('form').hidden=true; $('try').hidden=false; tryRender();
+}
 function setTab(t){ S.tab=t; ['ask','rep','ev'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t)); ({ask:askView,rep:reportView,ev:trustView})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
@@ -261,7 +317,7 @@ function init(data){
   const f=document.createElement('p'); f.className='note'; f.style.cssText='max-width:1240px;margin:0 auto;padding:0 28px 40px'; f.textContent=data.note; document.body.appendChild(f);
 }
 if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
-  S.can=c.can_ask; S.mode=c.mode; $('mode').textContent = c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
+  S.can=c.can_ask; S.mode=c.mode; if(c.mode==='byok') tryInit(); $('mode').textContent = c.mode==='byok'?'Tryout · your key':c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
   if(c.mode==='live'){ $('mode').style.color='#4FD18B'; $('mode').style.borderColor='#2d6b4a'; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});
 </script>

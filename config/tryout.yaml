@@ -1,0 +1,46 @@
+# The public tryout: a small, fixed menu so one visitor cannot burn a free-tier daily quota.
+# Nothing here is a model setting. Edit the numbers or the questions; no code changes needed.
+#
+# Each visitor may ask `per_visitor[tier]` questions from each tier. The three menu tiers are
+# fixed questions (the server refuses any other text for those tiers); "own" is free text.
+# Difficulty is by SHAPE, not measured: easy = one figure, medium = a ratio or a filter,
+# hard = a figure from the warehouse AND a fact from the documents in one answer (these may be
+# withheld; that is a correct outcome, not a bug).
+per_visitor:
+  easy: 1
+  medium: 1
+  hard: 1
+  own: 1
+own_slots: 3            # how many "your own question" boxes the page shows
+own_max_chars: 300
+questions:
+  easy:
+    - What was total gross revenue (sales before cancellations and discounts)?
+    - How many orders were placed?
+    - How many distinct customers bought something?
+  medium:
+    - What was the average order value?
+    - What share of gross revenue was cancelled?
+    - What was net revenue from customers we can identify?
+  hard:
+    - What was total gross revenue, and how many days do customers have to return unused goods?
+    - Which country placed the most orders, and what flat courier charge applies to small UK orders?
+    - What is the average order value, and how long can an item be backordered?
+# Which providers a visitor may bring a key for. `note` is shown as written; only what has
+# actually been measured is claimed.
+providers:
+  groq:
+    label: Groq
+    key_hint: Starts with gsk_ . Create one free at console.groq.com.
+    note: The only provider whose free limits were measured here (about 8,000 tokens a minute and a daily token cap; one question uses about 4,000 to 5,400 tokens).
+    model: openai/gpt-oss-20b
+  openrouter:
+    label: OpenRouter
+    key_hint: Starts with sk-or- . Create one at openrouter.ai.
+    note: Free-model limits were not measured here. Pick a model whose name ends in ":free".
+    model: null
+  gemini:
+    label: Google Gemini
+    key_hint: Create one in Google AI Studio.
+    note: Free limits were not measured here.
+    model: null

@@ -5,304 +5,405 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Verified Analyst</title>
 <link rel="icon" href="data:,">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-/* Layout: dark hero with the ask box, then a pipeline strip, answer + linked evidence, and a ledger. */
+/* Design: an audit workpaper. Auditors tick each figure in coloured pencil and tie it to a note in
+   the margin; the answer sheet does the same. Green = tied to a cell, blue = derived or quoted,
+   red = not tied. Fonts are served from this server (SIL Open Font License, see /fonts). */
+@font-face{font-family:'Source Serif 4';src:url(/fonts/source-serif-4.woff2) format('woff2');font-weight:200 900;font-display:swap}
+@font-face{font-family:'Public Sans';src:url(/fonts/public-sans.woff2) format('woff2');font-weight:100 900;font-display:swap}
 :root{
-  --paper:#F3EFE6; --card:#FCFAF5; --ink:#171612; --mute:#6A665B; --line:#DCD5C5;
-  --night:#12110E; --night2:#1C1B17; --night-line:#34322B; --night-ink:#ECE7DA; --night-mute:#98937F;
-  --ok:#1F7A4D; --ok-bg:#D9ECDD; --ok-glow:#4FD18B; --warn:#A35F00; --warn-bg:#F7E5BF; --amber:#E9B44C; --bad:#A33232;
-  --violet:#5C3FA0; --violet-bg:#E7E0F4; --focus:#2F6BFF;
-  --display:'Fraunces',Georgia,serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --paper:#F4F6F8; --sheet:#FFFFFF; --ink:#0E1A2B; --mute:#5B6778; --rule:#C7CED6; --hair:#E3E8ED;
+  --tied:#0F7B55; --tied-bg:#E2F2EB; --derived:#2447B8; --derived-bg:#E6ECFA; --flag:#C2362B; --flag-bg:#FBE9E7;
+  --serif:'Source Serif 4',Georgia,'Times New Roman',serif; --sans:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --code:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--body)}
-button{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.hero{background:radial-gradient(900px 300px at 85% -20%,#2c4a3a55,transparent),var(--night);color:var(--night-ink);padding:0 28px 34px}
-.top{display:flex;align-items:center;gap:24px;padding:16px 0;border-bottom:1px solid var(--night-line);flex-wrap:wrap}
-.logo{display:flex;align-items:center;gap:10px;font:600 18px var(--display)}
-.mark{width:26px;height:26px;border-radius:7px;background:var(--ok-glow);display:grid;place-items:center;color:var(--night)}
-.tabs{display:flex;gap:4px;margin-left:12px}
-.tabs button{background:none;border:0;color:var(--night-mute);padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500}
-.tabs button[aria-selected=true]{background:var(--night2);color:var(--night-ink)}
-.mode{margin-left:auto;font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid #5a4a22;border-radius:99px;padding:4px 10px}
-.mode::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:7px}
-.h1{font:700 clamp(30px,5vw,52px)/1.04 var(--display);letter-spacing:-.02em;margin:34px 0 10px;max-width:18ch;text-wrap:balance}
-.h1 em{font-style:normal;color:var(--ok-glow)}
-.sub{color:var(--night-mute);max-width:62ch;margin:0 0 22px}
-.ask{display:flex;gap:8px;max-width:760px;background:var(--night2);border:1px solid var(--night-line);border-radius:12px;padding:6px}
-.ask input{flex:1;min-width:0;background:none;border:0;color:var(--night-ink);font:17px var(--body);padding:10px 12px}
-.ask input:focus-visible{outline:none}
-.ask:focus-within{border-color:var(--ok-glow)}
-.go{background:var(--ok-glow);color:var(--night);border:0;border-radius:8px;padding:0 20px;font-weight:600;cursor:pointer}
-.sugg{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;max-width:900px}
-.sugg button{background:none;border:1px solid var(--night-line);color:var(--night-ink);border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer}
-.sugg button:hover{border-color:var(--night-mute)}
-.hint{color:var(--night-mute);font-size:13px;margin-top:10px;min-height:20px}
-.stats{display:flex;gap:34px;flex-wrap:wrap;margin-top:26px}
-.stats b{font:700 30px var(--display);display:block;font-variant-numeric:tabular-nums}
-.stats span{font-size:12px;color:var(--night-mute);text-transform:uppercase;letter-spacing:.08em}
-.wrap{padding:26px 28px 60px;max-width:1240px;margin:0 auto}
-/* pipeline */
-.pipe{display:flex;align-items:center;gap:0;margin-bottom:22px;flex-wrap:wrap;row-gap:10px}
-.st{display:flex;align-items:center;gap:8px;font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
-.dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:11px;background:var(--card);transition:all .25s}
-.st.on{color:var(--ink)}.st.on .dot{border-color:var(--ok);background:var(--ok);color:#fff}
-.st.skip .dot{border-style:dashed}.st.fail .dot{border-color:var(--warn);background:var(--warn);color:#fff}
-.bar{flex:0 0 34px;height:2px;background:var(--line);margin:0 8px}.bar.on{background:var(--ok)}
-/* answer + evidence */
-.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px;align-items:start}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px}
-.ans{padding:24px 26px}
-.q{font:600 15px var(--body);color:var(--mute);margin:0 0 10px}
-.atext{font:500 24px/1.5 var(--display);margin:0;text-wrap:pretty}
-.num{display:inline-block;background:var(--ok-bg);border-bottom:3px solid var(--ok);padding:0 5px;border-radius:4px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background .15s}
-.num.q{background:var(--violet-bg);border-color:var(--violet)}
-.num.sel,.num:hover{background:var(--ok);color:#fff}.num.q.sel,.num.q:hover{background:var(--violet)}
-.ring{display:flex;align-items:center;gap:16px;margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
-.ring svg{flex:none}
-.ring b{font:700 18px var(--display)}.ring span{display:block;color:var(--mute);font-size:13px}
-.vlist{display:flex;flex-direction:column;gap:8px;margin-top:16px}
-.v{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:#fff8;cursor:pointer;text-align:left;width:100%}
-.v.sel{border-color:var(--ink);background:#fff}
-.chip{font:500 11px var(--mono);letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:var(--ok-bg);color:var(--ok);white-space:nowrap}
-.chip.q{background:var(--violet-bg);color:var(--violet)}.chip.w{background:var(--warn-bg);color:var(--warn)}.chip.n{background:#E5E0D2;color:var(--mute)}
-.v .t{font:500 14px var(--mono);font-variant-numeric:tabular-nums}
-.v .why{grid-column:1/-1;font-size:13px;color:var(--mute)}
-.withheld{padding:26px;border-left:6px solid var(--amber)}
-.withheld h3{font:700 24px var(--display);margin:0 0 6px}
-/* evidence */
-.ev{position:sticky;top:12px;background:var(--night);color:var(--night-ink);border-radius:12px;padding:6px 0;overflow:hidden}
-.ev .sec{padding:14px 18px}.ev .sec+.sec{border-top:1px solid var(--night-line)}
-.ev h4{margin:0 0 9px;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--night-mute)}
-.ev pre{margin:0;font:12.5px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word}
-.kw{color:#8FB8FF}.fn{color:#E9B44C}.st-{color:#9BD7A6}
-.tbl{overflow-x:auto}
-.tbl table{border-collapse:collapse;font:12.5px var(--mono);font-variant-numeric:tabular-nums;width:100%}
-.tbl th{color:var(--night-mute);text-align:left;font-weight:500;padding:4px 14px 6px 0}
-.tbl td{padding:5px 14px 5px 0;border-top:1px solid #2b2a24}
-.tbl td.hit{background:#E9B44C;color:var(--night);border-radius:3px;padding-left:6px;font-weight:500}
-mark{background:#E9B44C;color:var(--night);padding:1px 3px;border-radius:3px}
-.pid{font:11px var(--mono);color:var(--night-mute);display:block;margin-bottom:3px}
-.pas{margin:0 0 14px;font:13px/1.6 var(--body);white-space:pre-wrap;color:#d8d3c4}
-.empty{color:var(--night-mute);font-size:13px;padding:14px 18px}
-/* ledger */
-h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin:0 0 14px;font-size:14px}
-.ledger{width:100%;border-collapse:collapse;font-size:14px}
-.ledger th{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--mute);text-align:left;padding:8px 10px;border-bottom:2px solid var(--ink)}
-.ledger td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
-.ledger tr.row{cursor:pointer}.ledger tr.row:hover td{background:#ECE6D8}
-.mini{display:flex;gap:2px}.mini i{width:9px;height:14px;border-radius:2px;background:var(--ok)}
-.mini i.q{background:var(--violet)}
+html{background:var(--paper)}
+body{margin:0;color:var(--ink);font:16px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--derived);outline-offset:3px;border-radius:2px}
+a{color:inherit}
+.page{max-width:1180px;margin:0 auto;padding:0 32px}
+/* header */
+.bar{display:flex;align-items:baseline;gap:36px;padding:22px 0 18px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.word{font:600 21px var(--serif);letter-spacing:-.01em;margin:0}
+nav{display:flex;gap:26px}
+nav button{background:none;border:0;padding:4px 0;color:var(--mute);cursor:pointer;font-weight:500;border-bottom:2px solid transparent}
+nav button:hover{color:var(--ink)}
+nav button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.mode{margin-left:auto;color:var(--mute);font-size:14px}
+/* the question line */
+.lead{padding:46px 0 10px}
+.title{font:600 clamp(28px,3.6vw,40px)/1.15 var(--serif);letter-spacing:-.016em;margin:0 0 14px;max-width:30ch;text-wrap:balance}
+.sub{color:var(--mute);max-width:60ch;margin:0 0 30px;font-size:17px;line-height:1.55}
+.ask{display:flex;gap:18px;align-items:flex-end;max-width:860px}
+.ask input{flex:1;min-width:0;background:none;border:0;border-bottom:2px solid var(--ink);border-radius:0;padding:8px 0 10px;font:400 26px/1.3 var(--serif);color:var(--ink)}
+.ask input::placeholder{color:#8A94A3}
+.ask input:focus-visible{outline:none;border-bottom-color:var(--derived)}
+.go{background:var(--ink);color:#fff;border:0;border-radius:3px;padding:12px 24px;font-weight:600;cursor:pointer;white-space:nowrap}
+.go:hover{background:#1d2e47}
+.go:disabled{opacity:.5;cursor:wait}
+.hint{color:var(--mute);font-size:14px;margin:12px 0 0;min-height:22px;max-width:70ch}
+.wrap{padding:30px 0 70px}
+/* process line */
+.proc{display:flex;margin:0 0 26px;padding:0;list-style:none;font-size:14px;color:var(--mute)}
+.proc li{flex:1;position:relative;padding-top:20px}
+.proc li::before{content:"";position:absolute;top:6px;left:0;right:0;height:2px;background:var(--rule)}
+.proc li::after{content:"";position:absolute;top:0;left:0;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--rule)}
+.proc li.on{color:var(--ink)}.proc li.on::before{background:var(--ink)}.proc li.on::after{border-color:var(--ink);background:var(--ink)}
+.proc li.skip::after{border-style:dashed}
+.proc li.fail{color:var(--flag)}.proc li.fail::after{border-color:var(--flag);background:var(--flag)}
+.proc li:last-child::before{right:50%}
+.proc b{display:block;font-weight:600;font-size:15px}
+.proc span{display:block;font-size:13px;line-height:1.35;max-width:22ch}
+/* the sheet */
+.sheet{position:relative;background:var(--sheet);border:1px solid var(--rule);border-radius:2px;box-shadow:0 1px 0 var(--rule)}
+.sheet-h{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:22px 30px 18px;border-bottom:1px solid var(--hair)}
+.qline{margin:0;font:500 17px/1.45 var(--serif);color:var(--mute);max-width:62ch}
+.stamp{font:600 14px var(--sans);color:var(--tied);border:2px solid var(--tied);border-radius:3px;padding:3px 11px;transform:rotate(-2deg);white-space:nowrap;align-self:flex-start}
+.stamp.flag{color:var(--flag);border-color:var(--flag)}
+.sheet-b{display:grid;grid-template-columns:minmax(0,1fr) 340px}
+.main{padding:30px 34px 34px}
+.atext{font:400 clamp(24px,2.6vw,30px)/1.5 var(--serif);margin:0;text-wrap:pretty;max-width:40ch}
+.fig{position:relative;cursor:pointer;font-variant-numeric:lining-nums tabular-nums;font-weight:600;border-bottom:2px solid var(--tied);padding-bottom:1px;transition:background .12s}
+.fig.d{border-bottom-color:var(--derived)}.fig.x{border-bottom-color:var(--flag);border-bottom-style:dashed}
+.fig:hover,.fig.on{background:var(--tied-bg)}.fig.d:hover,.fig.d.on{background:var(--derived-bg)}.fig.x:hover,.fig.x.on{background:var(--flag-bg)}
+.fig sup{font:700 11px var(--sans);color:var(--tied);margin-left:2px;vertical-align:super;line-height:0}
+.fig.d sup{color:var(--derived)}.fig.x sup{color:var(--flag)}
+.tick{display:inline-block;width:14px;height:12px;vertical-align:-1px;margin-left:3px;overflow:visible}
+.tick path{fill:none;stroke:var(--tied);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.fig.d .tick path{stroke:var(--derived)}
+.fresh .tick path{stroke-dasharray:22;stroke-dashoffset:22;animation:draw .38s ease-out forwards;animation-delay:calc(var(--n) * 170ms + 250ms)}
+@keyframes draw{to{stroke-dashoffset:0}}
+.fresh .stamp{animation:stamp .3s ease-out both;animation-delay:calc(var(--total) * 170ms + 500ms)}
+@keyframes stamp{from{opacity:0;transform:rotate(-2deg) scale(1.35)}to{opacity:1;transform:rotate(-2deg) scale(1)}}
+.margin{border-left:1px solid var(--rule);background:var(--paper);padding:24px 24px 28px}
+.margin ol{margin:0;padding:0;list-style:none}
+.margin li{position:relative;padding:0 0 18px 34px;cursor:pointer;font-size:14px;line-height:1.5;color:var(--ink)}
+.margin li:last-child{padding-bottom:0}
+.margin .ltr{position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--tied);color:var(--tied);font:700 12px/21px var(--sans);text-align:center}
+.margin li.d .ltr{border-color:var(--derived);color:var(--derived)}.margin li.x .ltr{border-color:var(--flag);color:var(--flag)}
+.margin b{display:block;font-weight:600}
+.margin li span{color:var(--mute)}
+.margin li.on b,.margin li:hover b{text-decoration:underline;text-underline-offset:3px}
+.margin h3{margin:0 0 16px;font:600 15px var(--sans)}
+.leader{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.leader path{fill:none;stroke-width:1.6;stroke-linecap:round}
+.why{margin:0;max-width:60ch;font-size:17px;line-height:1.6}
+.wtitle{font:600 clamp(26px,3vw,34px)/1.2 var(--serif);margin:0 0 12px;border-bottom:3px solid var(--flag);display:inline-block;padding-bottom:2px}
+/* support under the sheet */
+.support{margin-top:26px}
+.support h2{margin:0 0 4px}
+.support .cap{color:var(--mute);margin:0 0 14px;font-size:14px}
+.sql{margin:0 0 18px;background:#EDF1F5;border-left:3px solid var(--ink);padding:14px 18px;font:13px/1.65 var(--code);white-space:pre-wrap;word-break:break-word}
+.kw{color:#2447B8;font-weight:600}.fn{color:#7A3E00}.lit{color:#0F7B55}
+.res{border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;margin:0 0 18px;background:var(--sheet);border:1px solid var(--rule)}
+.res th{text-align:left;font-weight:600;padding:8px 18px 8px 12px;border-bottom:2px solid var(--ink);background:var(--sheet)}
+.res td{padding:7px 18px 7px 12px;border-top:1px solid var(--hair)}
+.res td.hit{background:var(--tied-bg);box-shadow:inset 0 -2px 0 var(--tied);font-weight:600}
+.res td.hit.d{background:var(--derived-bg);box-shadow:inset 0 -2px 0 var(--derived)}
 .tw{overflow-x:auto}
-.note{font-size:12.5px;color:var(--mute);max-width:110ch;margin-top:22px}
-/* trust + report */
-.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-.tile{padding:20px}.tile b{display:block;font:700 34px var(--display);margin-bottom:4px}.tile p{margin:0;color:var(--mute);font-size:14px}
-.cmd{font:13px var(--mono);background:var(--night);color:var(--night-ink);padding:14px 16px;border-radius:8px;white-space:pre;overflow-x:auto}
-.btn{border:1px solid var(--ink);background:var(--card);padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:500;margin-top:10px}
-.rsec{padding:18px 22px;margin-bottom:12px}.rsec h3{margin:0 0 6px;font:600 17px var(--display)}
-.try{max-width:900px;margin-top:18px;border:1px solid var(--night-line);border-radius:12px;padding:16px 18px;background:#ffffff06}
-.try h3{margin:0 0 4px;font:600 16px var(--display)}.try p{margin:0 0 10px;color:var(--night-mute);font-size:13px}
-.try .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-.try select,.try input{background:var(--night2);border:1px solid var(--night-line);color:var(--night-ink);border-radius:8px;padding:8px 10px;font:14px var(--body);min-width:0}
-.try input.key{flex:1;min-width:220px;font-family:var(--mono)}
-.tier{margin-top:12px}.tier h4{margin:0 0 6px;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--night-mute);display:flex;gap:10px}
-.tier h4 .left{color:var(--amber)}.tier h4 .left.zero{color:var(--night-mute)}
-.tier button[data-t]{display:block;width:100%;text-align:left;background:none;border:1px solid var(--night-line);color:var(--night-ink);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13.5px;cursor:pointer}
-.tier button[data-t]:hover:not(:disabled){border-color:var(--ok-glow)}.tier button[data-t]:disabled{opacity:.4;cursor:not-allowed}
-.keynote{font-size:12px;color:var(--night-mute);margin-top:6px}
-@media (max-width:900px){.grid{grid-template-columns:1fr}.hero{padding:0 16px 26px}.wrap{padding:20px 16px 50px}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.pas{margin:0 0 16px;max-width:76ch;font:17px/1.65 var(--serif);white-space:pre-wrap}
+.pid{display:block;color:var(--mute);font-size:13px;margin-bottom:2px}
+mark{background:var(--derived-bg);box-shadow:inset 0 -2px 0 var(--derived);color:inherit;padding:0 1px}
+.words{color:var(--mute);font-size:14px;max-width:80ch;margin:6px 0 0}
+/* headings, tables, buttons shared by the other tabs */
+h2{font:600 24px/1.25 var(--serif);margin:46px 0 6px;letter-spacing:-.01em}
+.lede{color:var(--mute);margin:0 0 16px;max-width:72ch}
+.ledger{width:100%;border-collapse:collapse;font-size:15px}
+.ledger th{text-align:left;font-weight:600;padding:8px 12px 8px 0;border-bottom:2px solid var(--ink);font-size:14px}
+.ledger td{padding:11px 12px 11px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.ledger tr.qrow{cursor:pointer}.ledger tr.qrow:hover td{background:var(--sheet)}
+.o{font-weight:600;white-space:nowrap}.o::before{margin-right:6px}
+.o.ok{color:var(--tied)}.o.ok::before{content:"✓"}.o.w{color:var(--flag)}.o.w::before{content:"✗"}.o.n{color:var(--mute)}.o.n::before{content:"–"}
+.btn{background:var(--sheet);border:1px solid var(--ink);color:var(--ink);padding:9px 16px;border-radius:3px;cursor:pointer;font-weight:600;margin-top:10px}
+.btn:hover{background:var(--ink);color:#fff}
+.btn.main-btn{background:var(--ink);color:#fff}.btn.main-btn:hover{background:#1d2e47}
+.btn.text{border:0;background:none;padding:6px 0;text-decoration:underline;text-underline-offset:3px;margin:0}
+.btn.text:hover{background:none;color:var(--derived)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.fld,select.fld{background:var(--sheet);border:1px solid var(--rule);border-radius:3px;padding:8px 10px;min-width:0}
+.fld:focus-visible{outline:2px solid var(--derived);outline-offset:0;border-color:var(--derived)}
+.note{font-size:14px;color:var(--mute);max-width:100ch}
+.pane{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:22px 26px;margin-bottom:18px}
+.pane h3{font:600 19px var(--serif);margin:0 0 10px}
+.sec{margin-bottom:16px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;border-top:2px solid var(--ink)}
+.cols>div{padding:20px 24px 20px 0;border-bottom:1px solid var(--rule)}
+.cols b{display:block;font:600 38px/1.1 var(--serif);margin-bottom:6px;font-variant-numeric:lining-nums}
+.cols p{margin:0;color:var(--mute);font-size:15px}
+.cmd{font:13px/1.6 var(--code);background:#EDF1F5;border-left:3px solid var(--ink);padding:14px 18px;white-space:pre;overflow-x:auto}
+.flagtxt{color:var(--flag);font-weight:600}.okt{color:var(--tied);font-weight:600}
+/* bring-your-own-key and your-data panels */
+.byok{border-top:2px solid var(--ink);margin:34px 0 0;padding-top:18px;max-width:900px}
+.byok h3{margin:0 0 4px;font:600 22px var(--serif)}
+.byok p{margin:0 0 12px;color:var(--mute);font-size:15px;max-width:68ch}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+.key{flex:1;min-width:220px;font-family:var(--code);font-size:14px}
+.tier{margin-top:20px}
+.tier h4{margin:0 0 6px;font:600 15px var(--sans);display:flex;gap:14px;align-items:baseline}
+.tier h4 .left{font-weight:500;font-size:14px;color:var(--tied)}.tier h4 .left.zero{color:var(--mute)}
+.tier button[data-t]{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--rule);padding:10px 0;font:400 18px/1.4 var(--serif);cursor:pointer}
+.tier button[data-t]:hover:not(:disabled){background:var(--sheet)}
+.tier button[data-t]:disabled{color:#8A94A3;cursor:not-allowed}
+.room{margin-top:8px;font-size:14px;color:var(--mute);max-width:72ch}
+.room b{color:var(--ink)}
+@media (max-width:900px){
+  .page{padding:0 18px}.sheet-b{grid-template-columns:1fr}.margin{border-left:0;border-top:1px solid var(--rule)}.leader{display:none}
+  .proc{flex-direction:column;gap:6px}.proc li{padding:0 0 0 24px}.proc li::before,.proc li::after{top:4px}.proc li::before{left:6px;right:auto;width:2px;height:auto;bottom:-10px}.proc li:last-child::before{display:none}
+  .ask{flex-direction:column;align-items:stretch}.stamp{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.fresh .tick path{stroke-dashoffset:0}}
 </style>
 </head>
 <body>
-<section class="hero">
-  <div class="top">
-    <div class="logo"><span class="mark" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg></span>Verified Analyst</div>
-    <div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-data" aria-selected="false" hidden>Your data</button><button role="tab" id="t-ev" aria-selected="false">Trust</button></div>
-    <span class="mode" id="mode" title="Model replies are recorded; verification is recomputed">Replay mode</span>
-  </div>
-  <h1 class="h1">Every number, <em>checked</em> before you see it.</h1>
-  <p class="sub">Ask about sales data or company documents. Each figure in the answer is matched to a warehouse cell or a stored passage. If it cannot be backed, the answer is withheld.</p>
-  <form class="ask" id="form" autocomplete="off"><input id="q" aria-label="Question" placeholder="Ask a question about the data or the documents" list="qs"><datalist id="qs"></datalist><button class="go" type="submit">Ask</button></form>
-  <div class="sugg" id="sugg"></div>
-  <div class="hint" id="hint" aria-live="polite"></div>
-  <div class="try" id="try" hidden></div>
-  <div class="stats" id="stats"></div>
-</section>
-<div class="wrap" id="app"></div>
+<div class="page">
+  <header class="bar">
+    <p class="word">Verified Analyst</p>
+    <nav role="tablist" aria-label="Sections"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-data" aria-selected="false" hidden>Your data</button><button role="tab" id="t-ev" aria-selected="false">What is checked</button></nav>
+    <span class="mode" id="mode">Recorded model replies; checks run now</span>
+  </header>
+  <section class="lead" id="lead">
+    <h1 class="title" id="title">Every figure is tied to its source, or the answer is withheld.</h1>
+    <p class="sub" id="sub">Ask about the sales data or the company documents. Each number in an answer is matched to a cell of the query result or to a stored passage, and shown with the tick that proves it.</p>
+    <form class="ask" id="form" autocomplete="off"><input id="q" aria-label="Question" placeholder="Type a question, or open one from the list below"><button class="go" id="go">Ask</button></form>
+    <p class="hint" id="hint" aria-live="polite"></p>
+    <div id="try" hidden></div>
+  </section>
+  <main class="wrap" id="app"></main>
+</div>
 <script>
 const EMBED = /*DATA*/null;
-const S = {items:[], sel:null, tab:'ask', pick:null, can:false, mode:'static', busy:false};
+const S = {items:[], sel:0, tab:'ask', pick:null, can:false, mode:'static', busy:false, fresh:false, ledger:true};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $ = id => document.getElementById(id);
 const REASON = {
   ambiguous:'The question is too vague to answer from data. A real analyst would ask what you mean, and so does this system.',
-  forecast:'This asks for a prediction. The warehouse holds history only, so no figure about the future can be verified.',
-  unsupported_metric:'The planner could not express this with the metrics the semantic layer defines, so it stopped instead of inventing one.',
+  forecast:'This asks for a prediction. The data holds history only, so no figure about the future can be tied to a source.',
+  unsupported_metric:'The planner could not express this with the metrics that are defined, so it stopped instead of inventing one.',
   unverified:'The drafted answer contained figures that did not match the data.', plan_failed:'No valid query could be planned.',
   no_passage:'No retrievable passage held a figure.', budget:'The token budget for this question ran out.',
-  sensitivity:'The data is not cleared for a hosted model.',
-  no_recording:'This demo replays recorded model replies, and none was recorded for this question. The system did not abstain; there is simply no stored reply.'
+  sensitivity:'This data is not cleared for a hosted model.',
+  no_recording:'This demo replays recorded model replies, and none was recorded for this question. The system did not abstain; there is no stored reply.'
 };
 const vs = x => (x.verification && x.verification.verification && x.verification.verification.verdicts) || [];
 const num = s => parseFloat(String(s).replace(/[^\d.\-]/g,''));
-function label(x){ return x.outcome==='verified'?['verified','']:x.outcome==='not_recorded'?['no recording','n']:['withheld','w']; }
-function stages(x){
+const good = v => v.verdict && v.verdict.startsWith('VERIFIED');
+const tone = v => v.verdict==='VERIFIED' ? '' : good(v) ? 'd' : 'x';
+const letter = i => i < 26 ? String.fromCharCode(65+i) : String(i+1);
+const isNum = c => /^-?\d+(\.\d+)?$/.test(String(c));
+function outcome(x){ return x.outcome==='verified'?['Tied out','ok']:x.outcome==='not_recorded'?['No recorded reply','n']:['Withheld','w']; }
+
+/* ---------- locating a figure in the executed result ---------- */
+function locate(x, v){
+  const ev = x.evidence||{}; if(!ev.rows || !v.expected) return null; const t = num(v.expected);
+  for(let r=0;r<ev.rows.length;r++) for(let c=0;c<ev.columns.length;c++){
+    const cell = ev.rows[r][c];
+    if(isNum(cell) && Math.abs(num(cell)-t) <= Math.max(0.006, Math.abs(t)*1e-6)) return {r, c, cell, column:ev.columns[c], label: c>0 ? ev.rows[r][0] : null};
+  }
+  return null;
+}
+function noteOf(x, v){
+  const loc = locate(x, v), tn = tone(v);
+  if(tn==='x') return ['Not tied', v.detail || 'This figure did not match the data.'];
+  if(v.verdict==='VERIFIED_QUOTE') return ['Quoted from a stored passage', 'The wording appears in a passage the model was shown.'];
+  if(v.verdict==='VERIFIED_DERIVED') return ['Derived from tied figures', v.detail || 'Computed from figures that are themselves tied.'];
+  if(loc) return ['Tied to the query result', `${loc.column}${loc.label?' for '+loc.label:''} is ${loc.cell}. Shown as ${v.text}.`];
+  return ['Tied to its source', v.detail || 'It matches the stored source.'];
+}
+
+/* ---------- process line ---------- */
+function process(x){
   const routed = !!x.route, data = x.route==='data'||x.route==='both', docs = x.route==='documents'||x.route==='both';
-  const ok = x.outcome==='verified';
-  const st = [['Route', routed||x.outcome!=='not_recorded', false, !routed&&x.outcome==='abstain'],
-    ['Plan SQL', data, !data&&routed, false],['Retrieve', docs, !docs&&routed, false],
-    ['Compose', ok||x.outcome==='partially_verified', !routed, false],['Verify', ok, !routed, x.outcome==='abstain'&&routed]];
-  return st;
+  const ok = x.outcome==='verified', n = vs(x).length, failed = x.outcome==='abstain' && routed;
+  const st = [
+    ['Route', routed, false, !routed && x.outcome==='abstain', routed ? 'Sent to '+(x.route==='both'?'data and documents':x.route) : 'Stopped before routing'],
+    ['Query', data, !data && routed, false, data ? 'SQL planned'+(x.plan_failures?`, ${x.plan_failures} plan(s) rejected`:'') : 'Not needed'],
+    ['Retrieve', docs, !docs && routed, false, docs ? `${(x.passage_labels||[]).length} passage(s) shown` : 'Not needed'],
+    ['Compose', ok || x.outcome==='partially_verified', !routed, false, ok ? 'Figures written as placeholders' : ''],
+    ['Verify', ok, !routed, failed, ok ? `${n} of ${n} figures tied` : failed ? 'Withheld here' : '']];
+  return '<ol class="proc" aria-label="How this answer was produced">' + st.map(s => `<li class="${s[1]?'on':''} ${s[2]?'skip':''} ${s[3]?'fail':''}"><b>${s[0]}</b><span>${esc(s[4])}</span></li>`).join('') + '</ol>';
 }
-function pipe(x){
-  return '<div class="pipe" aria-label="Pipeline">' + stages(x).map((s,i)=>
-    (i?`<span class="bar ${s[1]?'on':''}"></span>`:'') + `<span class="st ${s[1]?'on':''} ${s[2]?'skip':''} ${s[3]?'fail':''}"><span class="dot">${s[1]?'✓':s[3]?'!':''}</span>${s[0]}</span>`).join('') + '</div>';
-}
-function ringSvg(n,t){
-  const r=26,c=2*Math.PI*r,f=t?n/t:0;
-  return `<svg width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="${n} of ${t} figures verified"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#E4DECF" stroke-width="7"/><circle cx="32" cy="32" r="${r}" fill="none" stroke="#1F7A4D" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(c*f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/><text x="32" y="37" text-anchor="middle" font-family="Fraunces,serif" font-weight="700" font-size="16" fill="#171612">${n}/${t}</text></svg>`;
-}
+
+/* ---------- support (SQL, result, passages) ---------- */
 function sqlHi(sql){
   let h = esc(sql);
-  h = h.replace(/\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|FILTER|AS|DESC|ASC|AND|OR|IN|DISTINCT|NULLIF)\b/g,'<span class="kw">$1</span>')
-       .replace(/\b(SUM|COUNT|COALESCE|AVG)\(/g,'<span class="fn">$1</span>(').replace(/&#39;|'([^']*)'/g,m=>m);
-  return h.replace(/'([^']*)'/g,'<span class="st-">\'$1\'</span>');
+  h = h.replace(/\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|LIMIT|FILTER|AS|DESC|ASC|AND|OR|IN|DISTINCT|NULLIF|NOT|NULL|IS|OVER|PARTITION BY)\b/g,'<span class="kw">$1</span>')
+       .replace(/\b(SUM|COUNT|COALESCE|AVG|MIN|MAX)\(/g,'<span class="fn">$1</span>(');
+  return h.replace(/'([^']*)'/g,'<span class="lit">\'$1\'</span>');
 }
 function hl(text, needles){
   let h = esc(text);
   needles.filter(Boolean).forEach(n=>{ const e=esc(n).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); h=h.replace(new RegExp('(?<![\\d.,])'+e+'(?![\\d])','g'), m=>`<mark>${m}</mark>`); });
   return h;
 }
-function evidence(x, sel){
-  const ev = x.evidence||{}, v = vs(x).slice().sort((a,b)=>a.span[0]-b.span[0])[sel];
-  let h = '<div class="ev">';
-  if(!ev.sql && !ev.passages) return h+'<div class="empty">No evidence: nothing was queried or retrieved for this question.</div></div>';
+function support(x, sel){
+  const ev = x.evidence||{}, sorted = vs(x).slice().sort((a,b)=>a.span[0]-b.span[0]), v = sorted[sel];
+  const acct = x.accounting||{};
+  let h = `<section class="support"><h2>Support${v?` for note ${letter(sel)}`:''}</h2><p class="cap">What was actually run, and what it returned. Nothing here was written by the model.</p>`;
+  if(!ev.sql && !ev.passages) h += '<p class="note">Nothing was queried or retrieved for this question.</p>';
   if(ev.sql){
-    h += `<div class="sec"><h4>SQL · read-only role · guarded</h4><pre>${sqlHi(ev.sql)}</pre></div>`;
-    if(ev.rows&&ev.rows.length){
-      const target = v && v.verdict!=='VERIFIED_QUOTE' ? (v.expected? num(v.expected):num(v.text)) : null;
-      h += `<div class="sec"><h4>Result</h4><div class="tbl"><table><tr>${ev.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>` +
-        ev.rows.map(r=>`<tr>${r.map(c=>{ const hit = target!==null && /^-?\d+(\.\d+)?$/.test(c) && Math.abs(num(c)-target) <= Math.max(0.006, Math.abs(target)*1e-6); return `<td class="${hit?'hit':''}">${esc(c)}</td>`;}).join('')}</tr>`).join('') + '</table></div></div>';
+    h += `<pre class="sql">${sqlHi(ev.sql)}</pre>`;
+    if(ev.rows && ev.rows.length){
+      const loc = v ? locate(x, v) : null;
+      h += `<div class="tw"><table class="res"><tr>${ev.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>` +
+        ev.rows.map((r,ri)=>`<tr>${r.map((c,ci)=>`<td class="${loc&&loc.r===ri&&loc.c===ci?'hit '+tone(v):''}">${esc(c)}</td>`).join('')}</tr>`).join('') + '</table></div>';
     }
   }
   if(ev.passages){
-    const needles = v && v.verdict==='VERIFIED_QUOTE' ? [v.text] : vs(x).filter(a=>a.verdict==='VERIFIED_QUOTE').map(a=>a.text);
-    h += '<div class="sec"><h4>Passages shown to the model</h4>' + Object.entries(ev.passages).map(([l,p])=>`<span class="pid">${l} · ${esc(p.id)}</span><p class="pas">${hl(p.text,needles)}</p>`).join('') + '</div>';
+    const needles = v && v.verdict==='VERIFIED_QUOTE' ? [v.text] : sorted.filter(a=>a.verdict==='VERIFIED_QUOTE').map(a=>a.text);
+    h += Object.entries(ev.passages).map(([l,p])=>`<span class="pid">${esc(l)}, ${esc(p.id)}</span><p class="pas">${hl(p.text,needles)}</p>`).join('');
   }
-  return h+'</div>';
+  if(x.restatement) h += `<p class="words"><b>The query, in words.</b> ${esc(x.restatement)}</p>`;
+  if(acct.tokens_used) h += `<p class="words"><b>Model use.</b> ${acct.calls_ok||'?'} call(s), ${Number(acct.tokens_used).toLocaleString()} tokens${acct.prompt_tokens?` (${Number(acct.prompt_tokens).toLocaleString()} prompt, ${Number(acct.completion_tokens||0).toLocaleString()} completion)`:''}.</p>`;
+  if(x.stored_replies_only) h += '<p class="words"><b>Stored model replies reused.</b> No model was called for this answer. The query, the result and every tie above were re-run against the data just now.</p>';
+  return h + '</section>';
 }
-function answer(x){
+
+/* ---------- the sheet ---------- */
+function sheet(x){
   const sorted = vs(x).slice().sort((a,b)=>a.span[0]-b.span[0]);
-  const [lab,cls] = label(x);
   if(x.outcome!=='verified' && x.outcome!=='partially_verified'){
-    return `<div class="card withheld"><p class="q">${esc(x.question)}</p><h3>${x.outcome==='not_recorded'?'No recorded reply':'Answer withheld'}</h3><p style="margin:0;max-width:60ch">${esc(REASON[x.reason]||x.reason||'')}</p>${x.abstain_detail&&x.abstain_detail.source?`<p class="note">Stopped at: ${esc(x.abstain_detail.source)}</p>`:''}</div>`;
+    const norec = x.outcome==='not_recorded';
+    return `<article class="sheet" id="sheet"><header class="sheet-h"><p class="qline">${esc(x.question)}</p><span class="stamp ${norec?'':'flag'}">${norec?'No recorded reply':'Withheld'}</span></header>
+      <div class="sheet-b" style="grid-template-columns:1fr"><div class="main"><h3 class="wtitle">${norec?'Nothing to show':'No answer, on purpose'}</h3><p class="why">${esc((x.error&&x.error)||REASON[x.reason]||x.abstain_detail||'The answer could not be tied to the data, so it was withheld.')}</p></div></div></article>`;
   }
-  let t=x.rendered,out='',pos=0;
-  sorted.forEach((v,i)=>{ out+=esc(t.slice(pos,v.span[0]))+`<span class="num ${v.verdict==='VERIFIED_QUOTE'?'q':''} ${i===S.sel?'sel':''}" data-i="${i}" tabindex="0" role="button">${esc(t.slice(v.span[0],v.span[1]))}</span>`; pos=v.span[1]; });
-  out+=esc(t.slice(pos));
-  const how = {cell_bound:'matches a cell of the executed result',in_passage:'found in a stored passage'};
-  return `<div class="card ans"><p class="q">${esc(x.question)}</p><p class="atext">${out}</p>
-  <div class="ring">${ringSvg(sorted.length,sorted.length)}<div><b>${sorted.length} of ${sorted.length} figures verified</b><span>Click a figure to see where it comes from.</span></div></div>
-  <div class="vlist">${sorted.map((v,i)=>`<button class="v ${i===S.sel?'sel':''}" data-i="${i}"><span class="chip ${v.verdict==='VERIFIED_QUOTE'?'q':''}">${v.verdict.replace('VERIFIED_','').replace('VERIFIED','number')}</span><span class="t">${esc(v.text)}</span><span class="why">${how[v.reason]||esc(v.reason)}${v.expected?` · warehouse value ${esc(v.expected)}`:''}${v.detail&&v.verdict==='VERIFIED_QUOTE'?' · '+esc(v.detail):''}</span></button>`).join('')}</div>
-  ${x.restatement?`<p class="note" style="margin-top:16px"><b>Query in words:</b> ${esc(x.restatement)}</p>`:''}
-  ${x.stored_replies_only?`<p class="note"><b>Stored model replies reused.</b> No model was called for this answer; the SQL, the result and every verdict above were re-run against the data just now.</p>`:''}</div>`;
+  const t = x.rendered; let out = '', pos = 0;
+  sorted.forEach((v,i)=>{
+    out += esc(t.slice(pos, v.span[0])) + `<span class="fig ${tone(v)} ${i===S.sel?'on':''}" data-i="${i}" tabindex="0" role="button" aria-label="Figure ${letter(i)}: ${esc(v.text)}" style="--n:${i}">${esc(t.slice(v.span[0], v.span[1]))}${tone(v)==='x'?'':'<svg class="tick" viewBox="0 0 14 12" aria-hidden="true"><path d="M1.5 6.5l3.8 3.8L12.5 1.8"/></svg>'}<sup>${letter(i)}</sup></span>`;
+    pos = v.span[1];
+  });
+  out += esc(t.slice(pos));
+  const nGood = sorted.filter(good).length, all = nGood === sorted.length;
+  return `<article class="sheet ${S.fresh?'fresh':''}" id="sheet" style="--total:${sorted.length}"><header class="sheet-h"><p class="qline">${esc(x.question)}</p><span class="stamp ${all?'':'flag'}">${all?`Tied out: ${nGood} of ${sorted.length}`:`${nGood} of ${sorted.length} tied`}</span></header>
+    <div class="sheet-b"><div class="main"><p class="atext">${out}</p></div>
+    <aside class="margin" aria-label="Tie-out notes"><h3>Tie-out notes</h3><ol>${sorted.map((v,i)=>{ const [a,b]=noteOf(x,v); return `<li class="${tone(v)} ${i===S.sel?'on':''}" data-i="${i}" tabindex="0"><span class="ltr">${letter(i)}</span><b>${esc(a)}</b><span>${esc(b)}</span></li>`; }).join('')}</ol></aside></div>
+    <svg class="leader" id="leader" aria-hidden="true"></svg></article>`;
 }
+function leader(i){
+  const sh = $('sheet'), svg = $('leader'); if(!sh || !svg) return; svg.innerHTML = '';
+  if(i==null || innerWidth<=900) return;
+  const f = sh.querySelector(`.fig[data-i="${i}"]`), n = sh.querySelector(`.margin li[data-i="${i}"]`); if(!f || !n) return;
+  const s = sh.getBoundingClientRect(), a = f.getBoundingClientRect(), b = n.getBoundingClientRect();
+  const x1 = a.right - s.left + 2, y1 = a.bottom - s.top + 6, x2 = b.left - s.left - 2, y2 = b.top - s.top + 12, mx = Math.max(x1 + 24, x2 - 46);
+  const cls = f.classList.contains('x') ? '--flag' : f.classList.contains('d') ? '--derived' : '--tied';
+  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d', `M${x1} ${y1} L${mx} ${y1} C${mx+30} ${y1} ${x2-30} ${y2} ${x2} ${y2}`); p.style.stroke = `var(${cls})`;
+  svg.appendChild(p); const len = p.getTotalLength(); p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
+  requestAnimationFrame(()=>{ p.style.transition = 'stroke-dashoffset .28s ease-out'; p.style.strokeDashoffset = 0; });
+}
+
+/* ---------- ask view ---------- */
 function ledger(){
-  return `<h2>All ${S.items.length} recorded questions</h2><p class="lede">Open any row. Withheld and unrecorded questions are shown, not hidden.</p><div class="tw"><table class="ledger"><tr><th>Question</th><th>Route</th><th>Outcome</th><th>Figures</th></tr>` +
-  S.items.map((x,i)=>{const [l,c]=label(x);const v=vs(x);return `<tr class="row" data-p="${i}" tabindex="0"><td>${esc(x.question)}</td><td>${esc(x.route||'-')}</td><td><span class="chip ${c}">${l}</span></td><td><span class="mini">${v.map(a=>`<i class="${a.verdict==='VERIFIED_QUOTE'?'q':''}"></i>`).join('')}</span></td></tr>`}).join('') + '</table></div>';
+  return `<h2>${S.items.length===1?'The recorded question':`The ${S.items.length} recorded questions`}</h2><p class="lede">Open any row. Withheld and unrecorded questions are listed too.</p><div class="tw"><table class="ledger"><tr><th>Question</th><th>Sent to</th><th>Result</th><th>Figures tied</th></tr>` +
+  S.items.map((x,i)=>{ const [l,c]=outcome(x); const v=vs(x).filter(good).length; return `<tr class="qrow" data-p="${i}" tabindex="0"><td>${esc(x.question)}</td><td>${esc(x.route||'none')}</td><td><span class="o ${c}">${l}</span></td><td>${x.outcome==='verified'?v:'–'}</td></tr>`; }).join('') + '</table></div>';
 }
 function askView(){
-  const x = S.items[S.pick];
-  let h = '';
-  if(x){ h += pipe(x) + `<div class="grid">${answer(x)}<div>${evidence(x,S.sel)}</div></div>`; }
-  h += ledger();
-  $('app').innerHTML = h;
-  $('app').querySelectorAll('[data-i]').forEach(n=>{ n.onclick=()=>{S.sel=+n.dataset.i;askView();}; n.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();S.sel=+n.dataset.i;askView();}}; });
-  $('app').querySelectorAll('[data-p]').forEach(n=>{ const go=()=>{choose(+n.dataset.p);window.scrollTo({top:0,behavior:'smooth'});}; n.onclick=go; n.onkeydown=e=>{if(e.key==='Enter')go();}; });
+  const x = S.items[S.pick]; let h = '';
+  if(x){ h += process(x) + sheet(x) + support(x, S.sel); }
+  else if(S.mode==='workspace') h += '<p class="lede">No question asked yet. Open Your data, load a table, and ask about it there.</p>';
+  if(S.ledger && S.items.length) h += ledger();
+  $('app').innerHTML = h; S.fresh = false;
+  $('app').querySelectorAll('.fig,.margin li').forEach(n=>{
+    const i = +n.dataset.i, pick = ()=>{ S.sel = i; askView(); leader(i); };
+    n.onmouseenter = n.onfocus = ()=>leader(i); n.onmouseleave = n.onblur = ()=>leader(S.sel);
+    n.onclick = pick; n.onkeydown = e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } };
+  });
+  $('app').querySelectorAll('[data-p]').forEach(n=>{ const go=()=>{ choose(+n.dataset.p); window.scrollTo({top:0,behavior:'smooth'}); }; n.onclick=go; n.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
+  setTimeout(()=>leader(S.sel), S.fresh?0:60);
 }
-function choose(i){ S.pick=i; S.sel=0; $('q').value=S.items[i].question; $('hint').textContent=''; setTab('ask'); }
+function choose(i, scroll){ S.pick=i; S.sel=0; S.fresh=true; $('q').value=S.items[i].question; $('hint').textContent=''; setTab('ask'); if(scroll){ const sh=$('sheet'); if(sh) sh.scrollIntoView({behavior:'smooth',block:'start'}); } }
 function reportView(){
   const ok=S.items.filter(x=>x.outcome==='verified'), left=S.items.filter(x=>x.outcome!=='verified');
   const cmd='va report draft --title "Weekly check"\nva report approve --who "<your name>" --digest <digest printed by draft>';
-  $('app').innerHTML = `<h2 style="margin-top:0">Report draft: Weekly check</h2><p class="lede"><span class="chip w">pending approval</span> &nbsp;${ok.length} verified answers in, ${left.length} left out and listed below.</p>` +
-   ok.map(x=>`<div class="card rsec"><h3>${esc(x.question)}</h3><p style="margin:0 0 6px">${esc(x.rendered)}</p><span class="note">${vs(x).length} figure(s) verified</span></div>`).join('') +
-   `<h2>Withheld, not in the report</h2><ul>${left.map(x=>`<li>${esc(x.question)} <span class="note">(${esc(x.reason||'not verified')})</span></li>`).join('')}</ul>
-   <h2>Approve</h2><p class="lede" style="max-width:70ch">Approval is a named step. It quotes the digest of the draft you read, so an edited draft cannot be approved by mistake. Only then is a Markdown file written. Nothing is emailed or posted.</p><div class="cmd">${esc(cmd)}</div><button class="btn" id="copy">Copy commands</button> <span class="note" id="copied"></span>`;
+  $('app').innerHTML = `<h2 style="margin-top:0">Report draft: Weekly check</h2><p class="lede"><span class="flagtxt">Pending approval.</span> ${ok.length} tied-out answers are in, ${left.length} are left out. Nothing here is published until a named person approves it.</p>` +
+   ok.map(x=>`<div class="pane"><h3>${esc(x.question)}</h3><p style="margin:0 0 6px;font:18px/1.55 var(--serif)">${esc(x.rendered)}</p><span class="note">${vs(x).length} figure(s) tied</span></div>`).join('') +
+   `<h2>Left out of the report</h2><ul class="note" style="font-size:15px">${left.map(x=>`<li>${esc(x.question)} (${esc(REASON[x.reason]?x.reason:(x.reason||'not verified'))})</li>`).join('')}</ul>
+   <h2>Approve</h2><p class="lede">Approval is a named step. It quotes the digest of the draft you read, so an edited draft cannot be approved by mistake. Only then is a Markdown report written. Run these on your machine:</p><div class="cmd" id="cmd">${esc(cmd)}</div><button class="btn" id="copy">Copy the commands</button> <span class="note" id="copied"></span>`;
   $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(cmd);$('copied').textContent='Copied.';}catch(e){$('copied').textContent='Copy failed; select the text above.';}};
 }
 function trustView(){
   const ok=S.items.filter(x=>x.outcome==='verified'), n=ok.reduce((a,x)=>a+vs(x).length,0), k={};
   ok.forEach(x=>vs(x).forEach(v=>k[v.verdict]=(k[v.verdict]||0)+1));
   $('app').innerHTML = `<h2 style="margin-top:0">What is checked, and what is not</h2><p class="lede">These checks run on every push to GitHub.</p><div class="cols">
-   <div class="card tile"><b>30 → 0</b><p>Adversarial answers (wrong row, wrong period, wrong dimension value, wrong metric with the same unit) accepted as verified. Before the sentence-context check, all 30 were accepted.</p></div>
-   <div class="card tile"><b>${n}</b><p>Figures in the ${ok.length} verified recorded answers, each traced to a cell of its stored result or to its stored passage (${Object.entries(k).map(([a,b])=>b+' '+a).join(', ')}). A figure with no trace fails the build.</p></div>
-   <div class="card tile"><b>Placeholders</b><p>The model writes {c1}-style placeholders. A number it types itself is rejected; displayed digits come from the warehouse or a stored passage.</p></div></div>
-   <h2>Not claimed</h2><ul><li>No accuracy figure. These are ${S.items.length} development questions, and ${S.items.filter(x=>x.outcome==='not_recorded').length} have no recorded model reply.</li><li>Verification proves a figure matches its source. It does not prove the source answers the question asked.</li><li>Injection obedience was measured on 5 questions with one model. That is not a safety claim.</li></ul>`;
+   <div><b>30 of 30</b><p>Adversarial answers (wrong row, wrong period, wrong dimension value, a wrong metric with the same unit) were refused. None was accepted as verified.</p></div>
+   <div><b>${n}</b><p>Figures in the ${ok.length} verified recorded answers, each tied to a cell of its stored result or to its stored passage (${Object.entries(k).map(([a,b])=>b+' '+a.replace('VERIFIED_','').toLowerCase()).join(', ')||'none'}).</p></div>
+   <div><b>Placeholders</b><p>The model writes {c1}-style placeholders. A number it types itself is rejected; the digits you see come from the data or from a stored passage.</p></div></div>
+   <h2>Not claimed</h2><ul class="note" style="font-size:15px;line-height:1.7"><li>No accuracy figure. There are ${S.items.length} development questions, written by the author, and ${S.items.filter(x=>x.outcome==='not_recorded').length} have no recorded model reply.</li><li>A tie proves a figure matches its source. It does not prove the metric was the right one to ask for.</li><li>Document answers prove the number appears in a passage, not that the passage was read correctly.</li><li>There is no sign-in and no multi-user separation. It is a single-user tool.</li></ul>`;
 }
 
-const T = {cfg:null, key:'', provider:'groq', model:''};
+/* ---------- a provider's reported headroom (nothing is stored) ---------- */
+function room(d){
+  const h = d.rate_headers||{}, g = k => { const e = Object.entries(h).find(([n])=>n.toLowerCase()===k); return e ? e[1] : null; };
+  const t = g('x-ratelimit-remaining-tokens'), r = g('x-ratelimit-remaining-requests');
+  return {tokens: t!==null && !isNaN(+t) ? +t : null, requests: r!==null && !isNaN(+r) ? +r : null, reset: g('x-ratelimit-reset-tokens')};
+}
+function roomLine(rm, est, estNote){
+  if(rm.tokens===null) return 'This provider does not report remaining tokens, so no limit is shown. That is not the same as unlimited.';
+  const q = Math.floor(rm.tokens/est);
+  return `<b>${rm.tokens.toLocaleString()} tokens</b> left in this window: about <b>${q} question${q===1?'':'s'}</b> at roughly ${est.toLocaleString()} tokens each${estNote?' ('+estNote+')':''}.${rm.reset?` Refills in ${esc(rm.reset)}.`:''} A daily cap is not in these headers, so a daily limit can still stop a question.`;
+}
+async function probeKey(provider, key){
+  const r = await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':key},body:JSON.stringify({provider})});
+  return await r.json();
+}
+const FIRST_ESTIMATE = 5400;
+
+/* ---------- public tryout (bring your own key, fixed menu) ---------- */
+const T = {cfg:null, key:'', provider:'groq', model:'', room:''};
 function tryRender(){
   const c=T.cfg, rem=c.remaining, P=c.providers[T.provider];
   const tier=(name,title)=>`<div class="tier"><h4>${title}<span class="left ${rem[name]?'':'zero'}">${rem[name]} of ${c.per_visitor[name]} left</span></h4>`+
     c.questions[name].map((q,i)=>`<button type="button" data-t="${name}" data-i="${i}" ${rem[name]?'':'disabled'}>${esc(q)}</button>`).join('')+'</div>';
-  $('try').innerHTML=`<h3>Try it with your own key</h3>
-   <p>${c.questions.easy.length*3+c.own_slots} questions in total: 3 easy, 3 medium, 3 hard, and ${c.own_slots} of your own. You may ask ${c.per_visitor.easy} from each group, which keeps a free key inside its limits. Your key is sent with each question, used once and never stored on the server or in this browser. A menu question that was answered and fully verified before is served from its stored model reply (no key needed); the checks are re-run against the data every time. Your own questions are never stored.</p>
-   <div class="row"><select id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
-   <input class="key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
-   ${P.model?'':`<input id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn" id="lm" style="margin:0;background:none;color:inherit;border-color:var(--night-line)">List models</button>`}</div>
-   <div class="keynote">${esc(P.key_hint||'')} ${esc(P.note||'')}</div><div class="row"><button type="button" id="ck" style="background:none;border:1px solid var(--night-line);color:inherit;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px">Check my key (uses no tokens)</button></div><div class="keynote" id="mlist"></div>
-   ${tier('easy','Easy')}${tier('medium','Medium')}${tier('hard','Hard (data and documents together; may be withheld)')}
-   <div class="tier"><h4>Your own question<span class="left ${rem.own?'':'zero'}">${rem.own} of ${c.per_visitor.own} left</span></h4><div class="row"><input id="own" style="flex:1" maxlength="${c.own_max_chars}" placeholder="Ask something about the sales data or the documents" ${rem.own?'':'disabled'}><button type="button" class="go" id="ownbtn" style="padding:8px 16px" ${rem.own?'':'disabled'}>Ask</button></div></div>`;
-  $('prov').onchange=e=>{T.provider=e.target.value;T.model='';tryRender();};
+  $('try').innerHTML=`<div class="byok"><h3>Try it with your own key</h3>
+   <p>${c.questions.easy.length*3+c.own_slots} questions in total: 3 easy, 3 medium, 3 hard, and ${c.own_slots} of your own. You may ask ${c.per_visitor.easy} from each group, which keeps a free key inside its limits. Your key travels with each question, is used once, and is never stored on the server or in this browser. A menu question that was answered and fully verified before is served from its stored model reply (no key needed); the checks re-run against the data every time. Your own questions are never stored.</p>
+   <div class="row"><select class="fld" id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
+   <input class="fld key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
+   ${P.model?'':`<input class="fld" id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn text" id="lm">List models</button>`}
+   <button type="button" class="btn text" id="ck">Check my key (uses no tokens)</button></div>
+   <p class="note" style="margin:0">${esc(P.key_hint||'')} ${esc(P.note||'')}</p><p class="room" id="mlist">${T.room}</p>
+   ${tier('easy','Easy')}${tier('medium','Medium')}${tier('hard','Hard: data and documents together; may be withheld')}
+   <div class="tier"><h4>Your own question<span class="left ${rem.own?'':'zero'}">${rem.own} of ${c.per_visitor.own} left</span></h4><div class="row"><input class="fld" id="own" style="flex:1;font:18px var(--serif)" maxlength="${c.own_max_chars}" placeholder="Ask something about the sales data or the documents" ${rem.own?'':'disabled'}><button type="button" class="btn main-btn" id="ownbtn" style="margin:0" ${rem.own?'':'disabled'}>Ask</button></div></div></div>`;
+  $('prov').onchange=e=>{T.provider=e.target.value;T.model='';T.room='';tryRender();};
   $('key').oninput=e=>{T.key=e.target.value;}; if($('model')) $('model').oninput=e=>{T.model=e.target.value;};
   if($('lm')) $('lm').onclick=listModels; $('ck').onclick=checkKey;
   $('try').querySelectorAll('.tier button[data-t]').forEach(b=>b.onclick=()=>tryAsk(b.dataset.t,c.questions[b.dataset.t][+b.dataset.i]));
   $('ownbtn').onclick=()=>{const v=$('own').value.trim(); if(v) tryAsk('own',v);};
   $('own').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('ownbtn').click();}};
 }
-function headroom(d){
-  const h=d.rate_headers||{}, g=k=>Object.entries(h).find(([n])=>n.toLowerCase()===k);
-  const tok=g('x-ratelimit-remaining-tokens'), req=g('x-ratelimit-remaining-requests'), rt=g('x-ratelimit-reset-tokens');
-  if(!tok && !req) return 'This provider did not report remaining quota in its reply, so none is shown. That is not the same as unlimited.';
-  return 'Your key, as the provider reports it right now: '+(tok?tok[1]+' tokens left in the current window':'')+(tok&&req?'; ':'')+(req?req[1]+' requests left':'')+(rt?' (tokens refill in '+rt[1]+')':'')+'. A daily cap is not shown in these headers, so a daily limit can still stop a question. Nothing about your key is stored.';
-}
 async function checkKey(){
-  if(!T.key){ $('mlist').textContent=''; return; }
-  try{ const r=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({provider:T.provider})});
-    const d=await r.json(); $('mlist').textContent = d.error&&!d.rate_headers? 'Key check failed: '+d.error : headroom(d); }
-  catch(e){ $('mlist').textContent='Could not reach the server.'; }
+  if(!T.key){ T.room=''; if($('mlist')) $('mlist').textContent=''; return; }
+  try{ const d=await probeKey(T.provider,T.key); T.room = d.error&&!d.rate_headers ? 'Key check failed: '+esc(d.error) : roomLine(room(d), FIRST_ESTIMATE, 'measured on one question with this provider'); }
+  catch(e){ T.room='Could not reach the server.'; }
+  if($('mlist')) $('mlist').innerHTML=T.room;
 }
 async function listModels(){
   $('mlist').textContent='Asking the provider for its models…';
-  try{ const r=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({provider:T.provider})});
-    const d=await r.json(); const ids=(d.models||d.model_ids||[]).map(m=>m.id||m).slice(0,40);
-    $('mlist').textContent = ids.length? 'Models: '+ids.join(', ') : (d.error||d.status||'No models returned; check the key.'); }
+  try{ const d=await probeKey(T.provider,T.key); const ids=(d.models||[]).map(m=>m.id||m).slice(0,40);
+    $('mlist').textContent = ids.length ? 'Models: '+ids.join(', ') : (d.error||'No models returned; check the key.'); }
   catch(e){ $('mlist').textContent='Could not reach the server.'; }
 }
 async function tryAsk(tier,question){
   if(S.busy) return; if(!T.key && tier==='own'){ $('hint').textContent='Paste your own API key first. It is used for this question only.'; return; }
   const model=($('model')&&$('model').value.trim())||''; if(T.key && !T.cfg.providers[T.provider].model && !model){ $('hint').textContent='Choose a model id for this provider (List models).'; return; }
-  S.busy=true; $('hint').textContent='Running the pipeline with your key: route, plan, query, compose, verify…';
+  S.busy=true; $('hint').textContent='Running the pipeline: route, plan, query, compose, verify…';
   try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({question,tier,provider:T.provider,model})});
     const d=await r.json(); if(d.remaining) T.cfg.remaining=d.remaining;
     if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; }
     else if(d.reason==='provider_error'){ $('hint').textContent=T.key?'The provider did not answer (wrong key, a rate limit, or a bad model id). This did not use up your question.':'No stored reply exists for this question yet, so it needs your own key. This did not use up your question.'; }
-    else { $('hint').textContent=''; S.items.unshift(d); choose(0); refreshStats(); } }
+    else { $('hint').textContent=''; S.items.unshift(d); choose(0, true); } }
   catch(e){ $('hint').textContent='Could not reach the server.'; }
   S.busy=false; tryRender(); checkKey();
 }
 async function tryInit(){
   try{ T.cfg=await (await fetch('/api/tryout')).json(); }catch(e){ return; }
-  $('sugg').hidden=true; $('form').hidden=true; $('try').hidden=false; tryRender();
+  $('form').hidden=true; $('try').hidden=false; tryRender();
 }
 
-const W = {stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false};
+/* ---------- your data (local only) ---------- */
+const W = {stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false, est:null, room:''};
 const AGG = ['sum','count','count_distinct','avg','min','max'];
 async function wsPost(path, body, headers){
   const r = await fetch(path,{method:'POST',headers:headers||{'Content-Type':'application/json'},body:body});
@@ -325,49 +426,52 @@ function manifestFromForm(){
 function dataView(){
   let h='<h2 style="margin-top:0">Your data</h2>';
   if(!W.stage){
-    h+=`<p class="lede" style="max-width:70ch">Upload a CSV, TSV or Excel file (up to 25 MB). It is read on this computer only. You will see what the file looks like, say what it means, and define each number in a closed set of options. The system will refuse any definition that does not reproduce a figure you give it.</p>
-    <div class="card" style="padding:22px"><input type="file" id="file" accept=".csv,.tsv,.xlsx"> <span class="note" id="upmsg">${esc(W.msg)}</span></div>`;
-    h+=`<h2>Loaded datasets</h2>`+(W.datasets.length?W.datasets.map(d=>`<div class="card rsec"><h3>${esc(d.name)} <span class="chip ${d.visibility==='public'?'':'w'}">${esc(d.visibility)}</span></h3><p style="margin:0 0 6px">${esc(d.description)}</p><span class="note">Approved metrics: ${esc(d.metrics.join(', ')||'none')}</span><br><button class="btn" data-ask="${esc(d.name)}">Ask about this data</button></div>`).join(''):'<p class="note">None yet.</p>');
+    h+=`<p class="lede">Upload a CSV, TSV or Excel file (up to 25 MB). It is read on this computer only. You will see what the file looks like, say what it means, and define each number from a closed set of options. Any definition that does not reproduce a figure you give it is refused.</p>
+    <div class="pane"><input type="file" id="file" accept=".csv,.tsv,.xlsx"> <span class="note" id="upmsg">${esc(W.msg)}</span></div>`;
+    h+=`<h2>Loaded datasets</h2>`+(W.datasets.length?W.datasets.map(d=>`<div class="pane"><h3>${esc(d.name)} <span class="${d.visibility==='public'?'okt':'flagtxt'}" style="font:600 14px var(--sans)">${esc(d.visibility)}</span></h3><p style="margin:0 0 6px">${esc(d.description)}</p><span class="note">Approved numbers: ${esc(d.metrics.join(', ')||'none')}</span><br><button class="btn" data-ask="${esc(d.name)}">Ask about this data</button></div>`).join(''):'<p class="note">None yet.</p>');
     if(W.ds) h+=askPanel();
   } else {
     const p=W.stage.profile;
     h+=`<p class="lede">${esc(p.source_file)}: ${p.rows.toLocaleString()} rows, ${p.columns.length} columns, ${p.duplicate_rows} exact duplicate rows.${(p.issues||[]).map(i=>' '+esc(i)).join('')}</p>`;
-    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 8px;font:600 17px var(--display)">1. What is this data?</h3>
-      <label class="note">Name (lower-case letters, digits, _)<br><input id="m-name" value="${esc(W.meta.name)}" style="width:260px"></label><br>
-      <label class="note">What is it, and whose?<br><input id="m-desc" value="${esc(W.meta.description)}" style="width:100%"></label><br>
-      <label class="note">What does one row stand for?<br><input id="m-grain" value="${esc(W.meta.grain)}" style="width:100%"></label><br>
-      <label class="note">Currency code (blank if none) <input id="m-cur" value="${esc(W.meta.currency)}" size="5"></label>
-      <label class="note" style="margin-left:18px">Who may see this data
-        <select id="m-vis"><option value="internal" ${W.meta.visibility==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.meta.visibility==='public'?'selected':''}>Public: query results may go to the model provider whose key you use</option></select></label></div>`;
-    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 8px;font:600 17px var(--display)">2. Columns (the role is a guess: you decide)</h3><div class="tw"><table class="ledger"><tr><th>Column</th><th>Type</th><th>Empty</th><th>Distinct</th><th>Examples</th><th>Role</th><th>Label</th></tr>`+
+    h+=`<div class="pane"><h3>1. What is this data?</h3>
+      <div class="sec"><label class="note">Name (lower-case letters, digits, _)<br><input class="fld" id="m-name" value="${esc(W.meta.name)}" style="width:260px"></label></div>
+      <div class="sec"><label class="note">What is it, and whose?<br><input class="fld" id="m-desc" value="${esc(W.meta.description)}" style="width:100%"></label></div>
+      <div class="sec"><label class="note">What does one row stand for?<br><input class="fld" id="m-grain" value="${esc(W.meta.grain)}" style="width:100%"></label></div>
+      <div class="row"><label class="note">Currency code (blank if none) <input class="fld" id="m-cur" value="${esc(W.meta.currency)}" size="5"></label>
+      <label class="note">Who may see this data
+        <select class="fld" id="m-vis"><option value="internal" ${W.meta.visibility==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.meta.visibility==='public'?'selected':''}>Public: query results may go to the provider whose key you use</option></select></label></div></div>`;
+    h+=`<div class="pane"><h3>2. Columns</h3><p class="note" style="margin-top:0">The role is a guess from the values. You decide.</p><div class="tw"><table class="ledger"><tr><th>Column</th><th>Type</th><th>Empty</th><th>Distinct</th><th>Examples</th><th>Role</th><th>Label</th></tr>`+
       p.columns.map(c=>{ const w=W.cols[c.name]; const flags=[...(c.hints||[]),...(c.issues||[])].map(esc).join('; ');
         return `<tr><td><b>${esc(c.name)}</b><br><span class="note">${flags}</span></td><td>${esc(c.type)}</td><td>${(c.null_rate*100).toFixed(1)}%</td><td>${c.distinct}</td><td class="note">${(c.samples||[]).slice(0,3).map(esc).join(', ')}</td>
-        <td><select data-role="${esc(c.name)}">${['date','dimension','identifier','measure','ignore'].map(r=>`<option ${w.role===r?'selected':''}>${r}</option>`).join('')}</select>${w.role==='dimension'?`<br><label class="note"><input type="checkbox" data-enum="${esc(c.name)}" ${w.enumerable?'checked':''}> small closed set</label>`:''}${w.role==='date'&&(c.issues||[]).some(i=>/day|month|order|ambig/i.test(i))?`<br><select data-dord="${esc(c.name)}"><option value="">order?</option><option value="dmy" ${w.date_order==='dmy'?'selected':''}>day first</option><option value="mdy" ${w.date_order==='mdy'?'selected':''}>month first</option></select>`:''}${w.sensitivity==='personal'?'<br><span class="chip w">personal: not loaded</span>':''}</td>
-        <td><input data-label="${esc(c.name)}" value="${esc(w.label||'')}" size="16"></td></tr>`; }).join('')+`</table></div></div>`;
-    const meas=Object.entries(W.cols).filter(([n,c])=>c.role==='measure'||c.role==='dimension'&&0).map(([n])=>n), allc=Object.entries(W.cols).filter(([n,c])=>c.role!=='ignore').map(([n])=>n);
-    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 4px;font:600 17px var(--display)">3. Numbers you want answered</h3><p class="note" style="margin:0 0 8px">Each is one of: count, sum, average, minimum, maximum or distinct count, with at most one filter. Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
-      W.metrics.map((m,i)=>`<div class="rsec card" style="padding:12px"><div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
-        <select data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option ${m.aggregate===a?'selected':''}>${a}</option>`).join('')}</select>
-        ${m.aggregate==='count'?'<span class="note">rows</span>':`<select data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
-        <span class="note">where</span><select data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">
-        <select data-m="${i}" data-f="unit"><option value="count" ${m.unit==='count'?'selected':''}>a count</option><option value="currency" ${m.unit==='currency'?'selected':''}>money</option><option value="ratio" ${m.unit==='ratio'?'selected':''}>a plain number</option></select>
-        <input data-m="${i}" data-f="decimals" type="number" min="0" max="8" value="${esc(m.decimals)}" style="width:60px" title="decimals">
-      </div><div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px"><input data-m="${i}" data-f="description" placeholder="what it means" value="${esc(m.description)}" style="flex:1;min-width:200px">
-        <input data-m="${i}" data-f="known" placeholder="a figure you know" value="${esc(m.known)}" size="16"><label class="note"><input type="checkbox" data-m="${i}" data-f="approve" ${m.approve?'checked':''}> approve</label><button class="btn" style="margin:0" data-del="${i}">remove</button></div></div>`).join('')+
+        <td><select class="fld" data-role="${esc(c.name)}">${['date','dimension','identifier','measure','ignore'].map(r=>`<option ${w.role===r?'selected':''}>${r}</option>`).join('')}</select>${w.role==='dimension'?`<br><label class="note"><input type="checkbox" data-enum="${esc(c.name)}" ${w.enumerable?'checked':''}> small closed set</label>`:''}${w.role==='date'&&(c.issues||[]).some(i=>/day|month|order|ambig/i.test(i))?`<br><select class="fld" data-dord="${esc(c.name)}"><option value="">order?</option><option value="dmy" ${w.date_order==='dmy'?'selected':''}>day first</option><option value="mdy" ${w.date_order==='mdy'?'selected':''}>month first</option></select>`:''}${w.sensitivity==='personal'?'<br><span class="flagtxt">personal: not loaded</span>':''}</td>
+        <td><input class="fld" data-label="${esc(c.name)}" value="${esc(w.label||'')}" size="16"></td></tr>`; }).join('')+`</table></div></div>`;
+    const allc=Object.entries(W.cols).filter(([n,c])=>c.role!=='ignore').map(([n])=>n);
+    h+=`<div class="pane"><h3>3. Numbers you want answered</h3><p class="note" style="margin-top:0">Each is a count, sum, average, minimum, maximum or distinct count, with at most one filter. Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
+      W.metrics.map((m,i)=>`<div class="sec" style="border-top:1px solid var(--rule);padding-top:12px"><div class="row">
+        <input class="fld" data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
+        <select class="fld" data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option ${m.aggregate===a?'selected':''}>${a}</option>`).join('')}</select>
+        ${m.aggregate==='count'?'<span class="note">rows</span>':`<select class="fld" data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
+        <span class="note">where</span><select class="fld" data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input class="fld" data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">
+        <select class="fld" data-m="${i}" data-f="unit"><option value="count" ${m.unit==='count'?'selected':''}>a count</option><option value="currency" ${m.unit==='currency'?'selected':''}>money</option><option value="ratio" ${m.unit==='ratio'?'selected':''}>a plain number</option></select>
+        <input class="fld" data-m="${i}" data-f="decimals" type="number" min="0" max="8" value="${esc(m.decimals)}" style="width:64px" title="decimal places" aria-label="decimal places">
+      </div><div class="row"><input class="fld" data-m="${i}" data-f="description" placeholder="what it means" value="${esc(m.description)}" style="flex:1;min-width:200px">
+        <input class="fld" data-m="${i}" data-f="known" placeholder="a figure you know" value="${esc(m.known)}" size="16"><label class="note"><input type="checkbox" data-m="${i}" data-f="approve" ${m.approve?'checked':''}> approve</label><button class="btn text" data-del="${i}">remove</button></div></div>`).join('')+
       `<button class="btn" id="addm">Add a number</button></div>`;
-    h+=`<div class="row" style="display:flex;gap:10px;align-items:center"><button class="btn" id="chk">Check</button><button class="btn" id="load" style="background:var(--ink);color:var(--paper)">Load and reconcile</button><button class="btn" id="cancel">Start over</button> <span class="note" id="wmsg">${esc(W.msg)}</span></div>`;
-    if(W.result) h+=`<div class="card rsec" style="margin-top:12px">${W.result}</div>`;
+    h+=`<div class="row"><button class="btn" id="chk">Check</button><button class="btn main-btn" id="load">Load and reconcile</button><button class="btn text" id="cancel">Start over</button> <span class="note" id="wmsg">${esc(W.msg)}</span></div>`;
+    if(W.result) h+=`<div class="pane" style="margin-top:12px">${W.result}</div>`;
   }
   $('app').innerHTML=h; wireData();
 }
 function askPanel(){
-  const P=(S.cfgProviders||{groq:{label:'Groq'},openrouter:{label:'OpenRouter'},gemini:{label:'Google Gemini'},ollama:{label:'Local model (Ollama, nothing leaves this computer)'}});
-  const d=W.datasets.find(x=>x.name===W.ds);
-  return `<h2>Ask: ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede" style="color:var(--warn)">This data is internal: a hosted provider is refused. Use the local model option, or reload the data as Public if it is safe to send to your provider.</p>':''}
-   <div class="card" style="padding:18px"><div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><select id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
-   <input id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}" style="flex:1;min-width:220px"><input id="amodel" placeholder="Model id" value="${esc(W.model)}"></div>
-   <div class="row" style="display:flex;gap:8px;margin-top:10px"><input id="aq" style="flex:1" maxlength="300" placeholder="${esc((d&&d.examples[0])||'Ask a question about this data')}"><button class="btn" style="margin:0" id="ago">Ask</button></div><span class="note" id="amsg"></span></div>`;
+  const P={groq:'Groq',openrouter:'OpenRouter',gemini:'Google Gemini',ollama:'Local model (Ollama): nothing leaves this computer'};
+  const d=W.datasets.find(x=>x.name===W.ds), local=W.prov==='ollama';
+  return `<h2>Ask about ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede flagtxt" style="font-weight:500">This data is internal, so a hosted provider is refused. Use the local model, or reload the data as Public if it is safe to send to your provider.</p>':''}
+   <div class="pane"><div class="row"><select class="fld" id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v)}</option>`).join('')}</select>
+   ${local?'':`<input class="fld key" id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}">`}<input class="fld" id="amodel" placeholder="Model id${local?' you have pulled in Ollama':''}" value="${esc(W.model)}">
+   ${local?'':'<button class="btn text" id="ackey">Check my key (uses no tokens)</button>'}</div>
+   <p class="room" id="aroom">${W.room}</p>
+   <div class="row"><input class="fld" id="aq" style="flex:1;font:20px var(--serif)" maxlength="300" placeholder="Ask anything about this data"><button class="btn main-btn" style="margin:0" id="ago">Ask</button></div><span class="note" id="amsg"></span>
+   <p class="note" style="margin-bottom:0">You can ask as many questions as your key allows. The page reads your key's remaining tokens from the provider (nothing is stored) and stops before a question that would not fit.</p></div>`;
 }
 function wireData(){
   if($('file')) $('file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('upmsg').textContent='Reading…';
@@ -390,29 +494,43 @@ function wireData(){
   if($('chk')) $('chk').onclick=()=>wsRun('/api/ws/check');
   if($('load')) $('load').onclick=()=>wsRun('/api/ws/load');
   $('app').querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>{ W.ds=n.dataset.ask; dataView(); });
-  if($('aprov')){ $('aprov').onchange=e=>W.prov=e.target.value; $('akey').oninput=e=>W.key=e.target.value; $('amodel').oninput=e=>W.model=e.target.value; $('ago').onclick=wsAsk; $('aq').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wsAsk();}}; }
+  if($('aprov')){ $('aprov').onchange=e=>{W.prov=e.target.value;W.room='';dataView();}; if($('akey')) $('akey').oninput=e=>W.key=e.target.value; $('amodel').oninput=e=>W.model=e.target.value;
+    if($('ackey')) $('ackey').onclick=wsRoom; $('ago').onclick=wsAsk; $('aq').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wsAsk();}}; }
+}
+async function wsRoom(){
+  if(W.prov==='ollama' || !W.key) return null;
+  try{ const d=await probeKey(W.prov,W.key); const rm=room(d); const est=W.est||FIRST_ESTIMATE;
+    W.room = d.error&&!d.rate_headers ? 'Key check failed: '+esc(d.error) : roomLine(rm, est, W.est?'from your last answer on this data':'a first guess, measured on a different dataset');
+    if($('aroom')) $('aroom').innerHTML=W.room; return d.error&&!d.rate_headers ? null : rm; }
+  catch(e){ if($('aroom')) $('aroom').textContent='Could not reach the server.'; return null; }
 }
 async function wsRun(path){
   W.metrics.forEach(m=>{ if(m.aggregate!=='count'&&!m.column){ const first=Object.entries(W.cols).find(([n,c])=>c.role==='measure'); m.column=first?first[0]:''; } });
   W.msg='Working…'; $('wmsg').textContent=W.msg;
   const body=JSON.stringify({token:W.stage.token, manifest:manifestFromForm(), overwrite:W.overwrite||false});
   const r=await wsPost(path,body);
-  if(!r.ok){ W.msg=''; W.result=`<b>Not done.</b> ${esc(r.d.error||'failed')}`; if(/already exists/.test(r.d.error||'')) W.result+=` <button class="btn" id="over">Replace the existing one</button>`; dataView(); if($('over')) $('over').onclick=()=>{W.overwrite=true;wsRun('/api/ws/load');}; return; }
+  if(!r.ok){ W.msg=''; W.result=`<b class="flagtxt">Not done.</b> ${esc(r.d.error||'failed')}`; if(/already exists/.test(r.d.error||'')) W.result+=` <button class="btn" id="over">Replace the existing one</button>`; dataView(); if($('over')) $('over').onclick=()=>{W.overwrite=true;wsRun('/api/ws/load');}; return; }
   W.msg='';
-  if(path.endsWith('check')){ const d=r.d; W.result = d.ok ? `<b>Looks consistent.</b> Approved numbers: ${esc(d.approved.join(', ')||'none')}.${d.without_known_figure.length?` <span class="chip w">no figure to check</span> ${esc(d.without_known_figure.join(', '))}`:''}` : `<b>Fix these first:</b><ul>${d.problems.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`; dataView(); }
-  else { const d=r.d; W.overwrite=false; W.result=`<b>Loaded ${d.rows.toLocaleString()} rows as ${esc(d.name)}.</b> Not loaded: ${esc(d.not_loaded.join(', ')||'nothing')}.<table class="ledger" style="margin-top:8px"><tr><th>Number</th><th>You said</th><th>The data gives</th><th></th></tr>${d.reconciliation.map(x=>`<tr><td>${esc(x.metric)}</td><td>${esc(x.expected||'')}</td><td>${esc(x.got||'')}</td><td>${x.ok===true?'<span class="chip">matches</span>':x.ok===false?'<span class="chip w">differs</span>':'<span class="chip n">not checked</span>'}</td></tr>`).join('')}</table>`;
-    await wsLoadList(); W.ds=d.name; W.stage=null; dataView(); $('app').insertAdjacentHTML('afterbegin',`<div class="card rsec">${W.result}</div>`); W.result=null; }
+  if(path.endsWith('check')){ const d=r.d; W.result = d.ok ? `<b class="okt">Looks consistent.</b> Approved numbers: ${esc(d.approved.join(', ')||'none')}.${d.without_known_figure.length?` <span class="flagtxt">No figure to check against:</span> ${esc(d.without_known_figure.join(', '))}`:''}` : `<b class="flagtxt">Fix these first:</b><ul>${d.problems.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`; dataView(); }
+  else { const d=r.d; W.overwrite=false; W.result=`<b>Loaded ${d.rows.toLocaleString()} rows as ${esc(d.name)}.</b> Not loaded: ${esc(d.not_loaded.join(', ')||'nothing')}.<table class="ledger" style="margin-top:8px"><tr><th>Number</th><th>You said</th><th>The data gives</th><th></th></tr>${d.reconciliation.map(x=>`<tr><td>${esc(x.metric)}</td><td>${esc(x.expected||'')}</td><td>${esc(x.got||'')}</td><td>${x.ok===true?'<span class="o ok">matches</span>':x.ok===false?'<span class="o w">differs</span>':'<span class="o n">not checked</span>'}</td></tr>`).join('')}</table>`;
+    await wsLoadList(); W.ds=d.name; W.stage=null; dataView(); $('app').insertAdjacentHTML('afterbegin',`<div class="pane">${W.result}</div>`); W.result=null; }
 }
 async function wsAsk(){
-  if(W.busy) return; const q=$('aq').value.trim(); if(!q) return; if(!W.key && W.prov!=='ollama'){ $('amsg').textContent='Paste your own API key first.'; return; }
+  if(W.busy) return; const q=$('aq').value.trim(); if(!q) return;
+  if(!W.key && W.prov!=='ollama'){ $('amsg').textContent='Paste your own API key first.'; return; }
   if(!W.model && W.prov!=='groq'){ $('amsg').textContent='Give a model id for this provider.'; return; }
+  const rm = await wsRoom(); const est = W.est||FIRST_ESTIMATE;
+  if(rm && rm.tokens!==null && rm.tokens < est){ $('amsg').innerHTML=`Not enough left in this window: ${rm.tokens.toLocaleString()} tokens, and a question needs about ${est.toLocaleString()}.${rm.reset?` Try again in ${esc(rm.reset)}.`:''}`; return; }
   W.busy=true; $('amsg').textContent='Running the pipeline…';
   const r=await wsPost('/api/ws/ask',JSON.stringify({dataset:W.ds,question:q,provider:W.prov,model:W.model}),{'Content-Type':'application/json','X-Provider-Key':W.key});
   W.busy=false;
   if(!r.ok){ $('amsg').textContent=r.d.error||'Failed.'; return; }
   if(r.d.reason==='provider_error'||r.d.reason==='sensitivity'){ $('amsg').textContent=r.d.error||'The provider did not answer.'; return; }
-  S.items.unshift(r.d); choose(0); refreshStats();
+  const used=(r.d.accounting||{}).tokens_used; if(used) W.est=Math.round(used*1.1);
+  S.items.unshift(r.d); choose(0, true); wsRoom();
 }
+
+/* ---------- shell ---------- */
 function setTab(t){ S.tab=t; ['ask','rep','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t)); ({ask:askView,rep:reportView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
@@ -421,30 +539,23 @@ function match(text){
   S.items.forEach((x,j)=>{const s=x.question.toLowerCase().split(/\W+/).filter(a=>a.length>3).filter(a=>w.has(a)).length; if(s>sc){sc=s;best=j;}});
   return sc>=3?best:-1;
 }
-function refreshStats(){
-  const ok=S.items.filter(x=>x.outcome==='verified').length, nums=S.items.reduce((a,x)=>a+(x.outcome==='verified'?vs(x).length:0),0);
-  $('stats').innerHTML=`<div><b>${ok}</b><span>answers verified</span></div><div><b>${nums}</b><span>figures traced</span></div><div><b>${S.items.filter(x=>x.outcome==='abstain').length}</b><span>withheld</span></div><div><b>541,909</b><span>warehouse rows</span></div>`;
-}
 function init(data){
   S.items=data.items;
-  const ok=S.items.filter(x=>x.outcome==='verified').length, nums=S.items.reduce((a,x)=>a+(x.outcome==='verified'?vs(x).length:0),0);
-  $('stats').innerHTML=`<div><b>${ok}</b><span>answers verified</span></div><div><b>${nums}</b><span>figures traced</span></div><div><b>${S.items.filter(x=>x.outcome==='abstain').length}</b><span>withheld</span></div><div><b>541,909</b><span>warehouse rows</span></div>`;
-  $('qs').innerHTML=S.items.map(x=>`<option value="${esc(x.question)}">`).join('');
-  $('sugg').innerHTML=S.items.filter(x=>x.outcome!=='not_recorded').slice(0,9).map(x=>`<button type="button" data-q="${S.items.indexOf(x)}">${esc(x.question.length>52?x.question.slice(0,50)+'…':x.question)}</button>`).join('');
-  $('sugg').querySelectorAll('button').forEach(b=>b.onclick=()=>choose(+b.dataset.q));
   $('form').onsubmit=async e=>{e.preventDefault(); const text=$('q').value.trim(); if(!text) return; const i=match(text); if(i>=0) return choose(i);
-    if(!S.can){ $('hint').textContent='This page only holds recorded questions. To ask a new one, run va serve --provider <name> --model <id> (or --replay) on your machine. Pick a suggestion above.'; return; }
-    if(S.busy) return; S.busy=true; $('hint').textContent='Running the pipeline: route, plan, query, compose, verify…';
+    if(!S.can){ $('hint').textContent='This page only holds recorded questions: open one from the list below. To ask a new one, run va serve --provider <name> --model <id> on your machine.'; return; }
+    if(S.busy) return; S.busy=true; $('go').disabled=true; $('hint').textContent='Running the pipeline: route, plan, query, compose, verify…';
     try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text})}); const d=await r.json();
-      if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; } else { S.items.unshift(d); choose(0); refreshStats(); } }
-    catch(err){ $('hint').textContent='Could not reach the server.'; } S.busy=false; };
+      if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; } else { S.items.unshift(d); choose(0, true); } }
+    catch(err){ $('hint').textContent='Could not reach the server.'; } S.busy=false; $('go').disabled=false; };
   $('t-ask').onclick=()=>setTab('ask'); $('t-rep').onclick=()=>setTab('rep'); $('t-ev').onclick=()=>setTab('ev'); $('t-data').onclick=()=>setTab('data');
-  $('foot')&&0; choose(0); 
-  const f=document.createElement('p'); f.className='note'; f.style.cssText='max-width:1240px;margin:0 auto;padding:0 28px 40px'; f.textContent=data.note; document.body.appendChild(f);
+  if(S.mode==='workspace'){ setTab('data'); } else choose(0);
+  if(data.note && S.mode!=='workspace'){ const f=document.createElement('p'); f.className='note page'; f.style.cssText='padding-bottom:40px'; f.textContent=data.note; document.body.appendChild(f); }
 }
+const MODES = {static:'Recorded model replies; checks run now', replay:'Recorded model replies; checks run now', live:'Live model; checks run now', byok:'Your key, used once', workspace:'Your data, on this computer'};
 if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
-  S.can=c.can_ask; S.mode=c.mode; if(c.mode==='byok') tryInit(); if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; $('sugg').hidden=true; $('stats').hidden=true; document.querySelector('.sub').textContent='Upload your own table, say what each column and number means, and the system checks your definitions against figures you know. Answers are then verified against your data, or withheld.'; setTab('data'); } $('mode').textContent = c.mode==='workspace'?'Your data · local':c.mode==='byok'?'Tryout · your key':c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
-  if(c.mode==='live'){ $('mode').style.color='#4FD18B'; $('mode').style.borderColor='#2d6b4a'; }
+  S.can=c.can_ask; S.mode=c.mode; $('mode').textContent=MODES[c.mode]||MODES.static;
+  if(c.mode==='byok') tryInit();
+  if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; S.ledger=false; d={items:[],note:''}; $('title').textContent='Bring your own data.'; $('sub').textContent='Upload a table, say what its columns and numbers mean, and the system checks your definitions against figures you already know. Answers are then tied to your data, or withheld.'; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});
 </script>
 </body>

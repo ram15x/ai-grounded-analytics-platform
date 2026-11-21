@@ -1,3 +1,6 @@
+import urllib.request
+
+from verified_analyst.web import app
 from verified_analyst.web.app import load_payload, static_page
 
 
@@ -71,3 +74,25 @@ def test_static_server_refuses_new_questions():
         assert _post(srv, {"question": "hi"})[0] == 404
     finally:
         srv.shutdown()
+
+
+def test_fonts_are_served_locally_and_the_page_loads_nothing_from_another_site():
+    page = app.PAGE.read_text("utf-8")
+    assert (
+        "googleapis" not in page
+        and "gstatic" not in page
+        and "https://" not in page.split("</style>")[0]
+    )
+    s = _server()
+    try:
+        for path in app.FONTS:
+            with urllib.request.urlopen(f"http://127.0.0.1:{s.server_port}{path}") as r:
+                assert r.status == 200 and r.headers["Content-Type"] == "font/woff2"
+                assert r.read(4) == b"wOF2"
+    finally:
+        s.shutdown()
+
+
+def test_page_has_no_canned_sample_questions_for_uploaded_data():
+    page = app.PAGE.read_text("utf-8")
+    assert 'id="sugg"' not in page and "examples[0]" not in page

@@ -15,6 +15,11 @@ RESULTS = ROOT / "demo" / "results.json"
 PAGE = Path(__file__).with_name("index.html")
 
 META = ROOT / "demo" / "meta.json"
+# the two typefaces, served from this server (SIL Open Font License; licences sit beside them)
+FONTS = {
+    "/fonts/source-serif-4.woff2": "source-serif-4-latin-wght-normal.woff2",
+    "/fonts/public-sans.woff2": "public-sans-latin-wght-normal.woff2",
+}
 
 NOTE = (
     "Model replies are recorded from real calls to {model} and "
@@ -59,8 +64,17 @@ class _Handler(BaseHTTPRequestHandler):
                 return v, False
         return secrets.token_hex(16), True
 
-    def _send(self, code: int, body: bytes, ctype: str, cookie: str | None = None) -> None:
+    def _send(
+        self,
+        code: int,
+        body: bytes,
+        ctype: str,
+        cookie: str | None = None,
+        cache: str | None = None,
+    ) -> None:
         self.send_response(code)
+        if cache:
+            self.send_header("Cache-Control", cache)
         if cookie:
             self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Type", ctype)
@@ -83,6 +97,9 @@ class _Handler(BaseHTTPRequestHandler):
                 ).encode(),
                 "application/json",
             )
+        elif self.path in FONTS:
+            body = (PAGE.parent / "fonts" / FONTS[self.path]).read_bytes()
+            self._send(200, body, "font/woff2", None, "public, max-age=604800")
         elif self.path == "/api/tryout" and self.tryout is not None:
             vid, new = self._visitor()
             body = {**self.tryout, "remaining": self.allowance.remaining(vid)}

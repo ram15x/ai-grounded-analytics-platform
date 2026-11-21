@@ -117,6 +117,9 @@ class RunContext:
             "latency_ms_p95": percentile(lat_all, 95),
             "latency_n": len(lat_all),
             "by_provider": by_provider,
+            # why a provider was skipped or stopped (limit named, Retry-After); the router's waits
+            "provider_events": list(self.provider_events),
+            "waits": list(self.waits),
             "cost_usd": 0,
             "cost_note": "0 on free tiers; no would-be paid estimate is computed in this phase",
         }

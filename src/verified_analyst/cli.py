@@ -708,6 +708,14 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
     sv.set_defaults(fn=cmd_serve)
 
+    ds = sub.add_parser("dataset", help="bring your own data: profile an uploaded table")
+    ds_sub = ds.add_subparsers(dest="dataset_cmd", required=True)
+    dpf = ds_sub.add_parser("profile", help="profile a CSV, TSV or XLSX (no model, no database)")
+    dpf.add_argument("file")
+    dpf.add_argument("--sheet", default="0", help="XLSX sheet name or number")
+    dpf.add_argument("--out", help="write profile.json and profile.md into this folder")
+    dpf.set_defaults(fn=cmd_dataset_profile)
+
     ak = sub.add_parser("ask", help="answer one question (replay of recorded replies, or live)")
     ak.add_argument("question")
     ak.add_argument(
@@ -1052,6 +1060,28 @@ def cmd_report_approve(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"wrote {reports.publish(done, Path(args.out_dir))} (nothing was sent anywhere)")
+    return 0
+
+
+def cmd_dataset_profile(args: argparse.Namespace) -> int:
+    from .datasets import profile as dp  # noqa: PLC0415
+
+    sheet: str | int = int(args.sheet) if str(args.sheet).isdigit() else args.sheet
+    try:
+        prof = dp.profile_file(Path(args.file), sheet)
+    except dp.ProfileError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    md = dp.render_markdown(prof)
+    print(md)
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "profile.json").write_text(
+            json.dumps(prof.as_dict(), indent=1, default=str), "utf-8"
+        )
+        (out / "profile.md").write_text(md, encoding="utf-8")
+        print(f"wrote {out}")
     return 0
 
 

@@ -17,7 +17,13 @@ providers:
     env_key: GROQ_API_KEY
     timeout_s: 30    # per provider; each provider's own value is passed to its calls
     rpm: 30          # UNVERIFIED (RESEARCH.md: 30 RPM)
-    tpd: 200000      # UNVERIFIED (RESEARCH.md: 200K TPD)
+    tpd: 200000      # UNVERIFIED for any model other than the ones under daily_tokens (RESEARCH.md)
+    # MEASURED, n=1 (2026-11-21, assumptions row 53): a 429 for openai/gpt-oss-20b on the free plan
+    # whose body names tokens per day: "Limit 200000, Used 200000, Requested 621 ... try again in
+    # 4m28s" (Retry-After 269). A rolling cap, separate from the 8000 tokens/minute header. Used
+    # by the daily tally in front of every live command (va_next26). Other models: UNVERIFIED.
+    daily_tokens:
+      openai/gpt-oss-20b: 200000
     # Seen once, 2026-11-20, in the response headers of 24 requests to openai/gpt-oss-20b:
     # x-ratelimit-limit-tokens: 8000. That it is per MINUTE is inferred from the header name and
     # from reset-tokens values of 1 to 56 seconds, not from documentation. It applies to this

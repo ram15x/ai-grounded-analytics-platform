@@ -25,7 +25,7 @@ import yaml
 
 from ..config import ConfigError
 from ..semantic import SemanticLayer
-from . import live
+from . import live, usage
 from .accounting import RunContext, merge_summaries
 from .answer import Retrieved, Retriever, answer_question, decide_route, make_retriever
 from .cassette import Cassette, CassetteContext, layer_hash, schema_hash, warehouse_content_hash
@@ -449,6 +449,7 @@ def build_report(
                  "error_bodies": [{"seq": e.seq, "status": e.status, "body": e.error_body}
                                   for e in counting.events if e.error_body is not None]},
         "accounting": merge_summaries(runs) if runs else None,
+        "tokens_spent": usage.tokens_spent(runs),
         "token_guard": token_guard(runs, counting),
         "router": build_router_section(rows),
         "router_questions": rows,

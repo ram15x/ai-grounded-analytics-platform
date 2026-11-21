@@ -462,7 +462,7 @@ def cmd_live_models(args: argparse.Namespace) -> int:
 
 
 def cmd_live_probe(args: argparse.Namespace) -> int:
-    from .llm import live  # noqa: PLC0415
+    from .llm import live, usage  # noqa: PLC0415
     from .llm.settings import load_router_settings  # noqa: PLC0415
 
     settings = load_router_settings()
@@ -480,12 +480,16 @@ def cmd_live_probe(args: argparse.Namespace) -> int:
         quota_check=args.quota_check,
         record=not args.no_record,
     )
+    qs = live.load_probe_questions()
+    cap = min(args.token_cap or 10**9, settings.probe.token_cap)
+    usage.start(settings, args.provider, args.model, mode="live probe", questions=len(qs),
+                ceiling=cap, force=args.force)  # fmt: skip
     out = live.run_probe(
         settings,
         opts,
         layer=layer,
         readonly_url=url,
-        questions=live.load_probe_questions(),
+        questions=qs,
         known_values=catalogue(layer, url),
         env=os.environ,
     )
@@ -502,7 +506,7 @@ def cmd_live_probe(args: argparse.Namespace) -> int:
 
 
 def cmd_route_probe(args: argparse.Namespace) -> int:
-    from .llm import route_probe  # noqa: PLC0415
+    from .llm import route_probe, usage  # noqa: PLC0415
     from .llm.live import default_out_dir, redact  # noqa: PLC0415
     from .llm.settings import load_router_settings  # noqa: PLC0415
 
@@ -522,6 +526,16 @@ def cmd_route_probe(args: argparse.Namespace) -> int:
     )
     kw = {"layer": layer, "readonly_url": url, "known_values": catalogue(layer, url),
           "env": os.environ}  # fmt: skip
+    router_qs, injection_qs = route_probe.load_dev_questions()
+    nq = (0 if args.injection_only else len(router_qs)) + (
+        0 if args.route_only else len(injection_qs)
+    )
+    mode = ("route only" if args.route_only else "injection questions only"
+            if args.injection_only else "route plus full answer")  # fmt: skip
+    cfg_now = load_router_settings()
+    usage.start(cfg_now, args.provider, args.model, mode=mode, questions=nq,
+                ceiling=min(args.token_cap or 10**9, cfg_now.probe.token_cap), force=args.force,
+                multiplier=2 if args.compare_reasoning else 1)  # fmt: skip
     if args.compare_reasoning:
         if args.reasoning_effort:
             raise SystemExit("--compare-reasoning sets the effort itself; drop --reasoning-effort")
@@ -648,6 +662,11 @@ def build_parser() -> argparse.ArgumentParser:
     bm_.add_argument("--out-dir")
     bm_.add_argument("--seed-run", help="report.json of a probe, for its real binder refusals")
     bm_.add_argument("--max-tokens", type=int, default=None)
+    bm_.add_argument(
+        "--force",
+        action="store_true",
+        help="start although the daily token tally plus this run is above the cap",
+    )
     bm_.set_defaults(fn=cmd_docs_binder_model, what="labels")
     bmd = dc_sub.add_parser(
         "binder-model-dev", help="score current, S2 and SL on the dev half of the labels file"
@@ -691,6 +710,11 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--max-tokens", type=int, default=None, help="completion allowance per call")
     lp.add_argument("--quota-check", action="store_true", help="3 extra requests, see the report")
     lp.add_argument("--no-record", action="store_true", help="do not record cassettes")
+    lp.add_argument(
+        "--force",
+        action="store_true",
+        help="start although the daily token tally plus this run is above the cap",
+    )
     lp.set_defaults(fn=cmd_live_probe)
     rt = sub.add_parser("route", help="router and injection probe (needs a key in the environment)")
     rt_sub = rt.add_subparsers(dest="route_cmd", required=True)
@@ -711,6 +735,10 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument(
         "--injection-only", action="store_true",
         help="only the 5 injection questions (fits under the token cap; not with --route-only)",
+    )  # fmt: skip
+    rp.add_argument(
+        "--force", action="store_true",
+        help="start although the daily token tally plus this run's budget is above the daily cap",
     )  # fmt: skip
     rp.add_argument(
         "--reasoning-effort", default=None, metavar="LEVEL",

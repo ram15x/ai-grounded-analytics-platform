@@ -673,3 +673,21 @@ def test_compare_does_not_start_the_second_run_when_the_first_was_given_up(env, 
     )  # fmt: skip
     assert [s["effort"] for s in out["summaries"]] == ["low"] and slept == []
     assert "medium not run" in out["markdown"] and "75" in out["markdown"]
+
+
+@pytest.mark.db
+def test_the_report_records_tokens_spent_so_the_daily_tally_can_add_it_up(env, tmp_path):
+    from datetime import UTC, datetime
+
+    from verified_analyst.llm import usage
+
+    out = probe(env, Model(), tmp_path, injection_only=True, max_requests=60)
+    rep = out["report"]
+    assert rep["tokens_spent"]["total"] > 0 and rep["header"]["mode"] == "injection questions only"
+    t = usage.collect_tally("groq", "m-groq", report_roots=[tmp_path], cassette_roots=[],
+                            now=datetime.now(UTC))  # fmt: skip
+    assert t.total == rep["tokens_spent"]["total"] and t.reports == 1 and t.approximate == 0
+    est = usage.estimate_run(
+        "groq", "m-groq", "injection questions only", 5, report_roots=[tmp_path]
+    )
+    assert est.run_tokens and abs(est.run_tokens - rep["tokens_spent"]["total"]) <= 5

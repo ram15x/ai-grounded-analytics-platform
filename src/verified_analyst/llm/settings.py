@@ -28,6 +28,9 @@ class ProviderSettings(_M):
     rpm: float | None = Field(default=None, gt=0)  # documented requests per minute (UNVERIFIED)
     tpd: float | None = Field(default=None, gt=0)  # documented tokens per day (UNVERIFIED)
     tpm: float | None = Field(default=None, gt=0)  # documented tokens per minute (UNVERIFIED)
+    # Tokens per rolling 24 h (prompt + completion) MEASURED for a specific model id, from a 429
+    # body that names the limit. `tpd` is the fallback for any other model and stays UNVERIFIED.
+    daily_tokens: dict[str, int] = Field(default_factory=dict)
     # Sent as `reasoning_effort` on every request to this provider, only when set. UNVERIFIED:
     # whether a given Groq model accepts it, and which values, is not known. Groq only for now.
     reasoning_effort: str | None = Field(default=None, pattern=r"^[a-z]{1,16}$")

@@ -22,6 +22,7 @@ from typing import Any
 
 from ..config import ConfigError
 from ..semantic import SemanticLayer
+from . import usage
 from .accounting import RunContext, merge_summaries, percentile
 from .cassette import (
     KEY_ENV_VARS,
@@ -719,6 +720,7 @@ def build_report(
             "provider": opts.provider,
             "model": opts.model,
             "started_utc": started.isoformat(timespec="seconds"),
+            "mode": "live probe",
             "dataset": layer.source.relation,
             "dataset_sensitivity": s.sensitivity_of((layer.source.relation,)),
             "prompts": active_prompt_hashes(),
@@ -762,6 +764,7 @@ def build_report(
             "rate_headers": _headers_summary(counting.events),
         },
         "accounting": agg,
+        "tokens_spent": usage.tokens_spent(runs),
         "rates": build_rates(completed),
         "questions": [
             {

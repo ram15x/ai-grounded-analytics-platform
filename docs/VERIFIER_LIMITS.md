@@ -130,3 +130,9 @@ claim that means a different price, and a fair paraphrase can be refused (a labe
 passage uses but not next to the number). Cell numbers are bound by the semantic layer; passage
 numbers are bound by these heuristics only.
 
+### Binder false rejects and false accepts (measured on synthetic data)
+
+On the dev half of a generated test set, the R1 window rule refuses 229 of 461 correct labels and
+accepts 73 of 873 labels moved onto another number. It is a heuristic that fails closed, so it
+over-refuses; it is not a proof that a label describes its number. See docs/adr/0011 and
+`va docs binder-study`.

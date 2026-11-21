@@ -319,3 +319,23 @@ shapes and worked examples) with a retry that shows the field errors; a report t
 wrong route from an invalid reply and from a later failure. The `route.v1` text is kept for
 history. The run counts were not a measurement of the router's quality.
 
+### Binder study (R1 variants, ADR-0011)
+
+`va docs binder-study` measures the label binder on generated cases from the 80 synthetic documents
+(no model, no network): correct cases (a label from the number's own sentence, four styles) and
+swapped cases (the same label on another number, same passage or another document). Documents are
+split in two by a hash of the document key; this command prints the dev half only.
+
+Dev half (36 documents; 461 correct cases, 873 swapped cases): the shipped rule (frac 1.0, window 6)
+falsely rejects 229 of 461 correct cases (all 65 of the "distant" style) and falsely accepts 73 of
+873 swapped cases. The best dev variant that lowers both is frac 0.75, window 6, units skipped
+(153 of 461 and 66 of 873). No variant reaches 0 false accepts, so the target of 0 of N cannot be
+met by changing R1 alone and is not expected on the locked half either. Wider windows lower false
+rejects but raise false accepts.
+
+Pre-registered in docs/adr/0011-binder-variants.md: `current`, `C1` (units skipped), `C2` (also
+75% of label words), `C3` (60%). The locked half is scored once by `va docs binder-locked
+--candidates current,C1,C2,C3`, which refuses unless the ADR is committed and unchanged. A candidate
+is put forward only if its locked false accepts are no higher than current's and its false rejects
+are lower; otherwise R1 stays. The shipped default has not changed. The corpus is synthetic and the
+labels are generated, so this is a screen, not a benchmark.

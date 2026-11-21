@@ -919,37 +919,60 @@ def _ask_setup(args: argparse.Namespace):
     return layer, url, s, make_router, retrieve, catalogue(layer, url)
 
 
-def _byok_ask(question: str, provider: str, model: str | None, key: str) -> dict:
+def _byok_ask(
+    question: str, provider: str, model: str | None, key: str, tier: str = "own", cache_dir=None
+) -> dict:
     """One question with the visitor's own key. The key exists only in `env` below, which is
     built for this call and dropped with it: it is not written to disk, a trace or a log, and any
-    error text is scrubbed of it before it is returned."""
+    error text is scrubbed of it before it is returned.
+
+    Menu questions (not "own") also use a cache of model replies: a stored reply is used with no
+    model call and no key, and the checks are still re-run against the warehouse now. Replies are
+    stored only when the whole run ended verified, and a visitor's own question is never stored."""
     from .llm import route_probe  # noqa: PLC0415
     from .llm.answer import make_retriever  # noqa: PLC0415
+    from .llm.cassette import (  # noqa: PLC0415
+        Cassette,
+        CassetteContext,
+        layer_hash,
+        schema_hash,
+        warehouse_content_hash,
+    )
     from .llm.live import redact  # noqa: PLC0415
     from .llm.providers import build_one  # noqa: PLC0415
     from .llm.router import Router  # noqa: PLC0415
     from .llm.settings import load_router_settings  # noqa: PLC0415
 
     base = load_router_settings()
-    env = {base.providers[provider].env_key: key}
+    env = {base.providers[provider].env_key: key} if key else {}
     layer = load_semantic_layer()
     url = readonly_database_url()
+    cassette = before = None
     try:
         opts = route_probe.RouteProbeOptions(provider, model or "", Path(os.devnull))
         s = route_probe.route_settings(base, opts)
         for rel in (layer.source.relation, "docs.public"):
             if s.sensitivity_of((rel,)) != "public":
                 return {"outcome": "abstain", "reason": "sensitivity", "rendered": ""}
+        if tier != "own" and cache_dir:
+            ctx = CassetteContext(layer_hash(), schema_hash(), warehouse_content_hash(url))
+            cassette = Cassette(Path(cache_dir), "resume", ctx, env=env)
+            before = set(cassette.entries)
         setup = (
             layer, url, s,
-            lambda: Router(s, {provider: build_one(s, provider, env=env)}),
+            lambda: Router(s, {provider: build_one(s, provider, env=env)}, cassette=cassette),
             route_probe.public_only(make_retriever(url, k=3)), catalogue(layer, url),
         )  # fmt: skip
-        d = _ask_one(question, "byok", setup).as_dict()
+        res = _ask_one(question, "byok", setup)
+        d = res.as_dict()
+        if cassette is not None and res.outcome != "verified":
+            cassette.discard_since(before)  # keep only replies from verified runs
     except (ConfigError, LLMError) as exc:
         return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
                 "error": redact(str(exc), env)}  # fmt: skip
     d["id"] = "TRY"
+    acct = d.get("accounting") or {}
+    d["stored_replies_only"] = bool(cassette is not None and acct.get("tokens_used") == 0)
     return json.loads(redact(json.dumps(d, default=str), env))
 
 
@@ -1225,7 +1248,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         serve(
             args.port,
             args.host,
-            byok_fn=_byok_ask,
+            byok_fn=lambda q, p, m, k, tier: _byok_ask(q, p, m, k, tier, cfg.get("cache_dir")),
             models_fn=_byok_models,
             tryout_cfg=cfg,
         )

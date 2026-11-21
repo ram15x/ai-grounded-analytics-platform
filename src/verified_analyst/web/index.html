@@ -209,7 +209,8 @@ function answer(x){
   return `<div class="card ans"><p class="q">${esc(x.question)}</p><p class="atext">${out}</p>
   <div class="ring">${ringSvg(sorted.length,sorted.length)}<div><b>${sorted.length} of ${sorted.length} figures verified</b><span>Click a figure to see where it comes from.</span></div></div>
   <div class="vlist">${sorted.map((v,i)=>`<button class="v ${i===S.sel?'sel':''}" data-i="${i}"><span class="chip ${v.verdict==='VERIFIED_QUOTE'?'q':''}">${v.verdict.replace('VERIFIED_','').replace('VERIFIED','number')}</span><span class="t">${esc(v.text)}</span><span class="why">${how[v.reason]||esc(v.reason)}${v.expected?` · warehouse value ${esc(v.expected)}`:''}${v.detail&&v.verdict==='VERIFIED_QUOTE'?' · '+esc(v.detail):''}</span></button>`).join('')}</div>
-  ${x.restatement?`<p class="note" style="margin-top:16px"><b>Query in words:</b> ${esc(x.restatement)}</p>`:''}</div>`;
+  ${x.restatement?`<p class="note" style="margin-top:16px"><b>Query in words:</b> ${esc(x.restatement)}</p>`:''}
+  ${x.stored_replies_only?`<p class="note"><b>Stored model replies reused.</b> No model was called for this answer; the SQL, the result and every verdict above were re-run against the data just now.</p>`:''}</div>`;
 }
 function ledger(){
   return `<h2>All ${S.items.length} recorded questions</h2><p class="lede">Open any row. Withheld and unrecorded questions are shown, not hidden.</p><div class="tw"><table class="ledger"><tr><th>Question</th><th>Route</th><th>Outcome</th><th>Figures</th></tr>` +
@@ -250,7 +251,7 @@ function tryRender(){
   const tier=(name,title)=>`<div class="tier"><h4>${title}<span class="left ${rem[name]?'':'zero'}">${rem[name]} of ${c.per_visitor[name]} left</span></h4>`+
     c.questions[name].map((q,i)=>`<button type="button" data-t="${name}" data-i="${i}" ${rem[name]?'':'disabled'}>${esc(q)}</button>`).join('')+'</div>';
   $('try').innerHTML=`<h3>Try it with your own key</h3>
-   <p>${c.questions.easy.length*3+c.own_slots} questions in total: 3 easy, 3 medium, 3 hard, and ${c.own_slots} of your own. You may ask ${c.per_visitor.easy} from each group, which keeps a free key inside its limits. Your key is sent with each question, used once and never stored on the server or in this browser.</p>
+   <p>${c.questions.easy.length*3+c.own_slots} questions in total: 3 easy, 3 medium, 3 hard, and ${c.own_slots} of your own. You may ask ${c.per_visitor.easy} from each group, which keeps a free key inside its limits. Your key is sent with each question, used once and never stored on the server or in this browser. A menu question that was answered and fully verified before is served from its stored model reply (no key needed); the checks are re-run against the data every time. Your own questions are never stored.</p>
    <div class="row"><select id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
    <input class="key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
    ${P.model?'':`<input id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn" id="lm" style="margin:0;background:none;color:inherit;border-color:var(--night-line)">List models</button>`}</div>
@@ -272,13 +273,13 @@ async function listModels(){
   catch(e){ $('mlist').textContent='Could not reach the server.'; }
 }
 async function tryAsk(tier,question){
-  if(S.busy) return; if(!T.key){ $('hint').textContent='Paste your own API key first. It is used for this question only.'; return; }
-  const model=($('model')&&$('model').value.trim())||''; if(!T.cfg.providers[T.provider].model && !model){ $('hint').textContent='Choose a model id for this provider (List models).'; return; }
+  if(S.busy) return; if(!T.key && tier==='own'){ $('hint').textContent='Paste your own API key first. It is used for this question only.'; return; }
+  const model=($('model')&&$('model').value.trim())||''; if(T.key && !T.cfg.providers[T.provider].model && !model){ $('hint').textContent='Choose a model id for this provider (List models).'; return; }
   S.busy=true; $('hint').textContent='Running the pipeline with your key: route, plan, query, compose, verify…';
   try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({question,tier,provider:T.provider,model})});
     const d=await r.json(); if(d.remaining) T.cfg.remaining=d.remaining;
     if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; }
-    else if(d.reason==='provider_error'){ $('hint').textContent='The provider did not answer (wrong key, a rate limit, or a bad model id). This did not use up your question.'; }
+    else if(d.reason==='provider_error'){ $('hint').textContent=T.key?'The provider did not answer (wrong key, a rate limit, or a bad model id). This did not use up your question.':'No stored reply exists for this question yet, so it needs your own key. This did not use up your question.'; }
     else { $('hint').textContent=''; S.items.unshift(d); choose(0); refreshStats(); } }
   catch(e){ $('hint').textContent='Could not reach the server.'; }
   S.busy=false; tryRender();

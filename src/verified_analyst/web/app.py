@@ -110,7 +110,7 @@ class _Handler(BaseHTTPRequestHandler):
         key = self._key()
         if provider not in cfg["providers"]:
             return self._send(400, b'{"error":"choose a provider"}', "application/json")
-        if not key:
+        if not key and tier == "own":
             msg = b'{"error":"paste your own API key; it is used for this question only"}'
             return self._send(400, msg, "application/json")
         why = self.allowance.validate(tier, q)
@@ -127,7 +127,9 @@ class _Handler(BaseHTTPRequestHandler):
         answered = False
         try:
             with self.lock:
-                out = self.byok_fn(q, provider, model or cfg["providers"][provider]["model"], key)
+                out = self.byok_fn(
+                    q, provider, model or cfg["providers"][provider]["model"], key, tier
+                )
             answered = out.get("reason") not in ("provider_error", "budget", "sensitivity")
         except Exception as exc:  # noqa: BLE001
             msg = {"error": f"could not answer: {type(exc).__name__}"}

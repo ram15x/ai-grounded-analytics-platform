@@ -22,8 +22,8 @@ def srv():
     cfg = T.load_config()
     calls: list[tuple] = []
 
-    def byok(q, provider, model, key):
-        calls.append((q, provider, model, key))
+    def byok(q, provider, model, key, tier):
+        calls.append((q, provider, model, key, tier))
         if q.startswith("FAIL"):
             return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
                     "error": f"bad key {key}"}  # fmt: skip
@@ -93,9 +93,11 @@ def test_menu_tiers_refuse_text_that_is_not_on_the_menu(srv):
 
 def test_a_key_is_required_and_the_provider_must_be_known(srv):
     q = {"question": srv.cfg["questions"]["easy"][0], "tier": "easy", "provider": "groq"}
-    assert post(srv, q, key=None)[0] == 400
+    assert post(srv, q, key=None)[0] == 200  # menu questions may be served from stored replies
+    own = {"question": "mine", "tier": "own", "provider": "groq"}
+    assert post(srv, own, key=None)[0] == 400  # an own question always needs the visitor's key
     assert post(srv, {**q, "provider": "nope"})[0] == 400
-    assert not srv.calls
+    assert len(srv.calls) == 1  # only the key-less menu question above got through
 
 
 def test_own_question_length_is_capped(srv):
@@ -111,7 +113,11 @@ def test_a_failed_call_gives_the_slot_back(srv):
 def test_default_groq_model_comes_from_config_and_key_is_passed_through(srv):
     q = {"question": srv.cfg["questions"]["easy"][0], "tier": "easy", "provider": "groq"}
     post(srv, q)
-    assert srv.calls[0][2] == srv.cfg["providers"]["groq"]["model"] and srv.calls[0][3] == KEY
+    assert (
+        srv.calls[0][4] == "easy"
+        and srv.calls[0][2] == srv.cfg["providers"]["groq"]["model"]
+        and srv.calls[0][3] == KEY
+    )
 
 
 def test_tryout_config_endpoint_never_contains_a_key(srv):
@@ -159,3 +165,45 @@ def test_the_page_never_writes_the_key_to_browser_storage_or_a_url():
     for banned in ("localStorage", "sessionStorage", "document.cookie", "indexedDB"):
         assert banned not in html
     assert "X-Provider-Key" in html and "?key=" not in html
+
+
+def test_cache_forgets_replies_from_a_run_that_did_not_verify(tmp_path):
+    from verified_analyst.llm.cassette import Cassette, CassetteContext
+
+    c = Cassette(tmp_path, "resume", CassetteContext("l", "s", "w"), env={})
+    c.entries["old"] = {"key": "old"}
+    c.flush()
+    before = set(c.entries)
+    c.entries["new"] = {"key": "new"}
+    assert c.discard_since(before) == 1
+    again = Cassette(tmp_path, "resume", CassetteContext("l", "s", "w"), env={})
+    assert set(again.entries) == {"old"}
+
+
+def test_own_questions_are_never_cached(monkeypatch, tmp_path):
+    from verified_analyst import cli
+
+    class Layer:
+        class source:  # noqa: N801
+            relation = "analytics.sales_lines"
+
+    monkeypatch.setattr(cli, "load_semantic_layer", lambda: Layer)
+    monkeypatch.setattr(cli, "readonly_database_url", lambda: "x")
+    monkeypatch.setattr(cli, "catalogue", lambda *a: {})
+    monkeypatch.setattr("verified_analyst.llm.answer.make_retriever", lambda *a, **k: None)
+
+    class Res:
+        outcome = "verified"
+
+        def as_dict(self):
+            return {"outcome": "verified", "accounting": {"tokens_used": 5}}
+
+    def fake_ask(question, qid, setup):
+        return Res()
+
+    monkeypatch.setattr(cli, "_ask_one", fake_ask)
+    out = cli._byok_ask(
+        "my private question", "groq", "openai/gpt-oss-20b", "gsk_x", "own", tmp_path
+    )
+    assert out["stored_replies_only"] is False
+    assert list(tmp_path.iterdir()) == []  # nothing from an own question reaches the cache dir

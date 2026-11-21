@@ -13,6 +13,9 @@ per_visitor:
   own: 1
 own_slots: 3            # how many "your own question" boxes the page shows
 own_max_chars: 300
+# Model replies for MENU questions are stored here after a fully verified run and reused with no
+# model call (so no key and no tokens); checks are re-run each time. Own questions are never stored.
+cache_dir: data/tryout_cache
 questions:
   easy:
     - What was total gross revenue (sales before cancellations and discounts)?

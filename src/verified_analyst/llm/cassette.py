@@ -224,6 +224,16 @@ class Cassette:
         self.flush()
         return True
 
+    def discard_since(self, before: set[str]) -> int:
+        """Forget every entry added after `before` (a snapshot of the keys) and save. Used so a
+        run that did not end verified leaves nothing behind to be replayed to the next person."""
+        added = set(self.entries) - before
+        for k in added:
+            del self.entries[k]
+        if added:
+            self.flush()
+        return len(added)
+
     def usage(self) -> dict[str, Any]:
         return {"hit_keys": sorted(self.hits), "missed": self.misses}
 

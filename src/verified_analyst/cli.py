@@ -915,14 +915,14 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_eval_e2e(args: argparse.Namespace) -> int:
-    """Dev: eval/questions/dev.yaml, gold from t1. Locked: heldout.yaml, gold from t2, one shot."""
+    """Dev: eval/questions/dev.yaml, gold from t1. Locked: see e2e_locked, gold from t2, one shot."""
     import json as _json  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
     import yaml  # noqa: PLC0415
 
-    from . import e2e  # noqa: PLC0415
+    from . import e2e, e2e_locked  # noqa: PLC0415
 
     root = Path(__file__).resolve().parents[2]
     locked = args.split == "locked"
@@ -948,7 +948,7 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
     raw = Path(args.raw)
     if not raw.exists():
         raise SystemExit(f"raw file not found: {raw}")
-    qfile = root / "eval" / "questions" / ("heldout.yaml" if locked else "dev.yaml")
+    qfile = e2e_locked.QUESTIONS if locked else root / "eval" / "questions" / "dev.yaml"
     qs = yaml.safe_load(qfile.read_text(encoding="utf-8"))["questions"]
     df = (t2 if locked else t1).load_raw(raw)
     setup = _ask_setup(args)

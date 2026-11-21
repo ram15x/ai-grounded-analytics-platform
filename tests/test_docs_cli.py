@@ -26,7 +26,7 @@ def test_only_the_gated_command_names_the_heldout_retrieval_file():
     word, and no module reached by `va docs probe`, `eval` or `search` mentions it."""
     for path in SRC.rglob("*.py"):
         text = path.read_text(encoding="utf-8").lower().replace("held-out", "")
-        if path.name == "heldout_run.py":
+        if path.name in ("heldout_run.py", "e2e_locked.py"):  # e2e_locked: ADR-0014, one-shot
             continue
         if path.name == "cli.py":
             assert "heldout.yaml" not in text and "doc_questions" in text

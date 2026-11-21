@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from ..claims import QuerySpec, TemplateAnswer
 from ..compiler import CompileError, MetricQuery, compile_query
-from ..guard import GuardError, QueryTimeout, execute_guarded
+from ..guard import GuardError, QueryTimeout, allowed_for, execute_guarded
 from ..restate import restate
 from ..semantic import SemanticLayer
 from ..template import TemplateReport, verify_template
@@ -125,7 +125,7 @@ class QuestionRun:
 
 def _execute(layer: SemanticLayer, readonly_url: str, mq: MetricQuery) -> ExecutedQuery:
     cq = compile_query(layer, mq)
-    res = execute_guarded(readonly_url, cq.sql)
+    res = execute_guarded(readonly_url, cq.sql, allowed_relations=allowed_for(layer))
     return ExecutedQuery(QUERY_ID, cq.sql, res.columns, res.rows, metric_query=mq)
 
 

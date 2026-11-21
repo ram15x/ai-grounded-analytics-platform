@@ -1,0 +1,93 @@
+# Written by hand, the way a person would fill in the boxes. The data is SYNTHETIC (see
+# make_saas_subscriptions.py). The "known" figures were computed separately with pandas,
+# standing in for numbers a person would copy from their own report.
+name: saas_subs
+description: Subscriptions of an invented software company, one record per customer account.
+grain: One row is one subscription (one customer account on one plan).
+currency: USD
+columns:
+  subscription_id: {role: identifier, label: Subscription ID}
+  start_date: {role: date, label: Subscription start date}
+  end_date: {role: ignore}
+  plan:
+    role: dimension
+    label: Plan
+    enumerable: true
+    synonyms: [tier, package]
+  region: {role: dimension, label: Region, enumerable: true, synonyms: [market, geography]}
+  status:
+    role: dimension
+    label: Status
+    enumerable: true
+    description: active, trial or churned
+  seats: {role: measure, label: Seats}
+  mrr_usd: {role: measure, label: Monthly recurring revenue in USD}
+  billing_email: {role: ignore, sensitivity: personal}
+glossary:
+  MRR: Monthly recurring revenue; counted for active subscriptions only.
+metrics:
+  mrr:
+    status: approved
+    description: Monthly recurring revenue of active subscriptions
+    aggregate: sum
+    column: mrr_usd
+    where: [{column: status, op: eq, value: active}]
+    unit: currency:USD
+    decimals: 0
+    synonyms: [monthly recurring revenue, recurring revenue]
+    known:
+      - {value: "141740", note: "all active"}
+      - {value: "48434", where: [{column: region, op: eq, value: EMEA}], note: "EMEA active"}
+  active_subscriptions:
+    status: approved
+    description: Number of active subscriptions
+    aggregate: count
+    where: [{column: status, op: eq, value: active}]
+    unit: count
+    decimals: 0
+    synonyms: [active accounts, active customers]
+    known: [{value: "943"}]
+  subscriptions:
+    status: approved
+    description: Number of subscriptions of any status
+    aggregate: count
+    unit: count
+    decimals: 0
+    synonyms: [accounts, all subscriptions]
+    known: [{value: "1200"}]
+  churned_subscriptions:
+    status: approved
+    description: Number of churned subscriptions
+    aggregate: count
+    where: [{column: status, op: eq, value: churned}]
+    unit: count
+    decimals: 0
+    synonyms: [churned accounts]
+    known: [{value: "203"}]
+  churn_rate:
+    status: approved
+    description: Churned subscriptions divided by all subscriptions
+    numerator: churned_subscriptions
+    denominator: subscriptions
+    unit: ratio
+    decimals: 4
+    synonyms: [churn]
+  average_seats:
+    status: approved
+    description: Average number of seats per subscription
+    aggregate: avg
+    column: seats
+    unit: ratio
+    decimals: 2
+    synonyms: [seats per account]
+    known: [{value: "10.3383", tolerance: "0.0001"}]
+  draft_net_new_mrr:
+    status: draft
+    description: Not defined yet; stays out of the layer until approved
+    aggregate: sum
+    column: mrr_usd
+    unit: currency:USD
+    decimals: 0
+examples:
+  - question: "What is our monthly recurring revenue?"
+    expected: "141,740 USD"

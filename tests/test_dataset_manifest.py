@@ -146,3 +146,15 @@ def test_exclusions_apply_to_every_metric():
     )
     layer = M.build_layer(m, PROFILE)
     assert "l.customer <> 'c9'" in layer.metrics["orders"].expr
+
+
+def test_a_dataset_layer_may_read_only_its_own_table():
+    from verified_analyst.guard import ALLOWED_RELATIONS, GuardError, allowed_for, validate_sql
+
+    layer = M.build_layer(manifest(), PROFILE)
+    assert allowed_for(layer) == frozenset({"ds_shop.data"})
+    validate_sql("SELECT COUNT(*) FROM ds_shop.data AS l", allowed_for(layer))
+    for other in ("analytics.sales_lines", "ds_other.data"):
+        with pytest.raises(GuardError):
+            validate_sql(f"SELECT 1 FROM {other}", allowed_for(layer))
+    assert "analytics.sales_lines" in ALLOWED_RELATIONS

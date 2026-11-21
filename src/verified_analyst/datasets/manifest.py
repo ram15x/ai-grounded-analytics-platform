@@ -46,6 +46,8 @@ class Column(BaseModel):
     enumerable: bool = False  # a small closed set of values (the person confirms this)
     value_aliases: dict[str, list[str]] = Field(default_factory=dict)
     sensitivity: Literal["public", "internal", "personal"] = "internal"
+    # for a date column whose day/month order the values do not settle: the person says which
+    date_order: Literal["dmy", "mdy"] | None = None
 
 
 class Known(BaseModel):
@@ -114,8 +116,10 @@ class Manifest(BaseModel):
     def _check(self) -> Manifest:
         if not NAME.match(self.name):
             raise ValueError("name must be lower-case letters, digits and underscores")
-        if not self.description.strip() or not self.grain.strip():
-            raise ValueError("description and grain (what one row is) are required")
+        for field_name in ("description", "grain"):
+            text = getattr(self, field_name).strip()
+            if not text or "TODO" in text:
+                raise ValueError(f"{field_name} is required: replace the TODO with your own words")
         for m in self.metrics:
             if not IDENT.match(m):
                 raise ValueError(f"bad metric name {m!r}")
@@ -124,6 +128,31 @@ class Manifest(BaseModel):
     @property
     def relation(self) -> str:
         return f"ds_{self.name}.data"
+
+
+def skeleton(profile: DatasetProfile, name: str) -> dict[str, Any]:
+    """A manifest to start from, filled with GUESSES from the profile.
+
+    Every guess is the person's to confirm. Description and grain stay TODO, and the loader
+    refuses them until they are replaced."""
+    cols: dict[str, Any] = {}
+    for c in profile.columns:
+        if any(h.startswith("possible_personal_data") for h in c.hints):
+            cols[c.name] = {"role": "ignore", "sensitivity": "personal"}
+        elif c.type in ("date", "datetime"):
+            cols[c.name] = {"role": "date", "label": c.source_name}
+        elif "identifier" in c.hints:
+            cols[c.name] = {"role": "identifier", "label": c.source_name}
+        elif c.type in ("integer", "decimal") and "category" not in c.hints:
+            cols[c.name] = {"role": "measure", "label": c.source_name}
+        elif c.type in ("text", "boolean", "integer"):
+            cols[c.name] = {"role": "dimension", "label": c.source_name,
+                            "enumerable": "category" in c.hints}  # fmt: skip
+        else:
+            cols[c.name] = {"role": "ignore"}
+    return {"name": name, "description": "TODO what is this data and whose?",
+            "grain": "TODO what does one row stand for?", "currency": "", "columns": cols,
+            "exclusions": [], "glossary": {}, "metrics": {}, "examples": []}  # fmt: skip
 
 
 def load_manifest(path) -> Manifest:

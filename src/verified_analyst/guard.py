@@ -35,6 +35,14 @@ ALLOWED_RELATIONS = frozenset(
     {"analytics.sales_lines", "analytics.products", "analytics.customers", "analytics.invoices"}
 )
 
+
+def allowed_for(layer) -> frozenset[str]:
+    """The relations a layer's queries may read. The retail layer keeps the original set; any
+    other dataset may read its own table only, never another dataset's or the retail views."""
+    rel = layer.source.relation
+    return ALLOWED_RELATIONS if rel in ALLOWED_RELATIONS else frozenset({rel})
+
+
 _FORBIDDEN_NODE_NAMES = [
     "Insert", "Update", "Delete", "Merge", "Create", "Drop", "Alter", "AlterColumn",
     "Command", "Copy", "Set", "SetItem", "Use", "Grant", "Revoke", "Transaction", "Commit",

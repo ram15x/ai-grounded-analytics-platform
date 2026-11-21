@@ -22,7 +22,7 @@ from .claims import AnswerDoc, PassageRef, TemplateAnswer
 from .compiler import CompileError, compile_query
 from .config import ConfigError, admin_database_url, connect_kwargs, readonly_database_url
 from .documents.store import DocumentError
-from .guard import GuardError, QueryTimeout, execute_guarded
+from .guard import GuardError, QueryTimeout, allowed_for, execute_guarded
 from .llm.live import redact
 from .llm.types import LLMError
 from .semantic import SemanticError, load_semantic_layer
@@ -33,7 +33,7 @@ from .verifier import ExecutedQuery, Report, verify_answer
 def _execute(layer, readonly_url: str, spec) -> ExecutedQuery:
     if spec.metric_query is not None:
         cq = compile_query(layer, spec.metric_query)
-        res = execute_guarded(readonly_url, cq.sql)
+        res = execute_guarded(readonly_url, cq.sql, allowed_relations=allowed_for(layer))
         return ExecutedQuery(spec.id, cq.sql, res.columns, res.rows, metric_query=spec.metric_query)
     res = execute_guarded(readonly_url, spec.sql)
     return ExecutedQuery(
@@ -48,9 +48,8 @@ def catalogue(layer, readonly_url: str) -> dict[str, set[str]]:
         if dim.enumerable and dim.type == "text":
             src = f"{layer.source.relation} AS {layer.source.alias}"
             sql = f"SELECT DISTINCT {dim.column} AS v FROM {src}"
-            out[name] = {
-                str(r[0]) for r in execute_guarded(readonly_url, sql).rows if r[0] is not None
-            }
+            rows = execute_guarded(readonly_url, sql, allowed_relations=allowed_for(layer)).rows
+            out[name] = {str(r[0]) for r in rows if r[0] is not None}
     return out
 
 
@@ -67,7 +66,7 @@ def run_verify(path: Path, readonly_url: str) -> Report | TemplateReport:
 
     def shadow(mq):
         cq = compile_query(layer, mq)
-        res = execute_guarded(readonly_url, cq.sql)
+        res = execute_guarded(readonly_url, cq.sql, allowed_relations=allowed_for(layer))
         return ExecutedQuery("shadow", cq.sql, res.columns, res.rows, metric_query=mq)
 
     known = catalogue(layer, readonly_url)
@@ -715,6 +714,21 @@ def build_parser() -> argparse.ArgumentParser:
     dpf.add_argument("--sheet", default="0", help="XLSX sheet name or number")
     dpf.add_argument("--out", help="write profile.json and profile.md into this folder")
     dpf.set_defaults(fn=cmd_dataset_profile)
+    dtp = ds_sub.add_parser("template", help="write a manifest to fill in, from the profile")
+    dtp.add_argument("file")
+    dtp.add_argument("--name", required=True, help="dataset name: lower-case letters, digits, _")
+    dtp.add_argument("--out", required=True, help="manifest.yaml to write")
+    dtp.add_argument("--sheet", default="0")
+    dtp.set_defaults(fn=cmd_dataset_template)
+    dld = ds_sub.add_parser(
+        "load", help="load the table, check your known figures, write the layer"
+    )
+    dld.add_argument("file")
+    dld.add_argument("--manifest", required=True)
+    dld.add_argument("--sheet", default="0")
+    dld.add_argument("--readonly-role", default="va_readonly")
+    dld.add_argument("--out-dir", default="data/datasets")
+    dld.set_defaults(fn=cmd_dataset_load)
 
     ak = sub.add_parser("ask", help="answer one question (replay of recorded replies, or live)")
     ak.add_argument("question")
@@ -1082,6 +1096,62 @@ def cmd_dataset_profile(args: argparse.Namespace) -> int:
         )
         (out / "profile.md").write_text(md, encoding="utf-8")
         print(f"wrote {out}")
+    return 0
+
+
+def cmd_dataset_template(args: argparse.Namespace) -> int:
+    import yaml  # noqa: PLC0415
+
+    from .datasets import manifest as dm  # noqa: PLC0415
+    from .datasets import profile as dp  # noqa: PLC0415
+
+    sheet: str | int = int(args.sheet) if str(args.sheet).isdigit() else args.sheet
+    try:
+        prof = dp.profile_file(Path(args.file), sheet)
+        data = dm.skeleton(prof, args.name)
+        dm.Manifest.model_construct(**data)  # shape only; the TODO text is refused at load time
+    except (dp.ProfileError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    out = Path(args.out)
+    out.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    print(f"wrote {out}. Replace the TODOs, check every role, add metrics, then va dataset load.")
+    return 0
+
+
+def cmd_dataset_load(args: argparse.Namespace) -> int:
+    import yaml  # noqa: PLC0415
+
+    from .datasets import load as dl  # noqa: PLC0415
+    from .datasets import manifest as dm  # noqa: PLC0415
+    from .datasets import profile as dp  # noqa: PLC0415
+
+    sheet: str | int = int(args.sheet) if str(args.sheet).isdigit() else args.sheet
+    try:
+        man = dm.load_manifest(Path(args.manifest))
+        df = dp.read_table(Path(args.file), sheet)
+        prof = dp.profile_frame(df, Path(args.file).name)
+        layer = dm.build_layer(man, prof)  # refuses an unsafe or inconsistent manifest
+        info = dl.load_dataset(df, prof, man, admin_database_url(), args.readonly_role)
+        rec = dl.reconcile(man, prof, admin_database_url())
+        dl.check_reconciliation(rec)
+    except (dm.ManifestError, dp.ProfileError, dl.LoadError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    out = Path(args.out_dir) / man.name
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "layer.yaml").write_text(
+        yaml.safe_dump(json.loads(layer.model_dump_json()), sort_keys=False), encoding="utf-8"
+    )
+    (out / "profile.json").write_text(json.dumps(prof.as_dict(), indent=1, default=str), "utf-8")
+    (out / "manifest.yaml").write_text(Path(args.manifest).read_text("utf-8"), encoding="utf-8")
+    unchecked = [k for k, s in man.metrics.items() if s.status == "approved" and not s.known]
+    print(f"loaded {info['rows']} rows into {info['relation']}; not loaded: {info['not_loaded']}")
+    print(f"approved metrics: {sorted(layer.metrics)}")
+    print(f"known-figure checks passed: {sum(1 for r in rec if r['ok'])} of {len(rec)}")
+    if unchecked:
+        print(f"WARNING approved without a known figure to check against: {unchecked}")
+    print(f"layer written to {out / 'layer.yaml'} (use it with VA_SEMANTIC_PATH)")
     return 0
 
 

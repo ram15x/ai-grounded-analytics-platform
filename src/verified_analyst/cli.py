@@ -256,6 +256,7 @@ def cmd_docs_binder_study(args: argparse.Namespace) -> int:
 
     cases = bs.dev_cases()
     print(bs.render(bs.dev_table(cases), "dev", cases))
+    print(bs.render_changes(bs.verdict_changes(cases, bs.CURRENT, bs.DEFAULT)))
     return 0
 
 

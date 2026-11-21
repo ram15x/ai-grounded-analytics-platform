@@ -151,3 +151,26 @@ def test_sample_11_shows_the_known_limit_and_the_fixed_samples_do_not(warehouse)
         assert "scope_not_in_query" not in reasons(name)
     raw = (EXAMPLES / "11_known_limit_share_of_global_total.json").read_text()
     assert "KNOWN LIMIT" in raw and "The UK is 59.6%" in raw
+
+
+@pytest.mark.db
+def test_the_binder_default_change_moves_no_verdict_of_the_shipped_samples(warehouse, monkeypatch):
+    """ADR-0012: the samples carry no passage claim, so the binder is never consulted; verified by
+    running all of them under the old rule (`current`) and under the shipped default."""
+    import functools
+
+    from verified_analyst import verifier
+    from verified_analyst.documents.binding import CURRENT, DEFAULT, check_binding
+
+    def run_all(cfg):
+        monkeypatch.setattr(verifier, "check_binding", functools.partial(check_binding, cfg=cfg))
+        out = {}
+        for path in sorted(EXAMPLES.glob("*.json")):
+            r = run_verify(path, warehouse.readonly_url)
+            verdicts = r.report.verdicts if hasattr(r, "report") else r.verdicts
+            out[path.name] = (r.status, [(v.claim_id, v.verdict, v.reason) for v in verdicts])
+        return out
+
+    old, new = run_all(CURRENT), run_all(DEFAULT)
+    assert len(old) == 11 and old == new
+    assert not any("passage" in p.read_text().lower() for p in EXAMPLES.glob("*.json"))

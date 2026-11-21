@@ -31,7 +31,7 @@ from typing import Any
 
 from ..context import sentence_span
 from ..extract import extract_numbers
-from .binding import _STOP, DEFAULT, BinderConfig, check_binding, content, stem
+from .binding import _STOP, CURRENT, DEFAULT, BinderConfig, check_binding, content, stem
 from .chunker import chunk_text
 from .untrusted import blocked_overlap
 
@@ -182,6 +182,33 @@ def _kn(bad: list[Case], pool: list[Case], style: str) -> dict[str, int]:
     return {"k": sum(c.style == style for c in bad), "n": sum(c.style == style for c in pool)}
 
 
+def verdict_changes(cases: list[Case], old: BinderConfig, new: BinderConfig) -> dict[str, Any]:
+    """Case by case: how many verdicts differ between two rules, by case kind. A correct case
+    refused is a false reject, a swapped case accepted is a false accept."""
+    out: dict[str, Any] = {"old": old.name, "new": new.name, "kinds": {}}
+    for kind in ("correct", *SWAP_KINDS):
+        pool = [c for c in cases if c.kind == kind]
+        a = [judge(c, old) for c in pool]
+        b = [judge(c, new) for c in pool]
+        out["kinds"][kind] = {
+            "n": len(pool),
+            "unchanged": sum(x == y for x, y in zip(a, b, strict=True)),
+            "accepted_to_refused": sum(x and not y for x, y in zip(a, b, strict=True)),
+            "refused_to_accepted": sum(y and not x for x, y in zip(a, b, strict=True)),
+        }
+    return out
+
+
+def render_changes(ch: dict[str, Any]) -> str:
+    lines = [f"Verdict changes, {ch['old']} -> {ch['new']} (case by case):"]
+    for k, v in ch["kinds"].items():
+        lines.append(
+            f"  {k:15} n={v['n']:<5} unchanged {v['unchanged']:<5} accepted->refused "
+            f"{v['accepted_to_refused']:<5} refused->accepted {v['refused_to_accepted']}"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def variants() -> list[BinderConfig]:
     out = []
     for skip in (False, True):
@@ -209,9 +236,10 @@ def render(rows: list[dict[str, Any]], half: str, cases: list[Case]) -> str:
     lines = [
         f"Binder study, {half} half: {docs} documents, "
         + ", ".join(f"{k} cases {v}" for k, v in sorted(kinds.items())),
-        "Synthetic corpus, generated labels; counts, not a benchmark. DEFAULT is the shipped rule"
-        f" ({DEFAULT.name}). Correct cases take their label from the number's own sentence, so a"
-        " sentence-scoped rule passes them almost by construction: read its false rejects as a",
+        "Synthetic corpus, generated labels; counts, not a benchmark. The shipped rule is S2"
+        f" ({DEFAULT.name}); `current` is the rule before ADR-0012. Correct cases take their label"
+        " from the number's own sentence, so a sentence-scoped rule passes them almost by"
+        " construction: read its false rejects as a",
         "floor, not as robustness to real wording.",
         "",
         f"{'variant':40} {'false reject (correct)':>22} {'false accept (swapped)':>22}"
@@ -223,7 +251,7 @@ def render(rows: list[dict[str, Any]], half: str, cases: list[Case]) -> str:
         styles = " ".join(
             f"{s[:4]} {v['k']}/{v['n']}" for s, v in r["false_reject_by_style"].items()
         )
-        mark = " *" if r["variant"] == DEFAULT.name else ""
+        mark = " * shipped" if r["variant"] == DEFAULT.name else ""
         sp, od = k["same_passage"], k["other_document"]
         lines.append(
             f"{r['variant'] + mark:40} {fr['k']:>4} of {fr['n']:<4} (n={fr['n']})"
@@ -233,4 +261,4 @@ def render(rows: list[dict[str, Any]], half: str, cases: list[Case]) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["stem"]
+__all__ = ["CURRENT", "stem"]

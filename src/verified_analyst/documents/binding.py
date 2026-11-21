@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
+from dataclasses import dataclass
 
 WINDOW = 6
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
@@ -47,9 +49,93 @@ def content(text: str) -> set[str]:
     return {stem(w) for w in _WORD.findall(text) if w.lower() not in _STOP and len(w) > 1}
 
 
-def _window_words(text: str, start: int, end: int) -> set[str]:
-    before = _WORD.findall(text[:start])[-WINDOW:]
-    after = _WORD.findall(text[end:])[:WINDOW]
+_PREPS = frozenset(["for", "of", "to", "in", "on", "at", "by", "with", "within", "from"])
+
+
+@dataclass(frozen=True)
+class BinderConfig:
+    """R1 variants measured in documents/binder_study.py. DEFAULT is the shipped rule.
+
+    frac: share of the label words that the passage uses that must sit in the window (1.0: all).
+    window: words either side of the number.
+    ignore_repeated: label words that occur twice or more in the passage do not count as required.
+    head_noun: if the label's head noun is used by the passage it must be in the window; the
+        other label words then only need one of them in the window."""
+
+    frac: float = 1.0
+    window: int = WINDOW
+    ignore_repeated: bool = False
+    head_noun: bool = False
+    skip_units: bool = (
+        False  # unit and quantity words ("days", "units", "percent") are not evidence
+    )
+
+    @property
+    def name(self) -> str:
+        tail = "/skip_units" if self.skip_units else ""
+        if self.head_noun:
+            return f"head_noun/w{self.window}{tail}"
+        return (
+            f"frac{self.frac:g}/w{self.window}"
+            + ("/ignore_repeated" if self.ignore_repeated else "")
+            + tail
+        )
+
+
+DEFAULT = BinderConfig()
+UNIT_WORDS = frozenset(
+    [
+        "day",
+        "week",
+        "month",
+        "year",
+        "hour",
+        "minute",
+        "second",
+        "unit",
+        "percent",
+        "pound",
+        "gbp",
+        "working",
+        "per",
+        "cent",
+    ]
+)
+
+
+def head_of(label: str) -> str | None:
+    """Last content word of the label before its first preposition ("time limit for claiming a
+    late parcel" gives "limit"), as a stem; None if there is none."""
+    words = _WORD.findall(label)
+    for i, w in enumerate(words):
+        if w.lower() in _PREPS and i > 0:
+            words = words[:i]
+            break
+    heads = [stem(w) for w in words if w.lower() not in _STOP and len(w) > 1]
+    return heads[-1] if heads else None
+
+
+def _r1_ok(label: str, passage: str, start: int, end: int, cfg: BinderConfig) -> bool:
+    want = content(label)
+    if cfg.skip_units:
+        want -= {stem(w) for w in UNIT_WORDS}
+    near = _window_words(passage, start, end, cfg.window)
+    if not want & near:
+        return False
+    counts = Counter(stem(w) for w in _WORD.findall(passage) if w.lower() not in _STOP)
+    used = want & set(counts)
+    if cfg.head_noun:
+        head = head_of(label)
+        return head not in used or head in near
+    required = {w for w in used if counts[w] < 2} if cfg.ignore_repeated else used
+    if not required:
+        return True
+    return len(required & near) / len(required) >= cfg.frac - 1e-9
+
+
+def _window_words(text: str, start: int, end: int, window: int = WINDOW) -> set[str]:
+    before = _WORD.findall(text[:start])[-window:]
+    after = _WORD.findall(text[end:])[:window]
     return content(" ".join([*before, *after]))
 
 
@@ -67,17 +153,16 @@ def entities(sentence: str) -> set[str]:
 
 
 def check_binding(
-    label: str, sentence: str, passage: str, start: int, end: int
+    label: str, sentence: str, passage: str, start: int, end: int, cfg: BinderConfig = DEFAULT
 ) -> tuple[str, str] | None:
     """None when bound; otherwise (reason, detail)."""
     want = content(label)
     if not want:
         return "label_empty", ""
-    near = _window_words(passage, start, end)
-    # label words the passage uses must sit by the number (words it never uses are paraphrase)
-    used = want & content(passage)
-    if not want & near or used - near:
-        return "label_not_in_passage_window", ",".join(sorted(used - near or want))
+    if not _r1_ok(label, passage, start, end, cfg):
+        near = _window_words(passage, start, end, cfg.window)
+        used = want & content(passage)
+        return "label_not_in_passage_window", ",".join(sorted((used - near) or want))
     if not want & content(sentence):
         return "label_not_in_sentence", ",".join(sorted(want))
     missing = entities(sentence) - content(passage) - want

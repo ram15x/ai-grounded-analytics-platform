@@ -131,6 +131,8 @@ def _json(text: str) -> Any:
     return json.loads(text)
 
 
+REPLY_CHARS = 300  # how much of a reply that failed is kept in an event, for the probe reports
+
 REJECTED_TEXT = "the provider rejected the answer as invalid JSON (it did not parse)"
 TYPED_DIGIT_CODES = {"digit_outside_placeholder", "digits_in_unrecognised_form", "non_ascii_digit"}
 
@@ -241,6 +243,7 @@ def run_question(
                 ev["schema_ok"] = True
             except (ValueError, ValidationError) as exc:
                 plan, err = None, f"plan is not valid ({str(exc).splitlines()[0][:200]})"
+                ev["reply"], ev["error"] = got.text[:REPLY_CHARS], schema_problems(exc)
             else:
                 err = None
             if plan is not None and plan.abstain:
@@ -296,6 +299,7 @@ def run_question(
             )
         except (ValueError, ValidationError) as exc:
             problems = schema_problems(exc)
+            cev["reply"], cev["error"] = got.text[:REPLY_CHARS], problems
             result.attempts.append(Attempt(kind, "schema_failure", problems=problems))
         else:
             cev["schema_ok"] = True

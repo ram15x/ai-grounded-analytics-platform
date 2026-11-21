@@ -129,6 +129,24 @@ def got_route(res: QuestionRun) -> str:
     return "none"
 
 
+def step_details(res: QuestionRun) -> list[dict[str, Any]]:
+    """Every step whose reply did not validate: the reply (cut) and the field-level errors."""
+    return [
+        {"step": e["step"], "reply": e["reply"], "errors": e["error"]}
+        for e in res.events
+        if e.get("error")
+    ]
+
+
+def http_problems(counting: live.CountingTransport, since: int) -> list[dict[str, Any]]:
+    """Non-2xx responses and transport errors since request number `since` (bodies redacted)."""
+    return [
+        {"seq": e.seq, "status": e.status, "error": e.error, "body": e.error_body}
+        for e in counting.events[since:]
+        if e.status is None or not 200 <= e.status < 300
+    ]
+
+
 def _counts(items: list[str]) -> dict[str, int]:
     out: dict[str, int] = {}
     for i in items:
@@ -283,6 +301,19 @@ def render_report(rep: dict[str, Any]) -> str:
             f"- latency over successful calls (n={acc['latency_n']}): p50 "
             f"{acc['latency_ms_p50']} ms, p95 {acc['latency_ms_p95']} ms",
         ]
+    bad = [q for q in [*rep["router_questions"], *inj["questions"]]
+           if q["steps_not_valid"] or q["http_problems"]]  # fmt: skip
+    if bad:
+        lines += ["", "## Steps that were not valid, and HTTP problems (per question)"]
+    for q in bad:
+        lines.append(f"- {q['id']}:")
+        for st in q["steps_not_valid"]:
+            lines.append(f"  - {st['step']} reply {st['reply']!r}")
+            lines += [f"    - {err}" for err in st["errors"]]
+        for h in q["http_problems"]:
+            lines.append(
+                f"  - HTTP #{h['seq']} status {h['status']} {h['error'] or ''} {h['body'] or ''}"
+            )
     lines += ["", "Outcomes (not an accuracy figure): "
               + json.dumps(rep["outcomes_not_accuracy"], sort_keys=True)]  # fmt: skip
     lines += ["", "No accuracy claim is made here. Labels are the author's."]
@@ -341,6 +372,7 @@ def run_route_probe(
                 break
             run = router.new_run(q["id"], token_cap=s.probe.token_cap - used)
             first_reply = len(tap.replies)
+            first_http = len(counting.events)
             try:
                 if which == "router" and opts.route_only:
                     route, events, why = decide_route(
@@ -373,6 +405,8 @@ def run_route_probe(
                     "id": q["id"], "expected": q["route"], "got": got_route(res),
                     "outcome": "" if res.outcome == "route_only" else res.outcome,
                     "reason": res.reason, "route_failed": res.reason == "route_failed",
+                    "steps_not_valid": step_details(res),
+                    "http_problems": http_problems(counting, first_http),
                 })  # fmt: skip
             else:
                 found = sorted({m for t in texts for m in markers_in(t, q["markers"])})
@@ -382,6 +416,8 @@ def run_route_probe(
                     "reason": res.reason, "model_replies": len(texts),
                     "replies_with_marker": sum(bool(markers_in(t, q["markers"])) for t in texts),
                     "markers_found": found, "verified_with_marker": bool(shown),
+                    "steps_not_valid": step_details(res),
+                    "http_problems": http_problems(counting, first_http),
                 })  # fmt: skip
             if res.outcome == "abstain" and res.reason == "budget":
                 stop = "token cap reached mid-question"

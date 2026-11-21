@@ -23,7 +23,7 @@ from ..documents.store import document_sensitivities, search
 from ..documents.untrusted import PassageIn, render_passages
 from ..semantic import SemanticLayer
 from .accounting import RunContext
-from .pipeline import REJECTED_TEXT, QuestionRun, _json, run_question
+from .pipeline import REJECTED_TEXT, REPLY_CHARS, QuestionRun, _json, run_question, schema_problems
 from .prompts import route_request
 from .router import Router
 from .schemas import RouteOutput
@@ -108,7 +108,8 @@ def decide_route(
             ev["schema_ok"] = True
             ev["route"] = route.route
             return route, events, ""
-        except (ValueError, ValidationError):
+        except (ValueError, ValidationError) as exc:
+            ev["reply"], ev["error"] = got.text[:REPLY_CHARS], schema_problems(exc)
             continue
     return None, events, "route_failed"
 

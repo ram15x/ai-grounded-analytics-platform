@@ -37,8 +37,8 @@ class Model:
     """A scripted model behind mocked HTTP: routes by the author's labels (or a fixed route),
     plans one query, composes from cells and says nothing for passages unless told to repeat."""
 
-    def __init__(self, route=None, repeat=None, statuses=None):
-        self.route, self.repeat = route, repeat
+    def __init__(self, route=None, repeat=None, statuses=None, route_reply=None):
+        self.route, self.repeat, self.route_reply = route, repeat, route_reply
         self.statuses = list(statuses or [])
         self.requests: list[dict] = []
 
@@ -54,6 +54,8 @@ class Model:
         if system.startswith("You decide which source"):
             r = self.route or ROUTE_OF[question]
             reply = {"route": r, **({"reason": "ambiguous"} if r == "abstain" else {})}
+            if self.route_reply is not None:
+                reply = self.route_reply(question, user)
         elif system.startswith("You turn one business question"):
             reply = PLAN
         elif "Passages:" in user:
@@ -238,3 +240,37 @@ def test_only_route_probe_names_the_router_question_directory():
         p.name for p in (ROOT / "src").rglob("*.py") if "router_questions" in p.read_text("utf-8")
     ]
     assert users == ["route_probe.py"]
+
+
+# ---- report detail for steps that were not valid ----
+
+
+@pytest.mark.db
+def test_an_invalid_route_reply_is_reported_with_the_reply_and_the_field_errors(env, tmp_path):
+    bad = {"route": "documents", "reason": "it is a policy question"}
+    m = Model(route_reply=lambda q, user: bad)
+    out = probe(env, m, tmp_path, route_only=True)
+    row = out["report"]["router_questions"][0]
+    assert row["got"] == "invalid" and len(row["steps_not_valid"]) == 2
+    st = row["steps_not_valid"][0]
+    assert st["step"] == "route" and "it is a policy question" in st["reply"]
+    assert any("reason" in e or "route" in e for e in st["errors"])
+    assert "reply" in out["markdown"] and "it is a policy question" in out["markdown"]
+
+
+@pytest.mark.db
+def test_a_reply_is_cut_at_300_characters(env, tmp_path):
+    long = {"route": "documents", "reason": "x" * 1000}
+    out = probe(env, Model(route_reply=lambda q, u: long), tmp_path, route_only=True)
+    st = out["report"]["router_questions"][0]["steps_not_valid"][0]
+    assert len(st["reply"]) == 300
+
+
+@pytest.mark.db
+def test_a_non_2xx_response_is_reported_redacted_per_question(env, tmp_path):
+    body = ('{"error": {"message": "overloaded ' + KEYS["GROQ_API_KEY"] + '"}}').encode()
+    m = Model(statuses=[status(503, body=body)])
+    out = probe(env, m, tmp_path, route_only=True)
+    problems = out["report"]["router_questions"][0]["http_problems"]
+    assert problems and problems[0]["status"] == 503 and "overloaded" in problems[0]["body"]
+    assert KEYS["GROQ_API_KEY"] not in json.dumps(out["report"])

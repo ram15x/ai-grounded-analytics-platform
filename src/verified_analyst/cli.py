@@ -717,6 +717,15 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--runs", default="demo/results.json", help="JSON list of question runs")
     rd.add_argument("--out", default="data/reports/draft.json")
     rd.set_defaults(fn=cmd_report_draft)
+    rr = rp_sub.add_parser("run", help="answer a question list, write a pending draft (for cron)")
+    rr.add_argument("--title", required=True)
+    rr.add_argument("--questions", default="demo/weekly_questions.json")
+    rr.add_argument("--out", default="data/reports/draft.json")
+    rr.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
+    rr.add_argument("--provider")
+    rr.add_argument("--model")
+    rr.add_argument("--trace-dir", default="data/traces")
+    rr.set_defaults(fn=cmd_report_run)
     ra = rp_sub.add_parser("approve", help="approve a draft by its digest; writes the .md file")
     ra.add_argument("--draft", default="data/reports/draft.json")
     ra.add_argument("--who", required=True)
@@ -803,12 +812,10 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def cmd_ask(args: argparse.Namespace) -> int:
-    import json as _json  # noqa: PLC0415
-    from datetime import UTC, datetime  # noqa: PLC0415
-
+def _ask_setup(args: argparse.Namespace):
+    """Shared by `va ask` and `va report run`: layer, url, router, retriever, known values."""
     from .llm import route_probe  # noqa: PLC0415
-    from .llm.answer import answer_question, make_retriever  # noqa: PLC0415
+    from .llm.answer import make_retriever  # noqa: PLC0415
     from .llm.providers import build_one  # noqa: PLC0415
     from .llm.replay import ReplayProvider  # noqa: PLC0415
     from .llm.router import Router  # noqa: PLC0415
@@ -821,7 +828,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
         name, provider = "groq", ReplayProvider.from_file(Path(args.replay))
         s = base
         s.tasks = {t: [name] for t in ("route", "plan", "compose", "repair")}
-        router = Router(s, {name: provider}, sleep=lambda _x: None)
+
+        def make_router():
+            return Router(s, {name: provider}, sleep=lambda _x: None)
     else:
         if not (args.provider and args.model):
             raise SystemExit("give --replay, or --provider and --model for a live call")
@@ -830,13 +839,32 @@ def cmd_ask(args: argparse.Namespace) -> int:
         for rel in (layer.source.relation, "docs.public"):
             if s.sensitivity_of((rel,)) != "public":
                 raise SystemExit(f"refusing: {rel} is not tagged public in router.yaml")
-        router = Router(s, {args.provider: build_one(s, args.provider, env=os.environ)})
-    run = router.new_run("ask", token_cap=s.probe.token_cap)
-    res = answer_question(
-        args.question, layer=layer, readonly_url=url, router=router, run=run,
-        retrieve=route_probe.public_only(make_retriever(url, k=3)),
-        corpus_description=route_probe.CORPUS_DESCRIPTION, known_values=catalogue(layer, url),
+
+        def make_router():
+            return Router(s, {args.provider: build_one(s, args.provider, env=os.environ)})
+
+    retrieve = route_probe.public_only(make_retriever(url, k=3))
+    return layer, url, s, make_router, retrieve, catalogue(layer, url)
+
+
+def _ask_one(question: str, qid: str, setup):
+    from .llm import route_probe  # noqa: PLC0415
+    from .llm.answer import answer_question  # noqa: PLC0415
+
+    layer, url, s, make_router, retrieve, known = setup
+    router = make_router()  # a fresh router per question: one question's failures do not carry over
+    run = router.new_run(qid, token_cap=s.probe.token_cap)
+    return answer_question(
+        question, layer=layer, readonly_url=url, router=router, run=run, retrieve=retrieve,
+        corpus_description=route_probe.CORPUS_DESCRIPTION, known_values=known,
     )  # fmt: skip
+
+
+def cmd_ask(args: argparse.Namespace) -> int:
+    import json as _json  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    res = _ask_one(args.question, "ask", _ask_setup(args))
     rec = {"asked_at": datetime.now(UTC).isoformat(), "mode": "replay" if args.replay else "live",
            **res.as_dict()}  # fmt: skip
     out = Path(args.trace_dir)
@@ -846,6 +874,30 @@ def cmd_ask(args: argparse.Namespace) -> int:
     print(res.render_md())
     print(f"trace: {path}")
     return 0 if res.outcome != "abstain" else 1
+
+
+def cmd_report_run(args: argparse.Namespace) -> int:
+    """Answer a fixed list of questions and write a PENDING draft. A person approves it later."""
+    import json as _json  # noqa: PLC0415
+
+    from . import reports  # noqa: PLC0415
+
+    qs = _json.loads(Path(args.questions).read_text(encoding="utf-8"))
+    setup = _ask_setup(args)
+    runs = []
+    for i, q in enumerate(qs, 1):
+        d = _ask_one(q, f"report-{i}", setup).as_dict()
+        d["id"] = f"Q{i:02d}"
+        if d["reason"] == "provider_error" and args.replay:
+            d["outcome"], d["reason"] = "not_recorded", "no_recording"
+        runs.append(d)
+    rep = reports.draft(args.title, runs)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_json.dumps(rep, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(f"{len(rep['sections'])} verified, {len(rep['withheld'])} withheld. Draft: {out}")
+    print(f"pending approval. digest {rep['digest']}")
+    return 0
 
 
 def cmd_report_draft(args: argparse.Namespace) -> int:

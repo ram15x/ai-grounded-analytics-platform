@@ -20,6 +20,8 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
+from ..context import sentence_span
+
 WINDOW = 6
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
 _STOP = frozenset(
@@ -69,10 +71,17 @@ class BinderConfig:
     skip_units: bool = (
         False  # unit and quantity words ("days", "units", "percent") are not evidence
     )
+    scope: str = "window"  # "window": words near the number; "sentence": the number's sentence
+    nearest: bool = False  # sentence scope: with several numbers in the sentence, the cited one
+    # must be the number closest to a matched label word, or within `window` words of one
 
     @property
     def name(self) -> str:
         tail = "/skip_units" if self.skip_units else ""
+        if self.scope == "sentence":
+            return f"sent/frac{self.frac:g}{tail}" + (
+                f"/nearest/w{self.window}" if self.nearest else ""
+            )
         if self.head_noun:
             return f"head_noun/w{self.window}{tail}"
         return (
@@ -115,10 +124,50 @@ def head_of(label: str) -> str | None:
     return heads[-1] if heads else None
 
 
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z'-]*|\d[\d,.]*")
+
+
+def _nearest_ok(want: set[str], sentence: str, start: int, end: int, window: int) -> bool:
+    """With several numbers in the sentence: some matched label word has the cited number as its
+    closest number, or sits within `window` tokens of it. One number: always true."""
+    toks = list(_TOKEN.finditer(sentence))
+    nums = [i for i, m in enumerate(toks) if m.group(0)[0].isdigit()]
+    if len(nums) < 2:
+        return True
+    cited = [i for i in nums if toks[i].start() < end and toks[i].end() > start]
+    if not cited:
+        return False
+    c = cited[0]
+    for i, m in enumerate(toks):
+        if m.group(0)[0].isdigit() or stem(m.group(0)) not in want:
+            continue
+        if abs(i - c) <= window or min(nums, key=lambda n: (abs(n - i), n)) == c:
+            return True
+        if abs(i - c) == min(abs(n - i) for n in nums):
+            return True
+    return False
+
+
+def _sentence_ok(
+    label: str, want: set[str], passage: str, start: int, end: int, cfg: BinderConfig
+) -> bool:
+    a, b = sentence_span(passage, start, end)
+    sent = passage[a:b]
+    inside = want & content(sent)
+    if not inside:
+        return False
+    used = want & content(passage)
+    if len(inside) / len(used) < cfg.frac - 1e-9:
+        return False
+    return not cfg.nearest or _nearest_ok(want, sent, start - a, end - a, cfg.window)
+
+
 def _r1_ok(label: str, passage: str, start: int, end: int, cfg: BinderConfig) -> bool:
     want = content(label)
     if cfg.skip_units:
         want -= {stem(w) for w in UNIT_WORDS}
+    if cfg.scope == "sentence":
+        return _sentence_ok(label, want, passage, start, end, cfg)
     near = _window_words(passage, start, end, cfg.window)
     if not want & near:
         return False

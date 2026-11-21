@@ -188,6 +188,10 @@ def variants() -> list[BinderConfig]:
         out += [BinderConfig(f, w, ig, False, skip) for ig in (False, True)
                 for f in (1.0, 0.75, 0.6, 0.5) for w in (6, 8, 10)]  # fmt: skip
         out += [BinderConfig(1.0, w, False, True, skip) for w in (6, 8, 10)]
+    for skip in (False, True):
+        for f in (1.0, 0.75):
+            out.append(BinderConfig(f, 6, False, False, skip, "sentence", False))
+            out += [BinderConfig(f, w, False, False, skip, "sentence", True) for w in (6, 8)]
     return out
 
 
@@ -206,19 +210,25 @@ def render(rows: list[dict[str, Any]], half: str, cases: list[Case]) -> str:
         f"Binder study, {half} half: {docs} documents, "
         + ", ".join(f"{k} cases {v}" for k, v in sorted(kinds.items())),
         "Synthetic corpus, generated labels; counts, not a benchmark. DEFAULT is the shipped rule"
-        f" ({DEFAULT.name}).",
+        f" ({DEFAULT.name}). Correct cases take their label from the number's own sentence, so a"
+        " sentence-scoped rule passes them almost by construction: read its false rejects as a",
+        "floor, not as robustness to real wording.",
         "",
-        f"{'variant':38} {'false reject (correct)':>24} {'false accept (swapped)':>24}  by style",
+        f"{'variant':40} {'false reject (correct)':>22} {'false accept (swapped)':>22}"
+        f"  {'FA same passage':>16} {'FA other doc':>14}  FR by style",
     ]
     for r in rows:
         fr, fa = r["false_reject"], r["false_accept"]
+        k = r["false_accept_by_kind"]
         styles = " ".join(
             f"{s[:4]} {v['k']}/{v['n']}" for s, v in r["false_reject_by_style"].items()
         )
         mark = " *" if r["variant"] == DEFAULT.name else ""
+        sp, od = k["same_passage"], k["other_document"]
         lines.append(
-            f"{r['variant'] + mark:32} {fr['k']:>4} of {fr['n']:<5} (n={fr['n']})"
-            f" {fa['k']:>4} of {fa['n']:<5} (n={fa['n']})  {styles}"
+            f"{r['variant'] + mark:40} {fr['k']:>4} of {fr['n']:<4} (n={fr['n']})"
+            f" {fa['k']:>4} of {fa['n']:<4} (n={fa['n']})"
+            f"  {sp['k']:>4} of {sp['n']:<4} {od['k']:>4} of {od['n']:<4}  {styles}"
         )
     return "\n".join(lines) + "\n"
 

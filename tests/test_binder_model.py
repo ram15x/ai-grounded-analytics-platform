@@ -155,7 +155,8 @@ def _locked_kw(tmp_path, labels, d, **over):
     return kw
 
 
-def test_locked_run_needs_the_adr_and_labels_committed_and_runs_once(tmp_path):
+def test_locked_run_needs_the_adr_and_labels_committed_and_runs_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(bm, "MIN_CLAIMS", 5)  # the invented corpus is small
     d = corpus(tmp_path, 4)
     gen = bm.generate_labels(fake_labeler(), bm.select_sentences(d, hostile=[], target=100))
     labels = tmp_path / "labels.yaml"
@@ -289,3 +290,57 @@ def test_the_request_cap_also_leaves_the_generation_unspent_and_resumable(tmp_pa
     out = bm.run_generation(cfg, **_gen_kw(tmp_path, d, _transport(sent)))
     assert not out["complete"] and len(sent) == 2 and _ledger(tmp_path) == []
     assert out["meta"]["batches_answered"] == 2 and out["meta"]["stopped"]
+
+
+def test_locked_refuses_with_the_count_when_fewer_than_40_labels_are_usable(tmp_path):
+    d = corpus(tmp_path, 4)
+    gen = bm.generate_labels(fake_labeler(), bm.select_sentences(d, hostile=[], target=100))
+    labels = tmp_path / "labels.yaml"
+    bm.write_labels(labels, gen, {})
+    n = bm.usable_labels(bm.load_claims(labels, d))
+    assert 0 < n < bm.MIN_CLAIMS == 40
+    with pytest.raises(DocumentError, match=rf"only {n} usable labels.*at least 40"):
+        bm.run_locked(**_locked_kw(tmp_path, labels, d, root=tmp_path,
+                                   adr_path=_copy(ADR, tmp_path)))  # fmt: skip
+    assert not (tmp_path / "l.jsonl").exists()  # nothing scored, nothing spent
+
+
+def test_the_generator_reports_usable_labels_and_the_effort_per_batch(tmp_path):
+    d = corpus(tmp_path, 6)
+    cfg = settings(datasets={"docs.public": "public"})
+    cfg.providers["groq"].reasoning_effort = "low"
+    cfg.providers["groq"].models = {"default": "openai/gpt-oss-20b"}
+    sent = []
+    kw = _gen_kw(tmp_path, d, _transport(sent))
+    out = bm.run_generation(cfg, **{**kw, "model": "openai/gpt-oss-20b"})
+    m = out["meta"]
+    assert {b["reasoning_effort"] for b in m["batch_efforts"]} == {"low"}
+    assert {r.get("reasoning_effort") for r in sent} == {"low"}  # what the report says was sent
+    assert (
+        len(m["batch_efforts"]) == m["batches_total"] and m["reasoning_effort_configured"] == "low"
+    )
+    assert out["usable_labels"] == m["usable_labels"] == m["claims"]
+    assert "reasoning_effort sent: low" in out["markdown"]
+    assert "usable labels:" in out["markdown"] and "at least 40" in out["markdown"]
+    assert yaml.safe_load((tmp_path / "labels.yaml").read_text())["meta"]["batch_efforts"]
+    assert out["meta"]["at"].endswith("+00:00") and out["meta"]["http_requests_sent"] == len(sent)
+
+
+def test_a_resumed_batch_keeps_its_recorded_effort_and_a_changed_effort_asks_again(tmp_path):
+    d = corpus(tmp_path, 8)
+    cfg = settings(datasets={"docs.public": "public"})
+    cfg.providers["groq"].reasoning_effort = "low"
+    cfg.providers["groq"].models = {"default": "openai/gpt-oss-20b"}
+    cfg.probe.max_requests = 1
+    kw = {**_gen_kw(tmp_path, d, _transport([])), "model": "openai/gpt-oss-20b"}
+    first = bm.run_generation(cfg, **kw)
+    assert not first["complete"] and first["meta"]["batch_efforts"][0]["reasoning_effort"] == "low"
+    cfg.providers[
+        "groq"
+    ].reasoning_effort = "medium"  # a later default: the old batch is not reused
+    cfg.probe.max_requests = 60
+    sent = []
+    second = bm.run_generation(cfg, **{**kw, "transport": _transport(sent)})
+    assert second["complete"] and second["meta"]["batches_answered_from_cassettes"] == 0
+    assert {b["reasoning_effort"] for b in second["meta"]["batch_efforts"]} == {"medium"}
+    assert len(sent) == second["meta"]["batches_total"]

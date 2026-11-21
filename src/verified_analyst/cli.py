@@ -283,6 +283,7 @@ def cmd_docs_binder_model(args: argparse.Namespace) -> int:
 
     try:
         if args.what == "labels":
+            from .llm import usage  # noqa: PLC0415
             from .llm.cassette import (  # noqa: PLC0415
                 CassetteContext,
                 layer_hash,
@@ -292,6 +293,12 @@ def cmd_docs_binder_model(args: argparse.Namespace) -> int:
             from .llm.live import redact  # noqa: PLC0415
             from .llm.settings import load_router_settings  # noqa: PLC0415
 
+            cfg_now = load_router_settings()
+            planned, left = bm.plan_generation(cfg_now, args.provider, args.model,
+                                               Path(args.out_dir or bm.WORK_DIR))  # fmt: skip
+            usage.start(cfg_now, args.provider, args.model, mode="binder-model-labels",
+                        questions=left, ceiling=planned, planned_override=planned,
+                        force=args.force)  # fmt: skip
             ctx = CassetteContext(layer_hash(), schema_hash(),
                                   warehouse_content_hash(readonly_database_url()))  # fmt: skip
             out = bm.run_generation(
@@ -303,6 +310,9 @@ def cmd_docs_binder_model(args: argparse.Namespace) -> int:
             )  # fmt: skip
             print(redact(out["markdown"], os.environ))
             print(f"files written to: {out['out_dir']}")
+            m = out["meta"]
+            print(f"usable labels: {out['usable_labels']} of {m['sentences_asked']} sentences "
+                  f"asked (the locked scoring needs at least {bm.MIN_CLAIMS})")  # fmt: skip
             if not out["complete"]:
                 print("INCOMPLETE: run the same command again to resume; nothing was spent.",
                       file=sys.stderr)  # fmt: skip

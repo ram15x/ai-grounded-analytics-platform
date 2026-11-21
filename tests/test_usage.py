@@ -150,3 +150,31 @@ def test_a_model_with_no_known_cap_prints_the_tally_and_is_never_refused(tmp_pat
     )  # fmt: skip
     assert r["cap"] is None and "an unknown cap" in out[0]
 
+
+def test_plan_generation_counts_only_batches_not_already_recorded(tmp_path):
+    from verified_analyst.documents import binder_model as bm
+    from verified_analyst.llm.cassette import FILE_NAME
+
+    cfg = load_router_settings()
+    total = -(-len(bm.select_sentences()) // bm.BATCH)
+    planned, left = bm.plan_generation(cfg, "groq", M, tmp_path / "w")
+    assert left == total == 8 and planned > 0  # nothing recorded: the router's upper bound
+    d = tmp_path / "w" / "cassettes"
+    d.mkdir(parents=True)
+
+    def row(key, p, c, effort):
+        tokens = {"prompt": p, "completion": c}
+        return {"key": key, "provider": "groq", "model": M, "tokens": tokens,
+                "request": {"prompt_id": "label.v0", "reasoning_effort": effort}}  # fmt: skip
+
+    rows = [row(f"k{i}", 400, 300, "low") for i in range(5)] + [row("z", 1, 1, "medium")]
+    (d / FILE_NAME).write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    planned2, left2 = bm.plan_generation(cfg, "groq", M, tmp_path / "w")
+    assert left2 == 3 and planned2 == 3 * 700  # the mean of the 5 recorded at the current effort
+
+
+def test_the_three_live_commands_take_force():
+    from verified_analyst import cli
+
+    src = Path(cli.__file__).read_text("utf-8")
+    assert src.count('"--force"') >= 3 and src.count("usage.start(") == 3

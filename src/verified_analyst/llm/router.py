@@ -418,6 +418,10 @@ class Router:
         return None
 
     # ---- helpers ----
+    def prepared(self, name: str, req: LLMRequest) -> LLMRequest:
+        """The request as it would be sent to this provider (effort and allowance stamped)."""
+        return self._for_provider(name, req)
+
     def _for_provider(self, name: str, req: LLMRequest) -> LLMRequest:
         """The request as this provider will see it: its configured reasoning effort (only for
         Groq gpt-oss models) and, for compose and repair on a model that reports reasoning

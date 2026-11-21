@@ -29,6 +29,7 @@ import random
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -320,6 +321,12 @@ def build_model_cases(claims, numbers: list[Number]) -> list[Case]:
     return cases
 
 
+def usable_labels(claims) -> int:
+    """Claims whose label has at least one content word (the model's own labels and the real
+    refusals alike)."""
+    return sum(bool(content(c["label"])) for c, _ in claims)
+
+
 def half_claims(claims, half: str):
     return [(c, n) for c, n in claims if half_of(n.doc_key) == half]
 
@@ -436,6 +443,12 @@ def run_locked(*, candidates_arg: str, adr_path: Path = ADR_PATH, labels: Path =
     hashes = check_gate(adr_path, labels, root, git)
     if any(e["event"] == "locked_scored" for e in ledger_entries(ledger)):
         raise DocumentError("refusing to run: the ledger shows the locked half was already scored")
+    usable = usable_labels(load_claims(labels, corpus_dir))
+    if usable < MIN_CLAIMS:
+        raise DocumentError(
+            f"refusing to run: only {usable} usable labels in the labels file; ADR-0013 needs at "
+            f"least {MIN_CLAIMS} before anything is scored"
+        )
     rep = half_report("locked", labels, corpus_dir)
     if rep["claims"] < 1:
         raise DocumentError("refusing to run: the locked half has no claims")
@@ -447,6 +460,33 @@ __all__ = ["PRE_REGISTERED", "PUBLIC", "run_locked", "half_report", "generate_la
 
 
 # ----------------------------------------------------------------------------- the live run
+
+
+def plan_generation(settings: Any, provider: str, model: str, out_dir: Path,
+                    corpus_dir: Path = CORPUS_DIR) -> tuple[int, int]:  # fmt: skip
+    """(tokens planned, batches still to ask). Batches already recorded in the work folder with
+    the effort that would be sent now are answered from cassettes and cost nothing. A batch is
+    planned at the mean of the recorded ones, else at the router's own estimate (characters / 4
+    plus the allowance), which is an upper bound."""
+    from ..llm.cassette import read_entries  # noqa: PLC0415
+    from ..llm.router import estimate_tokens  # noqa: PLC0415
+
+    sentences = select_sentences(corpus_dir)
+    total = -(-len(sentences) // BATCH)
+    effort = settings.providers[provider].reasoning_effort if "gpt-oss" in model.lower() else None
+    entries = [
+        e for e in (read_entries(out_dir / "cassettes") if (out_dir / "cassettes").is_dir()
+                    else {}).values()
+        if (e["provider"], e["model"]) == (provider, model)
+        and e["request"].get("prompt_id") == "label.v0"
+        and e["request"].get("reasoning_effort") == effort
+    ]  # fmt: skip
+    left = max(0, total - len(entries))
+    if entries:
+        per = sum(e["tokens"]["prompt"] + e["tokens"]["completion"] for e in entries) / len(entries)
+    else:
+        per = estimate_tokens(label_request(sentences[:BATCH]))
+    return round(per * left), left
 
 
 def run_generation(
@@ -469,6 +509,7 @@ def run_generation(
     from ..llm import (
         live,  # noqa: PLC0415
         route_probe,  # noqa: PLC0415
+        usage,  # noqa: PLC0415
     )
     from ..llm.cassette import Cassette  # noqa: PLC0415
     from ..llm.providers import build_one  # noqa: PLC0415
@@ -506,13 +547,23 @@ def run_generation(
                     cassette=cassette, **kw)  # fmt: skip
     run = router.new_run("binder-model-labels", token_cap=s.probe.token_cap)
 
+    batch_efforts: list[dict[str, Any]] = []
+
     def call(req: LLMRequest) -> str:
-        return router.call(req, run).text
+        before = sum(r.outcome == "cassette" for r in run.records)
+        effort = router.prepared(provider, req).reasoning_effort  # what is (or was) sent
+        text = router.call(req, run).text
+        batch_efforts.append({
+            "batch": len(batch_efforts) + 1, "reasoning_effort": effort or "none",
+            "from_cassette": sum(r.outcome == "cassette" for r in run.records) > before,
+        })  # fmt: skip
+        return text
 
     gen = generate_labels(call, sentences, seeds, max_tokens, (AllProvidersFailed,
                                                                live.RequestCapReached))  # fmt: skip
     from_cassette = sum(r.outcome == "cassette" for r in run.records)
     tg = route_probe.token_guard([run], counting)
+    usable = sum(bool(content(c["label"])) for c in gen.claims)
     meta = {
         "provider": provider, "model": model, "prompt": "label.v0",
         "prompt_hash": prompt_hashes()["label.v0"], "sentences_asked": gen.sentences_asked,
@@ -524,6 +575,11 @@ def run_generation(
         "labels_dropped_no_usable_label": gen.dropped, "seeds_from_real_refusals": len(seeds),
         "seed_refusals_not_located": unlocated, "claims": len(gen.claims),
         "documents": len({c["doc"] for c in gen.claims}), "stopped": gen.stopped,
+        "usable_labels": usable, "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        # the effort each batch was ASKED with (a cassette hit keeps the effort it was recorded
+        # with: the effort is part of the cassette key). Only batches of THIS run are listed.
+        "batch_efforts": batch_efforts,
+        "reasoning_effort_configured": cfg.reasoning_effort,
     }  # fmt: skip
     if gen.complete and len(gen.claims) < MIN_CLAIMS:
         meta["warning"] = f"only {len(gen.claims)} claims; the ADR's minimum is {MIN_CLAIMS}"
@@ -531,7 +587,14 @@ def run_generation(
     if gen.complete:  # only now: the labels file and the one ledger entry
         sha = write_labels(labels, gen, meta)
         record(ledger, "generated", labels_sha256=sha, **meta)
-    rep = {"meta": meta, "labels_sha256": sha, "token_guard": tg}
+    efforts = sorted({b["reasoning_effort"] for b in batch_efforts})
+    sent = (
+        None if not efforts else efforts[0] if len(efforts) == 1 else "mixed: " + ", ".join(efforts)
+    )
+    if sent == "none":
+        sent = None
+    rep = {"meta": meta, "labels_sha256": sha, "token_guard": tg,
+           "tokens_spent": usage.tokens_spent([run])}  # fmt: skip
     md = "\n".join([
         f"# binder-model-labels: {'COMPLETE' if gen.complete else 'INCOMPLETE'}",
         f"- labels written: {meta['labels_written']} of {gen.sentences_asked} sentences "
@@ -540,8 +603,11 @@ def run_generation(
         *([f"- stopped: {gen.stopped}", "- the one allowed generation is NOT spent: no ledger "
            "entry, no labels file; run the same command again to resume from the cassettes"]
           if not gen.complete else [f"- labels file written; sha256 {sha}"]),
-        *route_probe.render_token_guard(tg),
+        f"- usable labels: {usable} of {gen.sentences_asked} sentences asked "
+        f"(at least {MIN_CLAIMS} are needed before the locked half can be scored)",
+        f"- reasoning_effort per batch this run: {json.dumps(batch_efforts)}",
+        *route_probe.render_token_guard(tg, sent),
     ]) + "\n"  # fmt: skip
     live.write_outputs(out_dir, rep, md, cassette, cassette_ctx, env)
     return {"meta": meta, "labels_sha256": sha, "out_dir": str(out_dir), "labels": str(labels),
-            "complete": gen.complete, "markdown": md}  # fmt: skip
+            "complete": gen.complete, "markdown": md, "usable_labels": usable}  # fmt: skip

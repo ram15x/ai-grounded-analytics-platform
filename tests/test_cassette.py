@@ -84,6 +84,7 @@ def test_real_hash_helpers_are_hex_and_stable():
         "compose.v1",
         "repair.v1",
         "route.v1",
+        "route.v2",
         "compose.v2",
         "repair.v2",
     }

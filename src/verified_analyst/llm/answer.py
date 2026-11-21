@@ -81,12 +81,15 @@ def decide_route(
     corpus_description: str,
     max_tokens: int | None = None,
 ) -> tuple[RouteOutput | None, list[dict[str, Any]], str]:
-    """Ask the router model, with one more try if its reply is not a valid route. Returns the
+    """Ask the router model, with one more try if its reply is not a valid route; the second
+    request shows the first reply and its field-level errors, as the repair prompt does. Returns the
     route (None when it gave no valid one), one event per reply, and the abstain reason to use
     when the route is None ("route_failed", or "budget", "sensitivity", "provider_error")."""
     events: list[dict[str, Any]] = []
+    previous: str | None = None
+    problems: list[str] = []
     for _ in range(ROUTE_ATTEMPTS):
-        req = route_request(layer, question, corpus_description)
+        req = route_request(layer, question, corpus_description, previous, problems)
         if max_tokens:
             req = dataclasses.replace(req, max_tokens=max_tokens)
         try:
@@ -109,7 +112,9 @@ def decide_route(
             ev["route"] = route.route
             return route, events, ""
         except (ValueError, ValidationError) as exc:
-            ev["reply"], ev["error"] = got.text[:REPLY_CHARS], schema_problems(exc)
+            problems = schema_problems(exc)
+            previous = got.text[:REPLY_CHARS]
+            ev["reply"], ev["error"] = previous, problems
             continue
     return None, events, "route_failed"
 

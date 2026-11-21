@@ -94,7 +94,7 @@ that is wrong (for example claims.0.unit) and what is wrong with it. Return the 
 JSON object, in the same shape, changing only what the problems require."""
 )
 
-ROUTE_SYSTEM = (
+ROUTE_SYSTEM_V1 = (
     "You decide which source answers one question. Reply with a single JSON object and nothing "
     "else.\n"
     'Shape: {"route": "data" | "documents" | "both" | "abstain", "reason": "<reason>"}.\n'
@@ -104,6 +104,33 @@ ROUTE_SYSTEM = (
     '"abstain": you cannot tell which, or neither source can answer; give "reason" as one of: '
     + ", ".join(ROUTE_ABSTAIN_REASONS)
     + ' and only then. Give no "reason" for the other routes. Guessing is worse than abstaining.'
+)
+
+
+ROUTE_SYSTEM = (
+    "You decide which source answers one question. Reply with exactly one JSON object and "
+    "nothing else: no prose, no code fence, no other keys.\n"
+    "The four possible replies, written exactly like this:\n"
+    '{"route": "data"}\n'
+    '{"route": "documents"}\n'
+    '{"route": "both"}\n'
+    '{"route": "abstain", "reason": "<one of: ' + ", ".join(ROUTE_ABSTAIN_REASONS) + '>"}\n'
+    'The key "reason" appears only with "abstain", and there it is required. Never give a '
+    'reason, an explanation or any other key with "data", "documents" or "both".\n'
+    '"data": the answer is a number computed from the tables in the catalogue. '
+    '"documents": the answer is a fact, rule or figure stated in the stored documents described '
+    'below. "both": the question needs a figure from the tables and a fact from the documents. '
+    '"abstain": you cannot tell which, or neither source can answer, or it asks for a forecast '
+    "or a cause. Guessing is worse than abstaining.\n"
+    "Worked examples (made up for this prompt):\n"
+    "Example question: What was the average basket size in Spain?\n"
+    'Reply: {"route": "data"}\n'
+    "Example question: How many days of notice must a supplier give before a price change?\n"
+    'Reply: {"route": "documents"}\n'
+    "Example question: Which product sold the most units, and how long is its guarantee?\n"
+    'Reply: {"route": "both"}\n'
+    "Example question: Which of our suppliers will put their prices up?\n"
+    'Reply: {"route": "abstain", "reason": "forecast"}'
 )
 
 DOCS_ADDENDUM = (
@@ -130,12 +157,13 @@ PROMPT_TEMPLATES = {
     "plan.v1": PLAN_SYSTEM_V1,
     "compose.v1": COMPOSE_SYSTEM,
     "repair.v1": REPAIR_SYSTEM,
-    "route.v1": ROUTE_SYSTEM,
+    "route.v1": ROUTE_SYSTEM_V1,
+    "route.v2": ROUTE_SYSTEM,
     "compose.v2": COMPOSE_SYSTEM_DOCS,
     "repair.v2": REPAIR_SYSTEM_DOCS,
 }
 ACTIVE_PROMPT_IDS = ("plan.v1", "compose.v1", "repair.v1")
-ROUTED_PROMPT_IDS = ("route.v1", "plan.v1", "compose.v2", "repair.v2")
+ROUTED_PROMPT_IDS = ("route.v2", "plan.v1", "compose.v2", "repair.v2")
 
 
 def prompt_hashes() -> dict[str, str]:
@@ -193,15 +221,29 @@ def plan_request(layer: SemanticLayer, question: str, error: str | None = None) 
     )
 
 
-def route_request(layer: SemanticLayer, question: str, corpus: str) -> LLMRequest:
-    """`corpus` is a fixed description written by the operator, never text from a document."""
+def route_request(
+    layer: SemanticLayer,
+    question: str,
+    corpus: str,
+    previous: str | None = None,
+    problems: list[str] | None = None,
+) -> LLMRequest:
+    """`corpus` is a fixed description written by the operator, never text from a document.
+    On a second try `previous` (the reply that failed, cut) and `problems` (field paths and
+    messages, never the input) are shown, as the repair prompt does."""
     user = f"Catalogue: {catalogue_text(layer)}\nDocuments: {corpus}\nQuestion: {question}"
+    if previous is not None:
+        user += (
+            f"\nYour previous reply was not valid: {previous[:300]}\n"
+            f"Problems: {json.dumps(problems or [])}\nReply again with one valid JSON object, "
+            "written exactly as one of the four replies above."
+        )
     return LLMRequest(
         task="route",
         messages=(("system", ROUTE_SYSTEM), ("user", user)),
         datasets=(),  # names, definitions and an operator description: no data, no passages
-        prompt_id="route.v1",
-        prompt_hash=prompt_hashes()["route.v1"],
+        prompt_id="route.v2",
+        prompt_hash=prompt_hashes()["route.v2"],
         schema_name="RouteOutput",
     )
 

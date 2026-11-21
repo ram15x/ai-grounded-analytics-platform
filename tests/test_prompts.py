@@ -82,10 +82,11 @@ def test_prompt_ids_and_hashes_are_versioned_and_distinct():
         "compose.v1",
         "repair.v1",
         "route.v1",
+        "route.v2",
         "compose.v2",
         "repair.v2",
     }
-    assert len(set(prompt_hashes().values())) == 7
+    assert len(set(prompt_hashes().values())) == 8
 
 
 def test_compose_and_repair_requests_carry_their_own_prompt_id():

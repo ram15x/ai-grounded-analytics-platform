@@ -298,3 +298,59 @@ def test_record_writes_public_cassettes_with_a_clean_key_scan(env, tmp_path):
     assert all(e["sensitivity"] == "public" for e in entries)
     raw = (tmp_path / "run" / "cassettes" / "calls.jsonl").read_text()
     assert not any(v in raw for v in KEYS.values())
+
+
+# ---- route prompt v2 and the retry with field errors ----
+
+
+def test_the_route_prompt_shows_each_reply_shape_and_one_example_per_route():
+    from verified_analyst.llm.prompts import ROUTE_SYSTEM
+
+    for shape in ('{"route": "data"}', '{"route": "documents"}', '{"route": "both"}'):
+        assert ROUTE_SYSTEM.count(shape) == 2  # the shape list and the worked example
+    assert ROUTE_SYSTEM.count('{"route": "abstain", "reason": "forecast"}') == 1
+    assert ROUTE_SYSTEM.count("Example question:") == 4
+
+
+def test_route_examples_are_not_dev_or_held_out_questions_anywhere():
+    from verified_analyst.llm.prompts import PROMPT_TEMPLATES
+
+    ex = re.findall(r"Example question: (.*)", PROMPT_TEMPLATES["route.v2"])
+    assert len(ex) == 4
+    held = {q["question"].strip().lower() for q in HELD["questions"]}
+    assert not {e.strip().lower() for e in ex} & (held | _all_other_question_text())
+    # nor a near copy: no example shares 70% of its words with any known question
+    known = held | _all_other_question_text()
+    for e in ex:
+        w = set(re.findall(r"[a-z]+", e.lower()))
+        for k in known:
+            kw = set(re.findall(r"[a-z]+", k))
+            assert len(w & kw) / len(w | kw) < 0.7, (e, k)
+
+
+@pytest.mark.db
+def test_the_second_route_request_shows_the_first_reply_and_its_field_errors(env, tmp_path):
+    bad = {"route": "documents", "reason": "because it is a policy"}
+    seen = []
+
+    def reply(question, user):
+        seen.append(user)
+        return bad if len(seen) % 2 else {"route": "documents"}
+
+    m = Model(route_reply=reply)
+    probe(env, m, tmp_path, route_only=True, max_requests=3)
+    first, second = seen[0], seen[1]
+    assert "previous reply" not in first
+    assert "Your previous reply was not valid" in second and "because it is a policy" in second
+    assert "schema_failure at reason" in second.split("Problems:")[1]
+
+
+@pytest.mark.db
+def test_a_json_validate_failed_400_on_the_route_path_is_retried_once(env, tmp_path):
+    body = b'{"error": {"code": "json_validate_failed", "failed_generation": ""}}'
+    m = Model(statuses=[status(400, body=body)])
+    out = probe(env, m, tmp_path, route_only=True, max_requests=2)
+    rows = out["report"]["router_questions"]
+    assert out["report"]["http"]["requests_sent"] == 2  # the refusal, then the same request again
+    assert rows[0]["got"] == "data"  # the retry was answered normally
+    assert rows[0]["http_problems"][0]["status"] == 400

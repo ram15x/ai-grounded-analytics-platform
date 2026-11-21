@@ -353,3 +353,32 @@ va docs binder-model-locked --candidates current,S2,SL
 which refuses unless ADR-0013 and the labels file are committed and unchanged, and runs once. No
 default changes either way.
 
+## The daily token tally and `--force` (va_next26)
+
+Groq's free plan for `openai/gpt-oss-20b` has a rolling cap of 200000 tokens per day (assumptions
+row 53, n=1). The provider does not say what is left, so every live command that makes model calls
+(`va live probe`, `va route probe` including `--compare-reasoning`, `va docs binder-model-labels`)
+starts by printing, from our own reports:
+
+```
+about N of 200000 tokens used in the last 24 h (groq/openai/gpt-oss-20b), from our own reports (...)
+token budget for this run: about X tokens = Y per question x Q questions (median of k earlier reports ...)
+```
+
+The estimate is the median tokens per question of the last 3 reports of the same provider, model and
+mode, times the questions planned (times 2 for a compare). With no earlier report it says so and uses
+the run's own token cap as the planned budget. If the tally plus the planned budget is above the daily
+cap, the command refuses to start; `--force` starts it anyway. The cap comes from `daily_tokens` in
+`config\router.yaml` (measured for `openai/gpt-oss-20b`); for any other model it falls back to `tpd`,
+which is UNVERIFIED, and a model with neither is never refused. The tally can undercount (assumptions
+row 54).
+
+## What the label generator's report means about the reasoning effort
+
+`reasoning_effort sent:` in the generator report read `no (not configured)` in va_next25 although the
+router sent `low`: the report line was never given the value (the probe reports take it from the
+config; the generator builds its report separately). From va_next26 it shows what was sent, and the
+labels file keeps `batch_efforts` (the effort each batch of that run was asked with). The effort is
+part of the cassette key, so a batch recorded with `low` is replayed only while `low` is what would be
+sent now; the first 5 batches of the interrupted run were asked with `low` by the code path (tested with mocked HTTP); the `request.reasoning_effort` field of their entries in `data\\binder_model_labels_work\\cassettes\\calls.jsonl` shows it.
+

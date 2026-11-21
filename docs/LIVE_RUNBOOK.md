@@ -54,14 +54,27 @@ the whole cap on the battery. The cap is 25 requests unless you pass `--max-requ
 anything else is refused). The run stops at once on the first 401/403, at the request cap, or at the
 token cap in `config\router.yaml` (`probe.token_cap`, 60000; `--token-cap` can only lower it).
 
-The probe now paces itself with a client-side tokens-per-minute bucket (`tpm: 8000` for Groq in
-`config\router.yaml`, used at 50%) and waits up to 120 s for it, so a run takes longer than the
-first one did (a full 10-question battery can take 10 to 20 minutes) and should hit fewer 429s. The
-report header prints the bucket settings and whether `reasoning_effort` was sent. It is not sent
-unless you add `reasoning_effort: low` under the Groq provider in the config; whether Groq accepts it
-for this model is UNKNOWN, so try it as its own run and paste back the status counts and the error
-text, which the report now shows for any non-2xx response. Optional: `--max-tokens 2048` if the report shows
-`length` among the finish reasons, `--token-cap N` to lower the cap, `--no-record` to skip cassettes.
+The probe paces itself with a client-side token guard (`tpm: 8000` for Groq in
+`config\router.yaml`, used at `bucket.fraction` 0.9). Before each request it estimates prompt tokens
+as characters / 4 plus `max_tokens`; if the bucket cannot cover that, it waits (at most 60 s per
+wait, each wait is reported). After an HTTP 429 it reads `Retry-After`, waits up to 60 s and retries
+ONCE; it never retries blindly. A wait counts against `--max-requests` only if a request is then
+sent. The report's 'Token guard and rate limits' section gives the waits, the 429s and the retries.
+A full run can take 10 to 20 minutes.
+
+`reasoning_effort` (config, Groq `low`) is sent only to Groq gpt-oss models; override it for one run
+with `--reasoning-effort medium`. That `low` reduces reasoning tokens is UNVERIFIED. To check it, run
+once (two runs of the 5 injection questions, `low` then `medium`, each with its own request cap):
+
+```powershell
+va route probe --provider groq --model <GPT-OSS ID> --injection-only --compare-reasoning low,medium --record
+```
+
+It writes `compare.md` and `compare.json` plus one sub-folder per setting. Compose and repair ask
+for at least 2048 completion tokens on models that report reasoning tokens; an empty reply with
+finish `length` is retried once with the allowance doubled (cap 4096).
+`--max-tokens N` sets the allowance for every call, `--token-cap N` lowers the cap (`va live
+probe` also has `--no-record`; `va route probe` records only with `--record`).
 
 Repeat with IDs taken from step 2 (replace the angle-bracket parts):
 

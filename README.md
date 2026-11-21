@@ -105,6 +105,12 @@ va report draft --title "Weekly check"
 va report approve --who "<name>" --digest <digest printed by draft>
 ```
 
+Ask new questions in the browser: `va serve --replay` (recorded replies, so only the recorded
+questions can be answered) or `va serve --provider groq --model <id>` with the key in the
+environment (live, public data only). Each question writes a JSON trace to `data/traces/`.
+A `Dockerfile` for the recorded-runs view is included; it has **not been built or run** (no Docker
+daemon where it was written).
+
 The recorded model replies come from real Groq calls and are replayed, not re-run; a question with
 no recording is shown as "no recording", not as a model abstention. See [demo/README.md](demo/README.md).
 

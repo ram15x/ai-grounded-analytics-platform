@@ -693,6 +693,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sv.add_argument("--port", type=int, default=8000)
     sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument(
+        "--replay",
+        nargs="?",
+        const="demo/recordings.jsonl",
+        metavar="FILE",
+        help="answer new questions from recorded replies (needs the database)",
+    )
+    sv.add_argument(
+        "--provider", help="answer new questions live (needs the key in the environment)"
+    )
+    sv.add_argument("--model")
+    sv.add_argument("--trace-dir", default="data/traces")
     sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
     sv.set_defaults(fn=cmd_serve)
 
@@ -939,7 +951,35 @@ def cmd_serve(args: argparse.Namespace) -> int:
         (out / "index.html").write_text(static_page(load_payload()), encoding="utf-8")
         print(f"wrote {out / 'index.html'}")
         return 0
-    serve(args.port, args.host)
+    ask_fn, mode = None, "static"
+    if args.replay or args.provider:
+        import itertools  # noqa: PLC0415
+        import json as _json  # noqa: PLC0415
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        setup = _ask_setup(args)
+        counter = itertools.count(1)
+        trace = Path(args.trace_dir)
+        trace.mkdir(parents=True, exist_ok=True)
+
+        def ask_fn(question: str) -> dict:
+            n = next(counter)
+            d = _ask_one(question, f"web-{n}", setup).as_dict()
+            d["id"] = f"ASK-{n:03d}"
+            if d["reason"] == "provider_error" and args.replay:
+                d["outcome"], d["reason"], d["abstain_detail"] = (
+                    "not_recorded",
+                    "no_recording",
+                    None,
+                )
+            stamp = f"{datetime.now(UTC):%Y%m%dT%H%M%S}-{n:03d}.json"
+            (trace / stamp).write_text(
+                _json.dumps(d, indent=1, ensure_ascii=False, default=str), encoding="utf-8"
+            )
+            return d
+
+        mode = "replay" if args.replay else "live"
+    serve(args.port, args.host, ask_fn, mode)
     return 0
 
 

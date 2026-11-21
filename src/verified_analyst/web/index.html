@@ -112,7 +112,7 @@ h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin
   <div class="top">
     <div class="logo"><span class="mark" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg></span>Verified Analyst</div>
     <div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-ev" aria-selected="false">Trust</button></div>
-    <span class="mode" title="Model replies are recorded; verification is recomputed">Replay mode</span>
+    <span class="mode" id="mode" title="Model replies are recorded; verification is recomputed">Replay mode</span>
   </div>
   <h1 class="h1">Every number, <em>checked</em> before you see it.</h1>
   <p class="sub">Ask about sales data or company documents. Each figure in the answer is matched to a warehouse cell or a stored passage. If it cannot be backed, the answer is withheld.</p>
@@ -124,7 +124,7 @@ h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin
 <div class="wrap" id="app"></div>
 <script>
 const EMBED = /*DATA*/null;
-const S = {items:[], sel:null, tab:'ask', pick:null};
+const S = {items:[], sel:null, tab:'ask', pick:null, can:false, mode:'static', busy:false};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $ = id => document.getElementById(id);
 const REASON = {
@@ -239,6 +239,10 @@ function match(text){
   S.items.forEach((x,j)=>{const s=x.question.toLowerCase().split(/\W+/).filter(a=>a.length>3).filter(a=>w.has(a)).length; if(s>sc){sc=s;best=j;}});
   return sc>=3?best:-1;
 }
+function refreshStats(){
+  const ok=S.items.filter(x=>x.outcome==='verified').length, nums=S.items.reduce((a,x)=>a+(x.outcome==='verified'?vs(x).length:0),0);
+  $('stats').innerHTML=`<div><b>${ok}</b><span>answers verified</span></div><div><b>${nums}</b><span>figures traced</span></div><div><b>${S.items.filter(x=>x.outcome==='abstain').length}</b><span>withheld</span></div><div><b>541,909</b><span>warehouse rows</span></div>`;
+}
 function init(data){
   S.items=data.items;
   const ok=S.items.filter(x=>x.outcome==='verified').length, nums=S.items.reduce((a,x)=>a+(x.outcome==='verified'?vs(x).length:0),0);
@@ -246,12 +250,20 @@ function init(data){
   $('qs').innerHTML=S.items.map(x=>`<option value="${esc(x.question)}">`).join('');
   $('sugg').innerHTML=S.items.filter(x=>x.outcome!=='not_recorded').slice(0,9).map(x=>`<button type="button" data-q="${S.items.indexOf(x)}">${esc(x.question.length>52?x.question.slice(0,50)+'…':x.question)}</button>`).join('');
   $('sugg').querySelectorAll('button').forEach(b=>b.onclick=()=>choose(+b.dataset.q));
-  $('form').onsubmit=e=>{e.preventDefault(); const i=match($('q').value); if(i>=0) choose(i); else $('hint').textContent='That question is not in the recorded set. Live questions need a model key (va ask --provider ... --model ...). Pick one of the suggestions.';};
+  $('form').onsubmit=async e=>{e.preventDefault(); const text=$('q').value.trim(); if(!text) return; const i=match(text); if(i>=0) return choose(i);
+    if(!S.can){ $('hint').textContent='This page only holds recorded questions. To ask a new one, run va serve --provider <name> --model <id> (or --replay) on your machine. Pick a suggestion above.'; return; }
+    if(S.busy) return; S.busy=true; $('hint').textContent='Running the pipeline: route, plan, query, compose, verify…';
+    try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text})}); const d=await r.json();
+      if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; } else { S.items.unshift(d); choose(0); refreshStats(); } }
+    catch(err){ $('hint').textContent='Could not reach the server.'; } S.busy=false; };
   $('t-ask').onclick=()=>setTab('ask'); $('t-rep').onclick=()=>setTab('rep'); $('t-ev').onclick=()=>setTab('ev');
   $('foot')&&0; choose(0); 
   const f=document.createElement('p'); f.className='note'; f.style.cssText='max-width:1240px;margin:0 auto;padding:0 28px 40px'; f.textContent=data.note; document.body.appendChild(f);
 }
-if(EMBED) init(EMBED); else fetch('/api/results').then(r=>r.json()).then(init).catch(()=>{$('app').textContent='Could not load results.';});
+if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
+  S.can=c.can_ask; S.mode=c.mode; $('mode').textContent = c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
+  if(c.mode==='live'){ $('mode').style.color='#4FD18B'; $('mode').style.borderColor='#2d6b4a'; }
+  init(d); }).catch(()=>{$('app').textContent='Could not load results.';});
 </script>
 </body>
 </html>

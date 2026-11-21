@@ -16,3 +16,58 @@ def test_no_recording_is_not_shown_as_abstain():
     p = load_payload()
     nr = [x for x in p["items"] if x["outcome"] == "not_recorded"]
     assert nr and all(x["reason"] == "no_recording" for x in nr)
+
+
+def _server(ask_fn=None):
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from verified_analyst.web import app
+
+    app._Handler.payload = app.load_payload()
+    app._Handler.ask_fn = staticmethod(ask_fn) if ask_fn else None
+    app._Handler.mode = "replay" if ask_fn else "static"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), app._Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _post(srv, body):
+    import json
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}/api/ask", data=json.dumps(body).encode(), method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, json.load(e)
+
+
+def test_ask_endpoint_answers_validates_and_survives_a_failing_question():
+    def ask(q):
+        if "boom" in q:
+            raise RuntimeError("secret detail")
+        return {"id": "X", "question": q, "outcome": "abstain", "reason": "ambiguous"}
+
+    srv = _server(ask)
+    try:
+        assert _post(srv, {"question": "hi"})[0] == 200
+        assert _post(srv, {"question": ""})[0] == 400
+        assert _post(srv, {"question": "x" * 301})[0] == 400
+        code, body = _post(srv, {"question": "boom"})
+        assert code == 500 and "secret detail" not in str(body)  # no internals leaked
+        assert _post(srv, {"question": "still alive"})[0] == 200
+    finally:
+        srv.shutdown()
+
+
+def test_static_server_refuses_new_questions():
+    srv = _server(None)
+    try:
+        assert _post(srv, {"question": "hi"})[0] == 404
+    finally:
+        srv.shutdown()

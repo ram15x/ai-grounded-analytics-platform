@@ -59,3 +59,22 @@ the label model sees only one sentence, while a composer sees passages and a que
 cases are built by the generator, not by a model. With about 40 claims per half the intervals are
 wide. This is a screen, not a measurement of accuracy on real answers, and not a basis for any
 accuracy claim.
+
+## Amendment 1 (before any label was generated)
+
+Written after the first generation attempt failed on its first request with a rate limit
+(`all providers failed (groq:rate_limit)`); no label existed and nothing was scored, so this
+changes no candidate and no data. Procedure step 2 reads as follows from now on:
+
+- The run is resumable. Its cassettes live in one fixed folder (`data/binder_model_labels_work`).
+  A batch already recorded there is answered from the cassette without a request; only missing
+  batches go to the provider.
+- A rate limit (the router giving up on a 429) or the request cap ends the run at that batch.
+  Batches before it are kept, nothing after it is tried, nothing is retried by hand.
+- The ledger entry and the labels file are written only when every batch has been answered. A
+  sentence whose answer has no usable label is still counted as dropped, as before; it is not
+  asked again, because the same request would replay the same answer. The report says how many
+  labels were written, how many batches were answered and how many came from cassettes.
+- An incomplete run does not spend the one allowed generation. After a complete run the ledger
+  refuses another, as before.
+

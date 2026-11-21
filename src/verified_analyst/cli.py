@@ -440,6 +440,7 @@ def cmd_route_probe(args: argparse.Namespace) -> int:
         token_cap=args.token_cap,
         max_tokens=args.max_tokens,
         route_only=args.route_only,
+        record=args.record,
     )
     out = route_probe.run_route_probe(
         load_router_settings(), opts, layer=layer, readonly_url=url,
@@ -447,7 +448,12 @@ def cmd_route_probe(args: argparse.Namespace) -> int:
     )  # fmt: skip
     print(redact(out["markdown"], os.environ))
     print(f"files written to: {out['out_dir']}")
-    print("Nothing was recorded and nothing was committed.")
+    c = out["cassette"]
+    if c:
+        print(f"cassettes: {c['entries']} entries in {c['dir']}; key scan {c['key_scan']}; "
+              f"check ok {c['check_ok']}; skipped internal {c['skipped_internal']}")  # fmt: skip
+    print(("Cassettes were recorded locally. " if c else "Nothing was recorded. ")
+          + "Nothing was committed.")  # fmt: skip
     return 3 if out["stopped_on_auth"] else 4 if out["stopped_early"] else 0
 
 
@@ -580,6 +586,10 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument(
         "--route-only", action="store_true",
         help="only the route call for the 12 router questions (12 requests, no injection set)",
+    )  # fmt: skip
+    rp.add_argument(
+        "--record", action="store_true",
+        help="record cassettes next to the report (public only; key scan and check as live probe)",
     )  # fmt: skip
     rp.set_defaults(fn=cmd_route_probe)
     return p

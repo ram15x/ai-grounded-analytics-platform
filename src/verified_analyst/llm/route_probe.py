@@ -26,7 +26,7 @@ from ..semantic import SemanticLayer
 from . import live
 from .accounting import RunContext, merge_summaries
 from .answer import Retrieved, Retriever, answer_question, decide_route, make_retriever
-from .cassette import scan_for_secrets
+from .cassette import Cassette, CassetteContext, layer_hash, schema_hash, warehouse_content_hash
 from .pipeline import QuestionRun
 from .prompts import routed_prompt_hashes
 from .providers import build_one
@@ -71,6 +71,7 @@ class RouteProbeOptions:
     token_cap: int | None = None
     max_tokens: int | None = None
     route_only: bool = False  # only the route call for each router question (fewest requests)
+    record: bool = False  # record cassettes (public data and public documents only)
 
 
 class _Tap:
@@ -103,7 +104,7 @@ def route_settings(base: RouterSettings, opts: RouteProbeOptions) -> RouterSetti
     s = live.probe_settings(
         base,
         live.ProbeOptions(opts.provider, opts.model, opts.out_dir, opts.max_requests,
-                          opts.token_cap, opts.max_tokens, record=False),
+                          opts.token_cap, opts.max_tokens, record=opts.record),
     )  # fmt: skip
     s.tasks = {t: [opts.provider] for t in ("route", "plan", "compose", "repair")}
     return s
@@ -199,6 +200,7 @@ def build_report(
             "caps": {"max_requests": s.probe.max_requests, "token_cap": s.probe.token_cap,
                      "max_tokens": opts.max_tokens or 1024},
             "mode": "route only" if opts.route_only else "route plus full answer",
+            "recording": opts.record,
             "scope": "one model, dev questions only, public data only; raw counts; no accuracy "
                      "claim, no ranking",
             "prompt_note": "prompts are first drafts, not tuned: results describe this model with "
@@ -350,7 +352,12 @@ def run_route_probe(
     kw: dict[str, Any] = {"sleep": live._sleep}
     if clock:
         kw["clock"] = clock
-    router = Router(s, {opts.provider: tap}, **kw)
+    cassette: Cassette | None = None
+    ctx: CassetteContext | None = None
+    if opts.record:  # same rules as the other probes: public only, key scan, check
+        ctx = CassetteContext(layer_hash(), schema_hash(), warehouse_content_hash(readonly_url))
+        cassette = Cassette(opts.out_dir / "cassettes", "record", ctx, env=env)
+    router = Router(s, {opts.provider: tap}, cassette=cassette, **kw)
     retrieve = public_only(retriever or make_retriever(readonly_url, k=3))
     started = datetime.now(UTC)
     runs: list[RunContext] = []
@@ -433,15 +440,10 @@ def run_route_probe(
     rep = build_report(opts, s, layer, tap, runs, rows, inj_rows, results, counting, stop, kind,
                        started)  # fmt: skip
     md = render_report(rep)
-    text_json = json.dumps(rep, indent=2, sort_keys=True, default=str)
-    leak = scan_for_secrets(text_json + md, env)
-    if leak:
-        raise ConfigError(f"refusing to write the report: it contains a credential ({leak})")
-    opts.out_dir.mkdir(parents=True, exist_ok=True)
-    (opts.out_dir / "report.json").write_text(text_json, encoding="utf-8")
-    (opts.out_dir / "report.md").write_text(md, encoding="utf-8")
+    written = live.write_outputs(opts.out_dir, rep, md, cassette, ctx, env)
     return {
         "report": rep, "markdown": md, "out_dir": str(opts.out_dir),
+        "cassette": written["cassette"],
         "stopped_on_auth": kind == "auth",
         "stopped_early": kind in ("provider_unavailable", "model_gone", "sensitivity"),
     }  # fmt: skip

@@ -1029,12 +1029,12 @@ def run_probe(
         "stopped_on_auth": stop_kind == "auth",
         "stopped_early": stop_kind in ("provider_unavailable", "model_gone"),
     }
-    out.update(write_outputs(opts, rep, md, cassette, ctx, env))
+    out.update(write_outputs(opts.out_dir, rep, md, cassette, ctx, env))
     return out
 
 
 def write_outputs(
-    opts: ProbeOptions,
+    out_dir: Path,
     rep: dict[str, Any],
     md: str,
     cassette: Cassette | None,
@@ -1046,12 +1046,12 @@ def write_outputs(
     leak = scan_for_secrets(text_json + md, env)
     if leak:
         raise ConfigError(f"refusing to write the report: it contains a credential ({leak})")
-    opts.out_dir.mkdir(parents=True, exist_ok=True)
-    (opts.out_dir / "report.json").write_text(text_json, encoding="utf-8")
-    (opts.out_dir / "report.md").write_text(md, encoding="utf-8")
-    result: dict[str, Any] = {"out_dir": str(opts.out_dir), "cassette": None}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "report.json").write_text(text_json, encoding="utf-8")
+    (out_dir / "report.md").write_text(md, encoding="utf-8")
+    result: dict[str, Any] = {"out_dir": str(out_dir), "cassette": None}
     if cassette is not None and ctx is not None:
-        cas_dir = opts.out_dir / "cassettes"
+        cas_dir = out_dir / "cassettes"
         raw = (
             (cas_dir / "calls.jsonl").read_text("utf-8")
             if (cas_dir / "calls.jsonl").exists()

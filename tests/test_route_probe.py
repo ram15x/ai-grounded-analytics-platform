@@ -274,3 +274,27 @@ def test_a_non_2xx_response_is_reported_redacted_per_question(env, tmp_path):
     problems = out["report"]["router_questions"][0]["http_problems"]
     assert problems and problems[0]["status"] == 503 and "overloaded" in problems[0]["body"]
     assert KEYS["GROQ_API_KEY"] not in json.dumps(out["report"])
+
+
+# ---- --record ----
+
+
+@pytest.mark.db
+def test_nothing_is_recorded_unless_asked(env, tmp_path):
+    out = probe(env, Model(), tmp_path, route_only=True)
+    assert out["cassette"] is None and not (tmp_path / "run" / "cassettes").exists()
+
+
+@pytest.mark.db
+def test_record_writes_public_cassettes_with_a_clean_key_scan(env, tmp_path):
+    from verified_analyst.llm.cassette import read_entries
+
+    out = probe(env, Model(), tmp_path, max_requests=60, record=True)
+    c = out["cassette"]
+    assert c["entries"] > 12
+    assert c["key_scan"] == "clean" and c["check_ok"] is True and c["skipped_internal"] == 0
+    entries = read_entries(tmp_path / "run" / "cassettes").values()
+    assert {e["task"] for e in entries} >= {"route", "plan", "compose"}
+    assert all(e["sensitivity"] == "public" for e in entries)
+    raw = (tmp_path / "run" / "cassettes" / "calls.jsonl").read_text()
+    assert not any(v in raw for v in KEYS.values())

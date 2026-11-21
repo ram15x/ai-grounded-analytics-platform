@@ -82,7 +82,7 @@ footer{padding:18px 24px;border-top:1px solid var(--line);font-size:12px;color:v
   </div>
   <div class="tally" id="tally" aria-live="polite"></div>
 </header>
-<div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Answers</button><button role="tab" id="t-rep" aria-selected="false">Report draft</button></div>
+<div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Answers</button><button role="tab" id="t-rep" aria-selected="false">Report draft</button><button role="tab" id="t-ev" aria-selected="false">Trust checks</button></div>
 <main>
   <nav id="list" aria-label="Questions"></nav>
   <section class="view" id="view" aria-live="polite"></section>
@@ -166,12 +166,26 @@ function reportView(){
   document.getElementById('view').innerHTML = h;
   document.getElementById('copy').onclick = async()=>{ try{ await navigator.clipboard.writeText(cmd); document.getElementById('copied').textContent='Copied.'; }catch(e){ document.getElementById('copied').textContent='Copy failed; select the text above.'; } };
 }
-function tab(which){
-  const rep = which==='rep';
-  document.getElementById('t-ask').setAttribute('aria-selected', !rep); document.getElementById('t-rep').setAttribute('aria-selected', rep);
-  document.getElementById('list').style.display = rep?'none':''; document.querySelector('main').style.gridTemplateColumns = rep?'1fr':'';
-  if(rep) reportView(); else render();
+function trustView(){
+  const it = STATE.items, ok = it.filter(x=>x.outcome==='verified');
+  const nums = ok.reduce((n,x)=>n+verdicts(x).length,0);
+  const kinds = {}; ok.forEach(x=>verdicts(x).forEach(v=>kinds[v.verdict]=(kinds[v.verdict]||0)+1));
+  const row = (a,b)=>`<div><b>${a}</b>${b}</div>`;
+  document.getElementById('view').innerHTML = `<p class="qtext">Trust checks</p><div class="meta"><span>what is checked, and what is not</span></div>
+  <div class="how">
+   ${row('30 of 30 → 0','Adversarial answers (wrong row, wrong period, wrong dimension value, wrong metric with the same unit) that were accepted as verified. Before the sentence-context check all 30 were accepted. This runs on every push.')}
+   ${row(nums+' figures','In the '+ok.length+' verified recorded answers. Each is traced to a cell of its stored result or to its stored passage text: '+Object.entries(kinds).map(([k,v])=>v+' '+k).join(', ')+'. A figure with no trace fails the build.')}
+   ${row('Placeholders only','The model is told to write {c1}-style placeholders. A number it types itself is rejected by the verifier; digits shown come from the warehouse or a stored passage.')}
+  </div>
+  <h2>Not claimed</h2><ul><li>No accuracy figure. These are ${it.length} development questions, and ${it.filter(x=>x.outcome==='not_recorded').length} have no recorded model reply.</li><li>Verification proves a figure matches its source. It does not prove the source answers the question asked.</li><li>Injection obedience was measured on 5 questions with one model. That is not a safety claim.</li></ul>`;
 }
+function tab(which){
+  document.getElementById('t-ask').setAttribute('aria-selected', which==='ask'); document.getElementById('t-rep').setAttribute('aria-selected', which==='rep'); document.getElementById('t-ev').setAttribute('aria-selected', which==='ev');
+  const wide = which!=='ask';
+  document.getElementById('list').style.display = wide?'none':''; document.querySelector('main').style.gridTemplateColumns = wide?'1fr':'';
+  if(which==='rep') reportView(); else if(which==='ev') trustView(); else render();
+}
+document.getElementById('t-ev').onclick=()=>tab('ev');
 document.getElementById('t-ask').onclick=()=>tab('ask'); document.getElementById('t-rep').onclick=()=>tab('rep');
 async function init(){
   let data = EMBED;

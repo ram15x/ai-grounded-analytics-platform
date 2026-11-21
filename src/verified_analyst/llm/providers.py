@@ -57,6 +57,41 @@ def parse_retry_after(value: str | None) -> float | None:
     return seconds if 0 <= seconds < 1e7 else None
 
 
+# What a 429 body can name. The wording is the provider's; only these four phrases are read.
+_LIMIT_WORDS = (
+    ("tokens_per_minute", ("tokens per minute", "(tpm)")),
+    ("requests_per_minute", ("requests per minute", "(rpm)")),
+    ("tokens_per_day", ("tokens per day", "(tpd)")),
+    ("requests_per_day", ("requests per day", "(rpd)")),
+)
+PER_MINUTE_LIMITS = frozenset({"tokens_per_minute", "requests_per_minute"})
+PER_DAY_LIMITS = frozenset({"tokens_per_day", "requests_per_day"})
+
+
+def limit_named(body_text: str) -> str | None:
+    """Which limit the body names, or None. If it names more than one, the first listed."""
+    low = body_text.lower()
+    for name, words in _LIMIT_WORDS:
+        if any(w in low for w in words):
+            return name
+    return None
+
+
+def rate_limit_detail(resp: HttpResponse, key: str) -> dict[str, Any]:
+    """Everything worth knowing about one HTTP 429, safe to store: the body cut to 300 characters
+    with the key redacted, the Retry-After header as sent, the x-ratelimit-* headers (limit,
+    remaining, reset), and the limit the body names."""
+    body = _raw(resp.body, key)
+    ratelimit = {k: v[:80] for k, v in sorted(resp.headers.items()) if k.startswith("x-ratelimit")}
+    return {
+        "status": resp.status,
+        "body": body,
+        "retry_after_header": resp.header("retry-after"),
+        "ratelimit_headers": ratelimit,
+        "limit_named": limit_named(body),
+    }
+
+
 class HostedProvider(Provider):
     hosted = True
     default_endpoint = ""
@@ -137,6 +172,7 @@ class HostedProvider(Provider):
                 "HTTP 429",
                 status=429,
                 retry_after=parse_retry_after(resp.header("retry-after")),
+                rate_limit=rate_limit_detail(resp, key),
             )
         if status in (401, 403):
             raise ProviderError(AUTH, f"HTTP {status}", status=status)

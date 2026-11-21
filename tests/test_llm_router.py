@@ -163,7 +163,7 @@ def test_a_429_is_retried_once_after_retry_after_and_a_second_429_gives_the_prov
     assert router.call(req(), run).provider == "gemini"
     assert len(tr["groq"].calls) == 2 and clock.slept == [2.0]  # one wait, one retry, no more
     assert run.waits == [{"provider": "groq", "task": "plan", "kind": "rate_limit_retry",
-                          "basis": "retry_after", "seconds": 2.0}]  # fmt: skip
+                          "basis": "retry_after", "limit_named": None, "seconds": 2.0}]  # fmt: skip
 
 
 def test_a_429_without_retry_after_waits_for_the_token_guard_never_blind():
@@ -184,7 +184,7 @@ def test_a_retry_after_above_60_s_is_not_shortened_the_provider_is_given_up():
 
 def test_breaker_opens_after_three_consecutive_429s_and_skips_provider():
     router, run, tr, clock = rig(
-        groq=[status(429, {"Retry-After": "1"})] * 3, gemini=[ok_gemini(), ok_gemini(), ok_gemini()]
+        groq=[status(429)] * 3, gemini=[ok_gemini(), ok_gemini(), ok_gemini()]
     )
     assert router.call(req(), run).provider == "gemini"  # 429, wait, 429: given up (2 in a row)
     assert router.breaker_state("groq") == "closed" and len(tr["groq"].calls) == 2
@@ -196,9 +196,7 @@ def test_breaker_opens_after_three_consecutive_429s_and_skips_provider():
 
 
 def test_breaker_half_open_probe_and_reopen():
-    router, run, tr, clock = rig(
-        groq=[status(429, {"Retry-After": "1"})] * 4 + [ok_openai()], gemini=[ok_gemini()] * 3
-    )
+    router, run, tr, clock = rig(groq=[status(429)] * 4 + [ok_openai()], gemini=[ok_gemini()] * 3)
     router.call(req(), run)
     router.call(req(), run)
     assert router.breaker_state("groq") == "open" and len(tr["groq"].calls) == 3
@@ -212,15 +210,14 @@ def test_breaker_half_open_probe_and_reopen():
 
 
 def test_non_429_error_resets_the_consecutive_count():
-    router, run, tr, _ = rig(groq=[status(429, {"Retry-After": "1"}), status(500), ok_openai()])
+    router, run, tr, _ = rig(groq=[status(429), status(500), ok_openai()])
     assert router.call(req(), run).provider == "groq"
     assert router.breaker_state("groq") == "closed" and router._consec_429["groq"] == 0
 
 
 def test_success_resets_the_consecutive_count():
     router, run, tr, _ = rig(
-        groq=[status(429, {"Retry-After": "1"}), ok_openai(),
-              status(429, {"Retry-After": "1"}), ok_openai()]
+        groq=[status(429), ok_openai(), status(429), ok_openai()]
     )  # fmt: skip
     router.call(req(), run)
     router.call(req(), run)
@@ -867,3 +864,97 @@ def test_a_request_that_can_never_fit_the_bucket_is_not_sent_and_not_waited_for(
     router, run, tr, clock = rig(cfg, groq=[ok_openai()], gemini=[ok_gemini()])
     assert router.call(req(max_tokens=500), run).provider == "gemini"
     assert tr["groq"].calls == [] and clock.slept == [] and run.waits == []
+
+
+TPM_BODY = (
+    b'{"error":{"message":"Rate limit reached for model `openai/gpt-oss-20b` on tokens per '
+    b'minute (TPM): Limit 8000, Used 7500, Requested 1200. Please try again in 5.2s.",'
+    b'"type":"tokens","code":"rate_limit_exceeded"}}'
+)
+RL_HEADERS = {
+    "Retry-After": "5", "x-ratelimit-limit-tokens": "8000",
+    "x-ratelimit-remaining-tokens": "300", "x-ratelimit-reset-tokens": "5.2s",
+    "x-ratelimit-limit-requests": "1000", "content-type": "application/json",
+}  # fmt: skip
+
+
+def test_every_429_is_recorded_with_body_retry_after_ratelimit_headers_and_the_limit_named():
+    router, run, tr, clock = rig(groq=[status(429, RL_HEADERS, TPM_BODY), ok_openai()])
+    assert router.call(req(), run).provider == "groq"
+    (rec,) = [r for r in run.records if r.outcome == "rate_limit"]
+    d = rec.rate_limit
+    assert d["status"] == 429 and d["retry_after_header"] == "5"
+    assert d["limit_named"] == "tokens_per_minute" and "tokens per minute (TPM)" in d["body"]
+    assert d["ratelimit_headers"] == {
+        "x-ratelimit-limit-requests": "1000", "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-tokens": "300", "x-ratelimit-reset-tokens": "5.2s",
+    }  # fmt: skip
+    assert len(d["body"]) <= 300 and rec.retry_after_s == 5.0
+    assert run.waits[0]["limit_named"] == "tokens_per_minute"
+
+
+def test_the_429_body_is_redacted_and_cut_and_an_unnamed_limit_stays_none():
+    long = b"x " * 400 + b"gsk_test_key_groq_0123456789abcdef " + b"y" * 50
+    router, run, _, _ = rig(groq=[status(429, {}, long), ok_openai()])
+    router.call(req(), run)
+    d = [r for r in run.records if r.outcome == "rate_limit"][0].rate_limit
+    assert len(d["body"]) == 300 and d["limit_named"] is None and d["retry_after_header"] is None
+    router, run, _, _ = rig(
+        groq=[status(429, {}, b"key gsk_test_key_groq_0123456789abcdef leaked"), ok_openai()]
+    )
+    router.call(req(), run)
+    d = [r for r in run.records if r.outcome == "rate_limit"][0].rate_limit
+    assert "gsk_test_key_groq_0123456789abcdef" not in d["body"] and "<redacted>" in d["body"]
+
+
+def test_per_minute_429s_with_retry_after_never_open_the_breaker():
+    router, run, tr, clock = rig(
+        groq=[status(429, RL_HEADERS, TPM_BODY)] * 8 + [ok_openai()], gemini=[ok_gemini()] * 8
+    )
+    for _ in range(4):  # 8 HTTP 429s over 4 questions: 4 waits, 4 give-ups, no breaker
+        assert router.call(req(), run).provider == "gemini"
+    assert router.breaker_state("groq") == "closed" and len(tr["groq"].calls) == 8
+    assert not any(r.outcome == "breaker_open" for r in run.records)
+    assert [e for e in run.provider_events if e["kind"] == "breaker_open"] == []
+
+
+def test_a_breaker_opened_by_silent_429s_shows_its_reason():
+    router, run, _, _ = rig(groq=[status(429)] * 3, gemini=[ok_gemini()] * 3)
+    router.call(req(), run)
+    router.call(req(), run)
+    router.call(req(), run)
+    (ev,) = [e for e in run.provider_events if e["kind"] == "breaker_open"]
+    assert "3 HTTP 429 in a row with no Retry-After and no limit named" in ev["reason"]
+    (skip,) = [r for r in run.records if r.outcome == "breaker_open"]
+    assert skip.note == ev["reason"]
+
+
+def test_retry_after_above_the_cap_stops_the_provider_for_the_run_and_says_with_what_number():
+    router, run, tr, clock = rig(
+        groq=[status(429, {"Retry-After": "75", "x-ratelimit-reset-tokens": "75s"}, TPM_BODY)],
+        gemini=[ok_gemini()] * 3,
+    )
+    assert router.call(req(), run).provider == "gemini"
+    assert router.call(req(), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 1 and clock.slept == []  # no wait, not asked again
+    (ev,) = [e for e in run.provider_events if e["kind"] == "stopped"]
+    assert ev["retry_after_s"] == 75.0 and "above the 60 s cap" in ev["reason"]
+    assert ev["limit_named"] == "tokens_per_minute"
+    assert [r.note for r in run.records if r.outcome == "provider_stopped"] == [ev["reason"]]
+
+
+def test_a_429_that_names_a_per_day_limit_stops_the_provider_at_once():
+    body = b'{"error":{"message":"Rate limit reached on tokens per day (TPD): Limit 200000"}}'
+    router, run, tr, clock = rig(groq=[status(429, {"Retry-After": "5"}, body)],
+                                 gemini=[ok_gemini()] * 2)  # fmt: skip
+    assert router.call(req(), run).provider == "gemini"
+    (ev,) = run.provider_events
+    assert ev["kind"] == "stopped" and ev["limit_named"] == "tokens_per_day"
+    assert clock.slept == [] and len(tr["groq"].calls) == 1
+
+
+def test_retry_after_within_the_cap_waits_and_retries_once_even_when_the_local_bucket_is_full():
+    router, run, tr, clock = rig(groq=[status(429, {"Retry-After": "45"}, TPM_BODY), ok_openai()])
+    assert router.call(req(), run).provider == "groq"
+    assert clock.slept == [45.0] and len(tr["groq"].calls) == 2
+    assert run.waits[-1]["basis"] == "retry_after" and run.waits[-1]["seconds"] == 45.0

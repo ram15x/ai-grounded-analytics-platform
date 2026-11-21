@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 PUBLIC = "public"
 INTERNAL = "internal"
@@ -84,6 +85,7 @@ class ProviderError(LLMError):
         completion_tokens: int = 0,
         reasoning_tokens: int = 0,
         finish_reason: str = "",
+        rate_limit: dict[str, Any] | None = None,
     ):
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
@@ -99,6 +101,9 @@ class ProviderError(LLMError):
         self.completion_tokens = completion_tokens
         self.reasoning_tokens = reasoning_tokens
         self.finish_reason = finish_reason
+        # for an HTTP 429: body (redacted, first 300 chars), Retry-After, x-ratelimit-* headers
+        # and the limit the body names, if it names one (see providers.rate_limit_detail)
+        self.rate_limit = rate_limit
 
 
 class SensitivityRefusal(LLMError):

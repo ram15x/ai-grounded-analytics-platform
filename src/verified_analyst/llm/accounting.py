@@ -33,6 +33,8 @@ class CallRecord:
     json_mode_off: bool = False  # the retry after a JSON-mode refusal sends JSON mode off
     max_tokens_doubled: bool = False  # the retry after an empty reply that ended on `length`
     raw_body: str = ""  # an unusable HTTP 200 reply: the body as sent (redacted, first 300 chars)
+    rate_limit: dict | None = None  # an HTTP 429: body, Retry-After, x-ratelimit-*, limit named
+    note: str = ""  # why a provider was skipped (breaker_open, provider_stopped)
     malformed_kind: str = ""  # content_empty | content_null | no_content | body_not_json | ...
 
     @property
@@ -68,6 +70,9 @@ class RunContext:
     # every sleep the router did: {"provider", "task", "kind", "seconds"}; kind is `bucket` (the
     # token guard waited for tokens/minute headroom) or `rate_limit_retry` (a 429, with `basis`)
     waits: list[dict[str, Any]] = field(default_factory=list)
+    # a provider the router stopped using, or whose breaker opened, during this question:
+    # {"provider", "kind": "stopped" | "breaker_open", "reason", "retry_after_s", "limit_named"}
+    provider_events: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, rec: CallRecord) -> None:
         rec.seq = len(self.records) + 1

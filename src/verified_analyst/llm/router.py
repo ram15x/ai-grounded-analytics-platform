@@ -20,7 +20,7 @@ from typing import Any
 from ..config import ConfigError
 from .accounting import CallRecord, RunContext
 from .cassette import Cassette
-from .providers import ADAPTERS, Provider
+from .providers import ADAPTERS, PER_DAY_LIMITS, Provider
 from .settings import RouterSettings
 from .types import (
     INTERNAL,
@@ -119,6 +119,8 @@ class Router:
         self._tpm: dict[str, TokenBucket] = {}
         self._consec_429: dict[str, int] = {}
         self._open_until: dict[str, float] = {}
+        self._breaker_reason: dict[str, str] = {}
+        self._stopped: dict[str, str] = {}  # provider -> why it is not used any more this run
         frac = settings.bucket.fraction
         for name, p in settings.providers.items():
             if p.rpm:
@@ -216,9 +218,12 @@ class Router:
         except ConfigError:
             fail("config")
             return None
+        if name in self._stopped:
+            fail("provider_stopped", model, note=self._stopped[name])
+            return None
         now = self.clock()
         if self._open_until.get(name, 0) > now:
-            fail("breaker_open", model)
+            fail("breaker_open", model, note=self._breaker_reason.get(name, ""))
             return None
         retry = self.settings.retry
         wait_ms = 0.0
@@ -268,6 +273,7 @@ class Router:
                         finish_reason=exc.finish_reason,
                         raw_body=exc.raw_body,
                         malformed_kind=exc.malformed_kind,
+                        rate_limit=exc.rate_limit,
                     )  # fmt: skip
                 )
                 attempts.append({"provider": name, "outcome": exc.kind, "attempt": attempt})
@@ -295,17 +301,14 @@ class Router:
                         finish_reason=JSON_REJECTED,
                     )
                 if exc.kind == RATE_LIMIT:
-                    n = self._consec_429.get(name, 0) + 1
-                    self._consec_429[name] = n
-                    if n >= self.settings.breaker.consecutive_429:
-                        self._open_breaker(name)
-                        return None
-                    # one retry, after the wait the provider asked for; with no Retry-After, after
-                    # the token guard says the request fits again (never a blind retry). A wait
-                    # above the cap is not shortened: the provider is given up for this call.
+                    # A 429 is the provider's per-minute or per-day limit, not a fault. Wait the
+                    # Retry-After it sent (or, if it sent none, until the token guard says the
+                    # request fits) and retry ONCE; never a blind retry. If the wait is above the
+                    # cap, or the body names a per-day limit, the provider is stopped for the run
+                    # and the report says with which number. The breaker is only for 429s that
+                    # say nothing (no Retry-After, no limit named) several times in a row.
                     rl = self.settings.rate_limit
-                    if rl_retries >= rl.retries:
-                        return None
+                    named = (exc.rate_limit or {}).get("limit_named")
                     if exc.retry_after is not None:
                         delay, basis = exc.retry_after, "retry_after"
                     else:
@@ -314,11 +317,38 @@ class Router:
                             self.settings.retry.base_s, 0.0 if need == float("inf") else need
                         )
                         basis = "token_guard"
-                    if delay > rl.max_wait_s:
+                    explained = named is not None or exc.retry_after is not None
+                    if named in PER_DAY_LIMITS:
+                        self._stop_provider(
+                            name, run, f"HTTP 429 names a per-day limit ({named})",
+                            exc.retry_after, named,
+                        )  # fmt: skip
                         return None
-                    run.waits.append({"provider": name, "task": req.task,
-                                      "kind": "rate_limit_retry", "basis": basis,
-                                      "seconds": round(delay, 3)})  # fmt: skip
+                    if delay > rl.max_wait_s:
+                        self._stop_provider(
+                            name, run,
+                            f"HTTP 429 asks for a wait of {delay:g} s ({basis}), above the "
+                            f"{rl.max_wait_s:g} s cap",
+                            delay, named,
+                        )  # fmt: skip
+                        return None
+                    if not explained:
+                        n = self._consec_429.get(name, 0) + 1
+                        self._consec_429[name] = n
+                        if n >= self.settings.breaker.consecutive_429:
+                            self._open_breaker(
+                                name, run,
+                                f"{n} HTTP 429 in a row with no Retry-After and no limit named",
+                            )  # fmt: skip
+                            return None
+                    else:
+                        self._consec_429[name] = 0
+                    if rl_retries >= rl.retries:
+                        return None
+                    run.waits.append({
+                        "provider": name, "task": req.task, "kind": "rate_limit_retry",
+                        "basis": basis, "limit_named": named, "seconds": round(delay, 3),
+                    })  # fmt: skip
                     wait_ms += delay * 1000
                     self.sleep(delay)
                     rl_retries += 1
@@ -425,7 +455,19 @@ class Router:
         d = min(r.cap_s, r.base_s * (2**attempt))
         return d * (1 - r.jitter) + self.rng.uniform(0, d * r.jitter)
 
-    def _open_breaker(self, name: str) -> None:
+    def _stop_provider(
+        self, name: str, run: RunContext, reason: str, retry_after: float | None, named: str | None
+    ) -> None:
+        self._stopped[name] = reason
+        run.provider_events.append({
+            "provider": name, "kind": "stopped", "reason": reason,
+            "retry_after_s": retry_after, "limit_named": named,
+        })  # fmt: skip
+
+    def _open_breaker(self, name: str, run: RunContext, reason: str) -> None:
+        self._breaker_reason[name] = reason
+        run.provider_events.append({"provider": name, "kind": "breaker_open", "reason": reason,
+                                    "retry_after_s": None, "limit_named": None})  # fmt: skip
         self._open_until[name] = self.clock() + self.settings.breaker.cooldown_s
         # after the cooldown the next 429 re-opens it immediately (half-open probe)
         self._consec_429[name] = self.settings.breaker.consecutive_429 - 1

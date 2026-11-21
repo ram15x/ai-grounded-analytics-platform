@@ -19,5 +19,13 @@ services:
       timeout: 3s
       retries: 10
 
+  # The web view (recorded runs; no key, no database needed):  docker compose --profile app up app
+  # Not built or run where it was written (no Docker daemon): treat as UNVERIFIED.
+  app:
+    profiles: ["app"]
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+
 volumes:
   va_pgdata:

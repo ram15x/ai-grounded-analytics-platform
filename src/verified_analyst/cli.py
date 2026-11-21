@@ -688,6 +688,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bml.add_argument("--candidates", required=True, help="must be exactly current,S2,SL")
     bml.set_defaults(fn=cmd_docs_binder_model, what="locked")
+    sv = sub.add_parser(
+        "serve", help="web view of the recorded question runs (no key, no database)"
+    )
+    sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
+    sv.set_defaults(fn=cmd_serve)
+
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(
@@ -765,6 +773,19 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     rp.set_defaults(fn=cmd_route_probe)
     return p
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    from .web.app import load_payload, serve, static_page
+
+    if args.build_static:
+        out = Path(args.build_static)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "index.html").write_text(static_page(load_payload()), encoding="utf-8")
+        print(f"wrote {out / 'index.html'}")
+        return 0
+    serve(args.port, args.host)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -183,4 +183,9 @@ def answer_question(
         **kwargs,
     )
     done.route, done.passage_labels = result.route, result.passage_labels
+    if kwargs:
+        done.evidence["passages"] = {
+            label: {"id": pid, "text": kwargs["passages"].texts.get(pid, "")}
+            for label, pid in result.passage_labels.items()
+        }
     return done

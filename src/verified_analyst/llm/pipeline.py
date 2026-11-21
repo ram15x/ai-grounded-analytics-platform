@@ -71,6 +71,8 @@ class QuestionRun:
     abstain_detail: dict[str, Any] | None = None
     route: str = ""  # data | documents | both ("" when the question was not routed)
     passage_labels: dict[str, str] = field(default_factory=dict)  # label -> passage id shown
+    # what the answer rests on: the SQL that ran and the passage texts shown (for the UI)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -84,6 +86,7 @@ class QuestionRun:
             "abstain_detail": self.abstain_detail,
             "route": self.route,
             "passage_labels": self.passage_labels,
+            "evidence": self.evidence,
             "attempts": [
                 {
                     "kind": a.kind,
@@ -253,6 +256,10 @@ def run_question(
                 try:
                     mq = plan.metric_query
                     executed = {QUERY_ID: _execute(layer, readonly_url, mq)}
+                    eq = executed[QUERY_ID]
+                    result.evidence["sql"] = eq.sql
+                    result.evidence["columns"] = list(eq.columns)
+                    result.evidence["rows"] = [[str(c) for c in r] for r in eq.rows[:20]]
                     result.restatement = restate(layer, mq)
                     ev["exec_ok"] = True
                 except (CompileError, GuardError, QueryTimeout) as exc:

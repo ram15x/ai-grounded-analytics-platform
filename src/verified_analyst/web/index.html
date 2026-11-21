@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verified Analyst</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: question list on the left, one answer with its evidence on the right. */
+:root{
+  --paper:#F4F0E8; --card:#FBF9F4; --ink:#1B1A17; --mute:#6B675E; --line:#DDD6C7;
+  --ok:#1E6B45; --ok-bg:#DCEBDD; --warn:#9A5B00; --warn-bg:#F6E4BE; --bad:#9B2C2C; --bad-bg:#F3D6D2;
+  --dark:#1E1D1A; --dark-ink:#E9E4D8; --dark-mute:#9A9585; --focus:#2457C5;
+  --display:'Fraunces',Georgia,serif; --body:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+header{display:flex;flex-wrap:wrap;gap:12px 32px;align-items:baseline;justify-content:space-between;padding:20px 24px 14px;border-bottom:1px solid var(--line)}
+h1{font:600 26px/1.1 var(--display);margin:0;letter-spacing:-.01em}
+.tag{color:var(--mute);font-size:13px;max-width:60ch}
+.tally{display:flex;gap:18px;font-size:13px;color:var(--mute)}
+.tally b{font:600 22px var(--display);color:var(--ink);display:block;font-variant-numeric:tabular-nums}
+main{display:grid;grid-template-columns:minmax(260px,330px) 1fr;gap:0;min-height:calc(100vh - 150px)}
+nav{border-right:1px solid var(--line);padding:12px 0;overflow-y:auto}
+nav button{display:block;width:100%;text-align:left;background:none;border:0;border-left:3px solid transparent;padding:10px 20px;font:inherit;color:inherit;cursor:pointer}
+nav button:hover{background:#ECE6D9}
+nav button[aria-current=true]{background:var(--card);border-left-color:var(--ink)}
+nav .q{display:block;font-size:14px;margin-top:4px}
+.chip{display:inline-block;font:500 11px var(--mono);letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.c-verified{background:var(--ok-bg);color:var(--ok)}
+.c-partial{background:var(--warn-bg);color:var(--warn)}
+.c-abstain{background:var(--warn-bg);color:var(--warn)}
+.c-none{background:#E4DFD2;color:var(--mute)}
+.c-bad{background:var(--bad-bg);color:var(--bad)}
+section.view{padding:24px 32px 48px;max-width:960px}
+.qtext{font:500 24px/1.25 var(--display);margin:0 0 6px;text-wrap:balance}
+.meta{font-size:12px;color:var(--mute);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.answer{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px 20px;font-size:17px;line-height:1.65}
+.num{background:var(--ok-bg);border-bottom:2px solid var(--ok);padding:0 2px;border-radius:2px;cursor:pointer;font-variant-numeric:tabular-nums}
+.num[aria-pressed=true]{outline:2px solid var(--ok)}
+.num.q{background:#E8E1F3;border-color:#5C3FA0}
+.verdicts{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.vd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:4px 8px;background:var(--card);cursor:pointer}
+.vd[aria-pressed=true]{border-color:var(--ink)}
+.vd b{color:var(--ok);font-weight:500}
+.detail{margin-top:10px;font:13px var(--mono);color:var(--mute);min-height:20px}
+.abst{border-left:4px solid var(--warn);background:var(--warn-bg);padding:14px 18px;border-radius:0 6px 6px 0}
+.abst h3{margin:0 0 4px;font:600 18px var(--display)}
+h2{font:600 13px var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:28px 0 8px}
+.evidence{background:var(--dark);color:var(--dark-ink);border-radius:6px;padding:16px 18px;overflow-x:auto}
+.evidence h4{font:500 11px var(--mono);color:var(--dark-mute);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px}
+.evidence pre{margin:0;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
+.evidence .blk+.blk{margin-top:18px;padding-top:14px;border-top:1px solid #3a3832}
+.evidence table{border-collapse:collapse;font:12.5px var(--mono);font-variant-numeric:tabular-nums}
+.evidence td,.evidence th{padding:3px 14px 3px 0;text-align:left;border-bottom:1px solid #34322c}
+.evidence th{color:var(--dark-mute);font-weight:500}
+mark{background:#E9C46A;color:#1B1A17;padding:0 2px;border-radius:2px}
+.pid{color:var(--dark-mute);font:11px var(--mono)}
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.how div{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;font-size:13px}
+.how b{display:block;font:600 14px var(--display);margin-bottom:2px}
+footer{padding:18px 24px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);max-width:110ch}
+.note{font-size:12.5px;color:var(--mute);margin-top:10px}
+@media (max-width:760px){main{grid-template-columns:1fr}nav{border-right:0;border-bottom:1px solid var(--line);max-height:260px}section.view{padding:18px 16px 40px}}
+@media (prefers-reduced-motion:no-preference){.num,.vd{transition:outline .1s}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Verified Analyst</h1>
+    <div class="tag">Answers over company data and documents. Every number is checked against the warehouse or a stored passage before it is shown, or the answer is withheld.</div>
+  </div>
+  <div class="tally" id="tally" aria-live="polite"></div>
+</header>
+<main>
+  <nav id="list" aria-label="Questions"></nav>
+  <section class="view" id="view" aria-live="polite"></section>
+</main>
+<footer id="foot"></footer>
+<script>
+const EMBED = /*DATA*/null;
+const STATE = {items:[], sel:0};
+const LABEL = {verified:'verified', partially_verified:'partly verified', abstain:'withheld', not_recorded:'no recording'};
+const CLS = {verified:'c-verified', partially_verified:'c-partial', abstain:'c-abstain', not_recorded:'c-none'};
+const REASON = {
+  ambiguous:'The question is too vague to answer from data. The system asks instead of guessing.',
+  forecast:'This asks for a prediction. The warehouse holds history only, so no number can be verified.',
+  unsupported_metric:'The planner could not express this with the metrics the semantic layer defines, so it stopped instead of inventing one.',
+  unverified:'The drafted answer contained numbers that did not match the data.',
+  plan_failed:'No valid query could be planned.', no_passage:'No retrievable passage held a figure.',
+  budget:'The token budget for this question ran out.', sensitivity:'The data is not cleared for a hosted model.',
+  no_recording:'This demo replays recorded model replies, and none was recorded for this question. The system did not abstain here.'
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function verdicts(x){ return (x.verification && x.verification.verification && x.verification.verification.verdicts) || []; }
+function render(){
+  const it = STATE.items, ok = it.filter(x=>x.outcome==='verified').length;
+  const abs = it.filter(x=>x.outcome==='abstain').length, nr = it.filter(x=>x.outcome==='not_recorded').length;
+  document.getElementById('tally').innerHTML =
+    `<div><b>${ok}</b>verified</div><div><b>${abs}</b>withheld</div><div><b>${nr}</b>not recorded</div><div><b>${it.length}</b>questions</div>`;
+  document.getElementById('list').innerHTML = it.map((x,i)=>
+    `<button data-i="${i}" aria-current="${i===STATE.sel}"><span class="chip ${CLS[x.outcome]||'c-none'}">${LABEL[x.outcome]||x.outcome}</span><span class="q">${esc(x.question)}</span></button>`).join('');
+  document.querySelectorAll('#list button').forEach(b=>b.onclick=()=>{STATE.sel=+b.dataset.i;render();});
+  view(it[STATE.sel]);
+}
+function answerHtml(x){
+  const vs = verdicts(x).slice().sort((a,b)=>a.span[0]-b.span[0]);
+  let t = x.rendered, out = '', pos = 0;
+  vs.forEach((v,i)=>{ out += esc(t.slice(pos,v.span[0])) +
+    `<span class="num ${v.verdict==='VERIFIED_QUOTE'?'q':''}" role="button" tabindex="0" aria-pressed="false" data-v="${i}">${esc(t.slice(v.span[0],v.span[1]))}</span>`; pos = v.span[1]; });
+  out += esc(t.slice(pos));
+  return {html:out, vs};
+}
+function hl(text, needles){
+  let h = esc(text);
+  needles.filter(Boolean).forEach(n=>{ const e = esc(n).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); h = h.replace(new RegExp('(?<![\\d.,])'+e+'(?![\\d])','g'), m=>`<mark>${m}</mark>`); });
+  return h;
+}
+function view(x){
+  const el = document.getElementById('view');
+  let h = `<p class="qtext">${esc(x.question)}</p><div class="meta"><span>${x.id}</span>${x.route?`<span>route: ${x.route}</span>`:''}<span class="chip ${CLS[x.outcome]||'c-none'}">${LABEL[x.outcome]||x.outcome}</span></div>`;
+  if(x.outcome==='verified'||x.outcome==='partially_verified'){
+    const a = answerHtml(x);
+    h += `<div class="answer" id="ans">${a.html}</div><div class="verdicts">` +
+      a.vs.map((v,i)=>`<button class="vd" data-v="${i}" aria-pressed="false"><b>${v.verdict}</b> ${esc(v.text)}</button>`).join('') +
+      `</div><div class="detail" id="detail">Select a number to see how it was checked.</div>`;
+  } else {
+    h += `<div class="abst"><h3>${x.outcome==='not_recorded'?'No recorded reply':'Answer withheld'}</h3>${esc(REASON[x.reason]||x.reason||'')}</div>`;
+  }
+  const ev = x.evidence||{}, vs = verdicts(x);
+  const needles = vs.filter(v=>v.verdict==='VERIFIED_QUOTE').map(v=>v.text);
+  if(ev.sql||ev.passages){
+    h += `<h2>Evidence</h2><div class="evidence">`;
+    if(ev.sql){ h += `<div class="blk"><h4>SQL that ran (read-only role)</h4><pre>${esc(ev.sql)}</pre></div>`;
+      if(ev.rows&&ev.rows.length) h += `<div class="blk"><h4>Result</h4><table><tr>${ev.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${ev.rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>`; }
+    if(ev.passages){ h += `<div class="blk"><h4>Passages shown to the model</h4>` + Object.entries(ev.passages).map(([l,p])=>`<p><span class="pid">${l} · ${esc(p.id)}</span><br><pre>${hl(p.text,needles)}</pre></p>`).join('') + `</div>`; }
+    h += `</div>`;
+  }
+  if(x.restatement) h += `<h2>Query, restated in words</h2><p>${esc(x.restatement)}</p>`;
+  const ac = x.accounting; 
+  h += `<p class="note">${x.attempts.length} compose attempt(s), ${x.plan_failures} plan failure(s), ${x.repairs_used} repair(s).</p>`;
+  el.innerHTML = h;
+  const sel = i => { el.querySelectorAll('[data-v]').forEach(n=>n.setAttribute('aria-pressed', n.dataset.v==i)); const v=verdicts(x).slice().sort((a,b)=>a.span[0]-b.span[0])[i]; if(!v) return;
+    const how = {cell_bound:'bound to a cell of the executed result', in_passage:'found in a stored passage'}[v.reason]||v.reason;
+    document.getElementById('detail').textContent = `${v.verdict}: ${v.text} is ${how}.` + (v.expected?` Warehouse value ${v.expected}.`:'') + (v.detail?` ${v.detail}.`:''); };
+  el.querySelectorAll('[data-v]').forEach(n=>{ n.onclick=()=>sel(+n.dataset.v); n.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();sel(+n.dataset.v);} }; });
+}
+async function init(){
+  let data = EMBED;
+  if(!data){ try{ data = await (await fetch('/api/results')).json(); }catch(e){ data = null; } }
+  if(!data){ document.getElementById('view').textContent='Could not load results.'; return; }
+  STATE.items = data.items; document.getElementById('foot').textContent = data.note; render();
+}
+init();
+</script>
+</body>
+</html>

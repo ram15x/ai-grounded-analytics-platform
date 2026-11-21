@@ -722,6 +722,21 @@ def build_parser() -> argparse.ArgumentParser:
     ak.add_argument("--trace-dir", default="data/traces", help="a JSON trace is written here")
     ak.set_defaults(fn=cmd_ask)
 
+    ev = sub.add_parser("eval", help="end-to-end scoring against gold values (dev questions)")
+    ev_sub = ev.add_subparsers(dest="eval_cmd", required=True)
+    e2 = ev_sub.add_parser(
+        "e2e", help="run the 15 dev questions through the pipeline and score them"
+    )
+    e2.add_argument(
+        "--raw", default="data/Online Retail.xlsx", help="the raw UCI file (gold source)"
+    )
+    e2.add_argument("--out-dir", default="data/e2e_runs")
+    e2.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
+    e2.add_argument("--provider")
+    e2.add_argument("--model")
+    e2.add_argument("--trace-dir", default="data/traces")
+    e2.set_defaults(fn=cmd_eval_e2e)
+
     rp_ = sub.add_parser("report", help="draft a report, then approve it to write the file")
     rp_sub = rp_.add_subparsers(dest="report_cmd", required=True)
     rd = rp_sub.add_parser("draft", help="collect verified answers into a pending report")
@@ -886,6 +901,54 @@ def cmd_ask(args: argparse.Namespace) -> int:
     print(res.render_md())
     print(f"trace: {path}")
     return 0 if res.outcome != "abstain" else 1
+
+
+def cmd_eval_e2e(args: argparse.Namespace) -> int:
+    """Dev questions only. Gold values come from eval/gold/t1.py over the raw file."""
+    import json as _json  # noqa: PLC0415
+    import sys as _sys  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    import yaml  # noqa: PLC0415
+
+    from . import e2e  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parents[2]
+    _sys.path.insert(0, str(root / "eval" / "gold"))
+    import t1  # noqa: PLC0415
+
+    raw = Path(args.raw)
+    if not raw.exists():
+        raise SystemExit(f"raw file not found: {raw}")
+    qs = yaml.safe_load((root / "eval" / "questions" / "dev.yaml").read_text(encoding="utf-8"))
+    qs = qs["questions"]
+    df = t1.load_raw(raw)
+    setup = _ask_setup(args)
+    rows = []
+    for q in qs:
+        gold = str(t1.GOLD_FUNCTIONS[q["gold_fn"]](df))
+        d = _ask_one(q["question"], q["id"], setup).as_dict()
+        d["id"] = q["id"]
+        if d["reason"] == "provider_error" and args.replay:
+            d["outcome"], d["reason"] = "not_recorded", "no_recording"
+        sc = e2e.score(d, gold, q["decimals"])
+        rows.append({"id": q["id"], "question": q["question"], "gold": gold, "score": sc,
+                     "expressible": q["expressible_as_metric_query"], "run": d})  # fmt: skip
+    summary = e2e.summarise(rows)
+    out = (
+        Path(args.out_dir)
+        / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}_{'replay' if args.replay else args.provider}"
+    )
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "results.json").write_text(
+        _json.dumps({"summary": summary, "rows": rows}, indent=1, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    md = e2e.render_md(summary, rows, "End-to-end dev run")
+    (out / "report.md").write_text(md, encoding="utf-8")
+    print(md)
+    print(f"files written to: {out}")
+    return 1 if summary["verified_wrong"] else 0
 
 
 def cmd_report_run(args: argparse.Namespace) -> int:

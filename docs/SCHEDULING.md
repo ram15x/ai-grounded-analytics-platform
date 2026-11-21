@@ -17,3 +17,13 @@ Run it from the operating system's scheduler. The scheduler is outside this proj
 A live run needs the provider key in the scheduler's environment and counts against the free
 plan's daily token cap (see the usage line `va` prints). If a question gets no answer, it is listed
 under "Withheld" in the draft with its reason.
+
+# End-to-end dev run
+
+`va eval e2e --provider groq --model <id>` runs the 15 dev questions (eval/questions/dev.yaml)
+through the pipeline and scores each against the gold value computed from the raw file
+(`--raw "data/Online Retail.xlsx"`). Scores: `correct`, `verified_wrong` (verified but no shown figure
+equals the gold value; the command exits 1), `withheld`, `no_reply`. It writes `report.md` and
+`results.json` under `data/e2e_runs/`. Live runs spend free-plan tokens: read the usage line first.
+`--replay` only exercises the plumbing (the recordings do not cover these questions, so every row
+is `no_reply`). The held-out questions are not wired in; they need a locked, one-shot procedure.

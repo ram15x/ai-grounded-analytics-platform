@@ -147,6 +147,11 @@ def test_only_the_locked_module_builds_the_locked_half():
         t = p.read_text("utf-8")
         if p.name == "binder_locked.py":
             continue
+        if p.name == "binder_model.py":
+            # ADR-0013: it reads documents of both halves only to ask a model for labels; the
+            # locked claims are scored only by run_locked (gated), never by the dev report.
+            assert t.count('half_report("locked"') == 1 and "def run_locked" in t, p
+            continue
         assert 'load_numbers("locked"' not in t, p
         if p.name not in {"cli.py", "binder_study.py"}:
             assert "binder_locked" not in t, p

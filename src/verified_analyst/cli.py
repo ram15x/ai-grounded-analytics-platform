@@ -278,6 +278,50 @@ def cmd_docs_binder_locked(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_docs_binder_model(args: argparse.Namespace) -> int:
+    from .documents import binder_model as bm  # noqa: PLC0415
+
+    try:
+        if args.what == "labels":
+            from .llm.cassette import (  # noqa: PLC0415
+                CassetteContext,
+                layer_hash,
+                schema_hash,
+                warehouse_content_hash,
+            )  # fmt: skip
+            from .llm.live import default_out_dir, redact  # noqa: PLC0415
+            from .llm.settings import load_router_settings  # noqa: PLC0415
+
+            ctx = CassetteContext(layer_hash(), schema_hash(),
+                                  warehouse_content_hash(readonly_database_url()))  # fmt: skip
+            out = bm.run_generation(
+                load_router_settings(), provider=args.provider, model=args.model,
+                out_dir=Path(args.out_dir) if args.out_dir else default_out_dir(
+                    args.provider, args.model),
+                env=os.environ, seed_report=Path(args.seed_run) if args.seed_run else None,
+                max_tokens=args.max_tokens, cassette_ctx=ctx,
+            )  # fmt: skip
+            print(redact(json.dumps(out, indent=2), os.environ))
+            print("Labels written once; commit eval/binder_model_labels/labels.yaml, then run "
+                  "`va docs binder-model-dev`. Do not open the locked-half claims.")  # fmt: skip
+            return 0
+        if args.what == "dev":
+            print(bm.render_half(bm.half_report("dev")))
+            return 0
+        rep = bm.run_locked(candidates_arg=args.candidates)
+    except (DocumentError, ConfigError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(bm.render_half(rep))
+    import time  # noqa: PLC0415
+
+    out_dir = Path("data") / "live_runs" / f"{time.strftime('%Y%m%d_%H%M%S')}_binder_model_locked"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "report.json").write_text(json.dumps(rep, indent=2), encoding="utf-8")
+    print(f"report written to {out_dir}")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     report = run_verify(Path(args.answer), readonly_database_url())
     print(json.dumps(report.as_dict(), indent=2) if args.json else render(report))
@@ -589,6 +633,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bl.add_argument("--candidates", required=True, help="must be exactly current,C1,C2,S1,S2,SL")
     bl.set_defaults(fn=cmd_docs_binder_locked)
+    bm_ = dc_sub.add_parser(
+        "binder-model-labels",
+        help="ONE live run: a model writes labels for number-carrying sentences (ADR-0013; "
+        "public documents only, recorded in cassettes)",
+    )
+    bm_.add_argument("--provider", required=True)
+    bm_.add_argument("--model", required=True)
+    bm_.add_argument("--out-dir")
+    bm_.add_argument("--seed-run", help="report.json of a probe, for its real binder refusals")
+    bm_.add_argument("--max-tokens", type=int, default=None)
+    bm_.set_defaults(fn=cmd_docs_binder_model, what="labels")
+    bmd = dc_sub.add_parser(
+        "binder-model-dev", help="score current, S2 and SL on the dev half of the labels file"
+    )
+    bmd.set_defaults(fn=cmd_docs_binder_model, what="dev")
+    bml = dc_sub.add_parser(
+        "binder-model-locked",
+        help="score the locked half once (needs docs/adr/0013 and the labels file committed)",
+    )
+    bml.add_argument("--candidates", required=True, help="must be exactly current,S2,SL")
+    bml.set_defaults(fn=cmd_docs_binder_model, what="locked")
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(

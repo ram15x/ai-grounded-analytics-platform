@@ -358,6 +358,13 @@ def test_a_json_validate_failed_400_on_the_route_path_is_retried_once(env, tmp_p
     assert out["report"]["http"]["requests_sent"] == 2  # the refusal, then the same request again
     assert rows[0]["got"] == "data"  # the retry was answered normally
     assert rows[0]["http_problems"][0]["status"] == 400
+    assert "response_format" in m.requests[0] and "response_format" not in m.requests[1]
+    assert rows[0]["json_retries"] == [{"task": "route", "recovered": True}]
+    rep = out["report"]["json_mode_refusals"]
+    assert (rep["refused"], rep["retry_got_http_200"]) == (1, 1)
+    assert [c["json_mode_off"] for c in rows[0]["calls"]] == [False, True]
+    assert rows[0]["calls"][0]["max_tokens"] == rows[0]["calls"][1]["max_tokens"]
+    assert "JSON-mode refusals" in out["markdown"] and "json-off" in out["markdown"]
 
 
 # ---- separating route errors, invalid replies and later failures ----

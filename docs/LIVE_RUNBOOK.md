@@ -102,10 +102,10 @@ Remove-Item Env:GROQ_API_KEY, Env:GEMINI_API_KEY, Env:OPENROUTER_API_KEY
 
 ## JSON-mode rejections
 
-If Groq answers HTTP 400 `json_validate_failed`, the router sends the same request once more (it counts
-as a request against the cap). If that is also rejected, the question goes through the normal repair
-step, and the report's accounting lists `json_rejected` under errors by provider. Whether the retry
-helps is not yet measured; look at `by status` and `json_rejected` counts in the next run.
+If Groq answers HTTP 400 `json_validate_failed`, the router sends the request once more, with JSON mode off (it counts
+as a request against the cap). If that retry returns text that does not parse, the question goes through the normal repair step.
+The identical-request retry recovered 0 of 4 on the first full route probe, so it was replaced
+(assumptions row 44, UNVERIFIED). The route probe report has a 'JSON-mode refusals' section.
 
 ## Early stops
 
@@ -287,8 +287,8 @@ many reached the composer and where the others stopped. Injection counts cover o
 reached the composer (with n); the others are listed with the stage where they stopped, and say
 nothing about injection.
 
-`json_validate_failed` (HTTP 400, Groq): the shared router already retries it once with the same
-request, for every task including `route`, and a second refusal comes back as a reply that does not
-parse (which the route step treats as invalid and retries with the errors). The retry is a real HTTP
+`json_validate_failed` (HTTP 400, Groq): the shared router retries it once with JSON mode off (it
+used to repeat the identical request, which failed 4 of 4 times), for every task including `route`;
+text that then does not parse is handled as an invalid reply (the route step retries with the errors). The retry is a real HTTP
 request and counts against `--max-requests`. A test now covers it on the route path.
 

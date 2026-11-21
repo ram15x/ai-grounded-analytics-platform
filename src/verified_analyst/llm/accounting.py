@@ -29,6 +29,8 @@ class CallRecord:
     wait_ms: float = 0.0  # time slept before this attempt (bucket or backoff)
     retry_after_s: float | None = None
     from_cassette: bool = False
+    max_tokens: int | None = None  # the completion allowance this request carried
+    json_mode_off: bool = False  # the retry after a JSON-mode refusal sends JSON mode off
 
     @property
     def tokens(self) -> int:

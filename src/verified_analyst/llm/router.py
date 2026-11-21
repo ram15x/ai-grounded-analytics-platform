@@ -236,18 +236,23 @@ class Router:
                         latency_ms=elapsed,
                         wait_ms=wait_ms,
                         retry_after_s=exc.retry_after,
+                        max_tokens=req.max_tokens,
+                        json_mode_off=not req.json_mode and json_rejects > 0,
                     )  # fmt: skip
                 )
                 attempts.append({"provider": name, "outcome": exc.kind, "attempt": attempt})
                 wait_ms = 0.0
                 if exc.kind == JSON_REJECTED:
-                    # JSON mode refused the model's own output. Same request once more (it does
-                    # not use up the normal retry budget, but it is a real HTTP request and the
-                    # probe's request cap counts it). A second refusal is handed to the caller as
-                    # a response whose text fails to parse, so it goes down the repair path.
+                    # JSON mode refused the model's own output. Retry ONCE with JSON mode off for
+                    # this call (our own parse and schema validation still apply; the identical
+                    # request was seen to fail again, assumptions row 33). It is a real HTTP
+                    # request, it does not use up the normal retry budget, and the probe's request
+                    # cap counts it. UNVERIFIED: that JSON mode off helps. If the provider still
+                    # answers JSON_REJECTED, hand the text back as unparseable (repair path).
                     self._consec_429[name] = 0
                     json_rejects += 1
-                    if json_rejects == 1:
+                    if json_rejects == 1 and req.json_mode:
+                        req = dataclasses.replace(req, json_mode=False)
                         continue
                     return LLMResponse(
                         text=exc.failed_generation or "",
@@ -275,6 +280,7 @@ class Router:
                 continue
             self._consec_429[name] = 0
             rec = self._record(req, resp, "ok", attempt, wait_ms)
+            rec = dataclasses.replace(rec, json_mode_off=json_rejects > 0 and not req.json_mode)
             run.add(rec)
             if not rec.tokens_estimated:  # settle the reservation against what the provider said
                 self._bucket_settle(name, reserved - (rec.prompt_tokens + rec.completion_tokens))
@@ -304,6 +310,7 @@ class Router:
             prompt_tokens=p, completion_tokens=c, tokens_estimated=est,
             latency_ms=resp.latency_ms, wait_ms=wait_ms, from_cassette=resp.from_cassette,
             reasoning_tokens=resp.reasoning_tokens, finish_reason=resp.finish_reason,
+            max_tokens=req.max_tokens,
         )  # fmt: skip
 
     def _delay(self, exc: ProviderError, attempt: int) -> float:

@@ -139,6 +139,30 @@ def step_details(res: QuestionRun) -> list[dict[str, Any]]:
     ]
 
 
+def call_details(run: RunContext) -> list[dict[str, Any]]:
+    """Every model call of the question: task, outcome, finish reason, tokens (reasoning tokens
+    where the provider reports them), the completion allowance, and whether JSON mode was off."""
+    return [
+        {"task": r.task, "outcome": r.outcome, "finish_reason": r.finish_reason,
+         "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens,
+         "max_tokens": r.max_tokens, "json_mode_off": r.json_mode_off}
+        for r in run.records
+    ]  # fmt: skip
+
+
+def json_retries(run: RunContext) -> list[dict[str, Any]]:
+    """Each JSON-mode refusal and whether the one retry (JSON mode off) got an HTTP 200 reply.
+    Whether that reply then parsed and validated is in the step details."""
+    out = []
+    recs = run.records
+    for i, r in enumerate(recs):
+        if r.outcome == "json_rejected" and not r.json_mode_off:
+            nxt = recs[i + 1] if i + 1 < len(recs) else None
+            out.append({"task": r.task, "recovered": bool(nxt and nxt.outcome == "ok"
+                                                          and nxt.task == r.task)})  # fmt: skip
+    return out
+
+
 def http_problems(counting: live.CountingTransport, since: int) -> list[dict[str, Any]]:
     """Non-2xx responses and transport errors since request number `since` (bodies redacted)."""
     return [
@@ -196,6 +220,15 @@ def build_breakdown(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 r["stage"] == "reached_composer" and r["outcome"] != "verified" for r in sourced
             ),
         },
+    }
+
+
+def _json_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    tries = [t for r in rows for t in r["json_retries"]]
+    return {
+        "refused": len(tries),
+        "retry_got_http_200": sum(t["recovered"] for t in tries),
+        "note": "the retry sends JSON mode off; that this helps is UNVERIFIED (assumptions row 44)",
     }
 
 
@@ -279,6 +312,7 @@ def build_report(
             "problems_by_binder_reason": {r: sum(r in p for p in problems) for r in BINDER_REASONS},
         },
         "router_breakdown": build_breakdown(rows),
+        "json_mode_refusals": _json_summary([*rows, *inj_rows]),
         "injection": {
             "questions": inj_rows,
             "reached_composer": {"k": len(reached), "n": len(inj_rows)},
@@ -329,6 +363,25 @@ def render_report(rep: dict[str, Any]) -> str:
         lines.append(f"  - expected {route}: {b['correct']} of {b['n']}")
     lines += ["- confusion (expected: got): " + json.dumps(r["confusion"], sort_keys=True)]
     sv, pa, inj = rep["schema_valid"], rep["placeholder_adherence"], rep["injection"]
+    jm = rep["json_mode_refusals"]
+    lines += [
+        "",
+        "## JSON-mode refusals (HTTP 400 json_validate_failed)",
+        f"- refused: {jm['refused']}; the one retry with JSON mode off got HTTP 200: "
+        f"{jm['retry_got_http_200']} of {jm['refused']} (n={jm['refused']}). {jm['note']}",
+        f"- completion allowance per call (max_tokens): {h['caps']['max_tokens']}",
+    ]
+    for q in [*rep["router_questions"], *rep["injection"]["questions"]]:
+        lines.append(
+            f"  - {q['id']}: "
+            + ", ".join(
+                f"{c['task']} {c['outcome']}/{c['finish_reason'] or '-'} "
+                f"{c['completion_tokens']}tok"
+                + (f" ({c['reasoning_tokens']} reasoning)" if c["reasoning_tokens"] else "")
+                + (" json-off" if c["json_mode_off"] else "")
+                for c in q["calls"]
+            )
+        )
     bd = rep["router_breakdown"]
     vs = bd["valid_source_routes"]
     lines += [
@@ -494,6 +547,7 @@ def run_route_probe(
                     "stage": stage_of(res),
                     "steps_not_valid": step_details(res),
                     "http_problems": http_problems(counting, first_http),
+                    "calls": call_details(run), "json_retries": json_retries(run),
                 })  # fmt: skip
             else:
                 comp = [t for task, t in tap.replies[first_reply:] if task in ("compose", "repair")]
@@ -509,6 +563,7 @@ def run_route_probe(
                     "markers_found": found, "verified_with_marker": bool(shown),
                     "steps_not_valid": step_details(res),
                     "http_problems": http_problems(counting, first_http),
+                    "calls": call_details(run), "json_retries": json_retries(run),
                 })  # fmt: skip
             if res.outcome == "abstain" and res.reason == "budget":
                 stop = "token cap reached mid-question"

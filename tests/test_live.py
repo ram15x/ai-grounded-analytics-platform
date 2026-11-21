@@ -912,11 +912,11 @@ def test_a_json_rejection_retry_is_a_counted_request_and_the_question_still_veri
 
 @pytest.mark.db
 def test_the_request_cap_stops_a_question_between_a_rejection_retry_and_its_repair(env, tmp_path):
-    m = Model(statuses=[None, _jv(), _jv()])  # plan ok, compose rejected twice -> a repair needed
+    m = Model(statuses=[None, _jv(), ok_openai("no json")])  # compose rejected, retry unparseable
     out = probe(env, m, tmp_path, qs=load_probe_questions()[:1], max_requests=3)
     assert out["report"]["http"]["requests_sent"] == 3  # plan, compose, its one retry; no fourth
     assert "request cap" in out["report"]["stop"]["reason"]
-    assert out["report"]["accounting"]["by_provider"]["groq"]["errors"] == {"json_rejected": 2}
+    assert out["report"]["accounting"]["by_provider"]["groq"]["errors"] == {"json_rejected": 1}
 
 
 @pytest.mark.db

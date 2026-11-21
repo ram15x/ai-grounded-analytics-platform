@@ -356,17 +356,21 @@ def over_http(env_, responses):
     return out, t, run
 
 
-def test_two_rejections_of_the_compose_call_become_a_schema_failure_then_a_repair(env):
+def test_a_rejection_then_an_unparseable_retry_becomes_a_schema_failure_then_a_repair(env):
     out, t, run = over_http(
         env,
-        [ok_openai(json.dumps(PLAN)), jv(), jv(), ok_openai(json.dumps(GOOD))],
+        [
+            ok_openai(json.dumps(PLAN)),
+            jv(),
+            ok_openai("sorry, no JSON"),
+            ok_openai(json.dumps(GOOD)),
+        ],
     )
     assert out.outcome == "verified" and out.repairs_used == 1
     assert [a.status for a in out.attempts] == ["schema_failure", "verified"]
-    assert "rejected the answer as invalid JSON" in out.attempts[0].problems[0]
-    assert len(t.calls) == 4  # plan, compose, compose again (the one retry), repair
-    repair_user = t.calls[3]["body"]["messages"][1]["content"]
-    assert "rejected the answer as invalid JSON" in repair_user
+    assert "schema_failure" in out.attempts[0].problems[0]
+    assert len(t.calls) == 4  # plan, compose, compose again (JSON mode off), repair
+    assert "response_format" in t.calls[1]["body"] and "response_format" not in t.calls[2]["body"]
 
 
 def test_one_rejection_then_success_needs_no_repair(env):
@@ -375,19 +379,21 @@ def test_one_rejection_then_success_needs_no_repair(env):
     assert len(t.calls) == 3
 
 
-def test_two_rejections_of_the_plan_call_use_the_plan_repair_budget(env):
+def test_a_rejection_then_an_unparseable_plan_retry_uses_the_plan_repair_budget(env):
     out, t, _ = over_http(
-        env, [jv(), jv(), ok_openai(json.dumps(PLAN)), ok_openai(json.dumps(GOOD))]
+        env, [jv(), ok_openai("no"), ok_openai(json.dumps(PLAN)), ok_openai(json.dumps(GOOD))]
     )
     assert out.outcome == "verified" and out.plan_failures == 1 and out.repairs_used == 1
 
 
-def test_a_rejection_recorded_with_empty_text_replays_as_a_schema_failure(env, tmp_path, warehouse):
+def test_a_rejection_then_unparseable_retry_replays_as_a_schema_failure(env, tmp_path, warehouse):
     layer, url, known = env
     ctx = CassetteContext(layer_hash(), schema_hash(), warehouse_content_hash(url))
     cfg = settings(datasets={"analytics.sales_lines": "public"})
     cfg.tasks = {t: ["groq"] for t in ("plan", "compose", "repair")}
-    t = MockTransport([ok_openai(json.dumps(PLAN)), jv(), jv(), ok_openai(json.dumps(GOOD))])
+    t = MockTransport(
+        [ok_openai(json.dumps(PLAN)), jv(), ok_openai("no"), ok_openai(json.dumps(GOOD))]
+    )
     rec = Cassette(tmp_path, "record", ctx, env=KEYS)
     router = Router(cfg, {"groq": GroqProvider("groq", "GROQ_API_KEY", transport=t, env=KEYS)},
                     cassette=rec)  # fmt: skip

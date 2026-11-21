@@ -580,27 +580,35 @@ def jv(generation="", code="json_validate_failed"):
     return status(400, body=json.dumps(body).encode())
 
 
-def test_json_validate_failed_is_retried_once_with_the_same_request_and_can_succeed():
+def test_json_validate_failed_is_retried_once_with_json_mode_off_and_can_succeed():
     router, run, tr, clock = rig(groq=[jv(), ok_openai('{"a": 1}')])
     r = router.call(req(), run)
     assert r.text == '{"a": 1}' and r.finish_reason != "json_rejected"
-    assert len(tr["groq"].calls) == 2
-    assert tr["groq"].calls[0]["body"] == tr["groq"].calls[1]["body"]  # same request
+    first, second = (c["body"] for c in tr["groq"].calls)
+    assert "response_format" in first and "response_format" not in second
+    assert {k: v for k, v in first.items() if k != "response_format"} == second  # nothing else
     assert [x.outcome for x in run.records] == ["json_rejected", "ok"]
+    assert [x.json_mode_off for x in run.records] == [False, True]
+    assert all(x.max_tokens == first["max_tokens"] for x in run.records)
     assert clock.slept == []
 
 
-def test_a_second_json_validate_failed_is_returned_as_unparseable_text_not_an_error():
-    router, run, tr, _ = rig(groq=[jv(), jv("{ half a json")])
+def test_a_retry_that_returns_non_json_text_is_handed_back_as_text_with_no_third_request():
+    router, run, tr, _ = rig(groq=[jv(), ok_openai("{ half a json")])
     r = router.call(req(), run)
-    assert (r.text, r.finish_reason, r.provider) == ("{ half a json", "json_rejected", "groq")
+    assert (r.text, r.provider) == ("{ half a json", "groq")
     assert len(tr["groq"].calls) == 2  # exactly one retry, never a third request
-    assert [x.outcome for x in run.records] == ["json_rejected", "json_rejected"]
 
 
-def test_the_empty_failed_generation_seen_on_groq_comes_back_as_empty_text():
-    router, run, tr, _ = rig(groq=[jv(""), jv("")])
-    assert router.call(req(), run).text == ""
+def test_an_empty_failed_generation_is_retried_the_same_way():
+    router, run, tr, _ = rig(groq=[jv(""), ok_openai('{"a": 1}')])
+    assert router.call(req(), run).text == '{"a": 1}' and len(tr["groq"].calls) == 2
+
+
+def test_if_the_json_off_retry_is_itself_refused_the_next_provider_is_tried():
+    router, run, tr, _ = rig(groq=[jv(), jv()], gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 2
 
 
 def test_the_json_retry_does_not_use_up_the_normal_retry_budget():

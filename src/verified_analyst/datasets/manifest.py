@@ -106,6 +106,9 @@ class Manifest(BaseModel):
     description: str
     grain: str  # what one row is
     currency: str = ""
+    # who may see this data: "public" lets hosted model providers receive its query results;
+    # the default, "internal", keeps it on local models only (see ADR-0005 sensitivity rule)
+    visibility: Literal["public", "internal"] = "internal"
     columns: dict[str, Column]
     exclusions: list[dict[str, Any]] = Field(default_factory=list)  # {name, description, where}
     glossary: dict[str, str] = Field(default_factory=dict)

@@ -5,6 +5,7 @@ Every limit in the file is UNVERIFIED unless its comment in the file says where 
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Literal
@@ -128,9 +129,25 @@ def default_router_path() -> Path:
     return Path(__file__).resolve().parents[3] / "config" / "router.yaml"
 
 
+def apply_dataset_visibility(cfg: RouterSettings, layer_path: Path) -> RouterSettings:
+    """Read `visibility.json` next to an uploaded dataset's layer file and register it. Anything
+    missing or malformed leaves the dataset unregistered, which the router treats as internal."""
+    f = layer_path.parent / "visibility.json"
+    try:
+        info = json.loads(f.read_text("utf-8"))
+        relation, vis = info["relation"], info["visibility"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return cfg
+    if isinstance(relation, str) and vis in ("public", "internal"):
+        cfg.datasets[relation] = vis
+    return cfg
+
+
 def load_router_settings(path: Path | None = None) -> RouterSettings:
     path = path or default_router_path()
     try:
-        return RouterSettings.model_validate(yaml.safe_load(path.read_text("utf-8")))
+        cfg = RouterSettings.model_validate(yaml.safe_load(path.read_text("utf-8")))
     except (OSError, yaml.YAMLError, ValueError) as exc:
         raise ConfigError(f"cannot load router config {path}: {exc}") from exc
+    layer = os.environ.get("VA_SEMANTIC_PATH")
+    return apply_dataset_visibility(cfg, Path(layer)) if layer else cfg

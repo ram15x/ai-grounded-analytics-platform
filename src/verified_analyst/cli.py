@@ -1143,6 +1143,9 @@ def cmd_dataset_load(args: argparse.Namespace) -> int:
     (out / "layer.yaml").write_text(
         yaml.safe_dump(json.loads(layer.model_dump_json()), sort_keys=False), encoding="utf-8"
     )
+    (out / "visibility.json").write_text(
+        json.dumps({"relation": info["relation"], "visibility": man.visibility}), "utf-8"
+    )
     (out / "profile.json").write_text(json.dumps(prof.as_dict(), indent=1, default=str), "utf-8")
     (out / "manifest.yaml").write_text(Path(args.manifest).read_text("utf-8"), encoding="utf-8")
     unchecked = [k for k, s in man.metrics.items() if s.status == "approved" and not s.known]
@@ -1151,6 +1154,8 @@ def cmd_dataset_load(args: argparse.Namespace) -> int:
     print(f"known-figure checks passed: {sum(1 for r in rec if r['ok'])} of {len(rec)}")
     if unchecked:
         print(f"WARNING approved without a known figure to check against: {unchecked}")
+    where = "may go to hosted models" if man.visibility == "public" else "stays on local models"
+    print(f"visibility: {man.visibility} ({where})")
     print(f"layer written to {out / 'layer.yaml'} (use it with VA_SEMANTIC_PATH)")
     return 0
 

@@ -175,6 +175,16 @@ class Router:
         attempts: list[dict] = []
         for name in eligible:
             preq = self._for_provider(name, req)
+            if self.cassette is not None and self.cassette.mode == "resume":
+                # a recorded answer is used without a request; only a miss goes to the provider
+                try:
+                    model = self.settings.providers[name].model_for(req.task)
+                except ConfigError:
+                    model = ""
+                hit = self.cassette.lookup(name, model, preq) if model else None
+                if hit is not None:
+                    run.add(self._record(preq, hit, "cassette", 0, 0.0))
+                    return hit
             resp = self._try_provider(name, preq, run, attempts)
             if resp is not None:
                 if self.cassette is not None:

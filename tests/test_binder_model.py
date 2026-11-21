@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from llm_helpers import KEYS, ok_openai, settings
+from llm_helpers import KEYS, ok_openai, settings, status
 from verified_analyst.documents import binder_model as bm
 from verified_analyst.documents import binder_study as bs
 from verified_analyst.documents.binding import CURRENT, DEFAULT
@@ -197,35 +197,95 @@ def test_locked_run_refuses_when_the_adr_differs_from_the_code(tmp_path):
 
 def test_the_real_locked_half_is_not_scorable_before_the_labels_are_committed(tmp_path):
     # the repository has no labels file yet: the gate refuses rather than scoring anything
-    with pytest.raises(DocumentError, match="missing|not been committed"):
+    with pytest.raises(DocumentError, match="missing|not been committed|changed since"):
         bm.run_locked(candidates_arg="current,S2,SL", ledger=tmp_path / "l.jsonl")
     assert not (tmp_path / "l.jsonl").exists()
 
 
-def test_generation_is_one_run_public_only_and_recorded_nowhere_else(tmp_path):
-    d = corpus(tmp_path, 4)
-    cfg = settings(datasets={"docs.public": "public"})
-    sent = []
+def _transport(sent, script=()):
+    """Mocked HTTP: answers every batch with labels; `script` items override the first calls."""
+    script = list(script)
 
     def transport(url, headers, body, timeout):
         data = json.loads(body)
         sent.append(data)
+        if script:
+            item = script.pop(0)
+            if item is not None:
+                return item
         req = type("R", (), {"messages": [(m["role"], m["content"]) for m in data["messages"]]})
         return ok_openai(fake_labeler()(req))
 
-    kw = {"provider": "groq", "model": "m-groq", "out_dir": tmp_path / "out", "env": KEYS,
-          "labels": tmp_path / "labels.yaml", "ledger": tmp_path / "ledger.jsonl",
-          "corpus_dir": d, "transport": transport, "sleep": lambda s: None}  # fmt: skip
+    return transport
+
+
+def _gen_kw(tmp_path, d, transport):
+    from verified_analyst.llm.cassette import CassetteContext
+
+    return {"provider": "groq", "model": "m-groq", "out_dir": tmp_path / "work", "env": KEYS,
+            "labels": tmp_path / "labels.yaml", "ledger": tmp_path / "ledger.jsonl",
+            "corpus_dir": d, "transport": transport, "sleep": lambda s: None,
+            "cassette_ctx": CassetteContext("l", "s", "w")}  # fmt: skip
+
+
+def _ledger(tmp_path):
+    f = tmp_path / "ledger.jsonl"
+    return [json.loads(x)["event"] for x in f.read_text().splitlines()] if f.exists() else []
+
+
+def test_generation_is_one_run_public_only_and_writes_one_ledger_entry(tmp_path):
+    d = corpus(tmp_path, 4)
+    cfg = settings(datasets={"docs.public": "public"})
+    sent = []
+    kw = _gen_kw(tmp_path, d, _transport(sent))
     cfg.probe.max_requests = 60
     out = bm.run_generation(cfg, **kw)
-    assert out["meta"]["claims"] > 0 and out["meta"]["http_requests_sent"] == len(sent)
-    assert out["meta"]["requests_planned"] == len(sent) <= 60
-    assert (tmp_path / "labels.yaml").exists() and len(out["labels_sha256"]) == 64
-    events = [json.loads(x)["event"] for x in (tmp_path / "ledger.jsonl").read_text().splitlines()]
-    assert events == ["generation_started", "generated"]
+    m = out["meta"]
+    assert out["complete"] and m["claims"] > 0 and m["http_requests_sent"] == len(sent)
+    assert m["batches_total"] == m["batches_answered"] == len(sent) <= 60
+    assert m["labels_written"] == m["claims"] and len(out["labels_sha256"]) == 64
+    assert (tmp_path / "labels.yaml").exists() and _ledger(tmp_path) == ["generated"]
+    n = len(sent)
     with pytest.raises(DocumentError, match="already generated"):
         bm.run_generation(cfg, **kw)
-    assert len(sent) == out["meta"]["requests_planned"]  # the refused second run sent nothing
+    assert len(sent) == n  # the refused second run sent nothing
     untagged = settings(datasets={"hr.salaries": "internal"})
     with pytest.raises(DocumentError, match="not tagged public"):
         bm.run_generation(untagged, **{**kw, "ledger": tmp_path / "other.jsonl"})
+
+
+def test_a_rate_limit_keeps_the_batches_done_and_the_next_run_resumes_from_them(tmp_path):
+    d = corpus(tmp_path, 8)  # enough sentences for 3 or more batches
+    cfg = settings(datasets={"docs.public": "public"})
+    cfg.probe.max_requests = 60
+    sent1 = []
+    hdr = {"Retry-After": "75", "x-ratelimit-limit-tokens": "8000"}
+    body = b'{"error":{"message":"Rate limit on tokens per minute (TPM): Limit 8000"}}'
+    first = bm.run_generation(
+        cfg, **_gen_kw(tmp_path, d, _transport(sent1, [None, status(429, hdr, body)]))
+    )
+    m = first["meta"]
+    assert not first["complete"] and m["batches_total"] >= 3 and m["batches_answered"] == 1
+    assert m["labels_written"] == bm.BATCH and m["http_requests_sent"] == 2 == len(sent1)
+    assert not (tmp_path / "labels.yaml").exists() and _ledger(tmp_path) == []  # not spent
+    assert "INCOMPLETE" in first["markdown"] and "NOT spent" in first["markdown"]
+    assert "75" in first["markdown"] and "tokens_per_minute" in first["markdown"]
+    sent2 = []
+    second = bm.run_generation(cfg, **_gen_kw(tmp_path, d, _transport(sent2)))
+    m2 = second["meta"]
+    assert second["complete"] and m2["batches_answered_from_cassettes"] == 1
+    assert len(sent2) == m2["batches_total"] - 1  # the finished batch was not asked again
+    assert m2["labels_written"] > m["labels_written"] and _ledger(tmp_path) == ["generated"]
+    assert yaml.safe_load((tmp_path / "labels.yaml").read_text())["meta"]["complete"] is True
+    with pytest.raises(DocumentError, match="already generated"):
+        bm.run_generation(cfg, **_gen_kw(tmp_path, d, _transport([])))
+
+
+def test_the_request_cap_also_leaves_the_generation_unspent_and_resumable(tmp_path):
+    d = corpus(tmp_path, 8)
+    cfg = settings(datasets={"docs.public": "public"})
+    cfg.probe.max_requests = 2
+    sent = []
+    out = bm.run_generation(cfg, **_gen_kw(tmp_path, d, _transport(sent)))
+    assert not out["complete"] and len(sent) == 2 and _ledger(tmp_path) == []
+    assert out["meta"]["batches_answered"] == 2 and out["meta"]["stopped"]

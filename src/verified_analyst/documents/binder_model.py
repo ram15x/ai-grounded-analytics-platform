@@ -46,6 +46,7 @@ ROOT = Path(__file__).resolve().parents[3]
 ADR_PATH = ROOT / "docs" / "adr" / "0013-model-written-labels.md"
 LABELS_PATH = ROOT / "eval" / "binder_model_labels" / "labels.yaml"
 LEDGER_PATH = ROOT / "data" / "binder_model_ledger.jsonl"
+WORK_DIR = ROOT / "data" / "binder_model_labels_work"  # cassettes of the one generation
 # Set to the ADR that used the locked half once it has been scored; nothing else may use it.
 SPENT_BY: str | None = None
 TARGET_CLAIMS = 80
@@ -207,8 +208,12 @@ def parse_labels(text: str, batch: list[Number]) -> dict[int, str]:
 class Generated:
     claims: list[dict[str, Any]]
     sentences_asked: int
-    requests: int
+    requests: int  # batches answered
     dropped: int
+    batches_total: int = 0
+    complete: bool = True
+    stopped: str = ""  # why it stopped before the last batch (a rate limit, the request cap)
+    sentences_answered: int = 0  # sentences in the batches that were answered
 
 
 def generate_labels(
@@ -216,18 +221,29 @@ def generate_labels(
     sentences: list[Number],
     seeds: Sequence[tuple[Number, str]] = (),
     max_tokens: int | None = None,
+    stop_on: tuple[type[BaseException], ...] = (),
 ) -> Generated:
-    """One model call per BATCH sentences; `call` returns the reply text (an exception, such as
-    the router giving up, propagates)."""
+    """One model call per BATCH sentences; `call` returns the reply text. An exception in
+    `stop_on` (the router giving up, the request cap) ends the run at that batch: the batches
+    before it are kept, none after it is tried, and nothing is retried by hand. Any other
+    exception propagates."""
     claims: list[dict[str, Any]] = [_row(n, label, "real_refusal") for n, label in seeds]
-    dropped = requests = 0
+    dropped = answered = done = 0
+    total = -(-len(sentences) // BATCH)
+    stopped = ""
     for i in range(0, len(sentences), BATCH):
         batch = sentences[i : i + BATCH]
-        requests += 1
-        got = parse_labels(call(label_request(batch, max_tokens)), batch)
+        try:
+            text = call(label_request(batch, max_tokens))
+        except stop_on as exc:
+            stopped = str(exc) or type(exc).__name__
+            break
+        done += 1
+        answered += len(batch)
+        got = parse_labels(text, batch)
         dropped += len(batch) - len(got)
         claims += [_row(batch[j], lab, "model") for j, lab in sorted(got.items())]
-    return Generated(claims, len(sentences), requests, dropped)
+    return Generated(claims, len(sentences), done, dropped, total, done == total, stopped, answered)
 
 
 def _row(n: Number, label: str, source: str) -> dict[str, Any]:
@@ -450,11 +466,15 @@ def run_generation(
     sleep: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
     """The one generation run. Public documents only; the router refuses anything else."""
-    from ..llm import live  # noqa: PLC0415
+    from ..llm import (
+        live,  # noqa: PLC0415
+        route_probe,  # noqa: PLC0415
+    )
     from ..llm.cassette import Cassette  # noqa: PLC0415
     from ..llm.providers import build_one  # noqa: PLC0415
     from ..llm.router import Router  # noqa: PLC0415
     from ..llm.transport import urllib_transport  # noqa: PLC0415
+    from ..llm.types import AllProvidersFailed  # noqa: PLC0415
 
     check_generation_allowed(ledger)
     if settings.sensitivity_of(("docs.public",)) != PUBLIC:
@@ -476,11 +496,10 @@ def run_generation(
                 unlocated += 1
             else:
                 seeds.append((n, sd["label"]))
-    needed = -(-len(sentences) // BATCH)
-    if needed > s.probe.max_requests:
-        raise DocumentError(f"the run needs {needed} requests; the cap is {s.probe.max_requests}")
     counting = live.CountingTransport(transport or urllib_transport, s.probe.max_requests, env=env)
-    cassette = Cassette(out_dir / "cassettes", "record", cassette_ctx, env=env) \
+    # "resume": a batch that is already in the cassettes of an earlier, unfinished run is answered
+    # from them without a request; only the missing batches go to the provider
+    cassette = Cassette(out_dir / "cassettes", "resume", cassette_ctx, env=env) \
         if cassette_ctx is not None else None  # fmt: skip
     kw: dict[str, Any] = {"sleep": sleep or live._sleep}
     router = Router(s, {provider: build_one(s, provider, transport=counting, env=env)},
@@ -490,20 +509,39 @@ def run_generation(
     def call(req: LLMRequest) -> str:
         return router.call(req, run).text
 
-    record(ledger, "generation_started", provider=provider, model=model)
-    gen = generate_labels(call, sentences, seeds, max_tokens)
+    gen = generate_labels(call, sentences, seeds, max_tokens, (AllProvidersFailed,
+                                                               live.RequestCapReached))  # fmt: skip
+    from_cassette = sum(r.outcome == "cassette" for r in run.records)
+    tg = route_probe.token_guard([run], counting)
     meta = {
         "provider": provider, "model": model, "prompt": "label.v0",
         "prompt_hash": prompt_hashes()["label.v0"], "sentences_asked": gen.sentences_asked,
-        "requests_planned": gen.requests, "http_requests_sent": counting.count,
-        "labels_dropped_no_content_word": gen.dropped, "seeds_from_real_refusals": len(seeds),
+        "batches_total": gen.batches_total, "batches_answered": gen.requests,
+        "batches_answered_from_cassettes": from_cassette,
+        "http_requests_sent": counting.count, "complete": gen.complete,
+        "sentences_answered": gen.sentences_answered,
+        "labels_written": sum(c["source"] == "model" for c in gen.claims),
+        "labels_dropped_no_usable_label": gen.dropped, "seeds_from_real_refusals": len(seeds),
         "seed_refusals_not_located": unlocated, "claims": len(gen.claims),
-        "documents": len({c["doc"] for c in gen.claims}),
+        "documents": len({c["doc"] for c in gen.claims}), "stopped": gen.stopped,
     }  # fmt: skip
-    if len(gen.claims) < MIN_CLAIMS:
+    if gen.complete and len(gen.claims) < MIN_CLAIMS:
         meta["warning"] = f"only {len(gen.claims)} claims; the ADR's minimum is {MIN_CLAIMS}"
-    sha = write_labels(labels, gen, meta)
-    record(ledger, "generated", labels_sha256=sha, **meta)
-    live.write_outputs(out_dir, {"meta": meta, "labels_sha256": sha},
-                       "labels written; see report.json", cassette, cassette_ctx, env)  # fmt: skip
-    return {"meta": meta, "labels_sha256": sha, "out_dir": str(out_dir), "labels": str(labels)}
+    sha = ""
+    if gen.complete:  # only now: the labels file and the one ledger entry
+        sha = write_labels(labels, gen, meta)
+        record(ledger, "generated", labels_sha256=sha, **meta)
+    rep = {"meta": meta, "labels_sha256": sha, "token_guard": tg}
+    md = "\n".join([
+        f"# binder-model-labels: {'COMPLETE' if gen.complete else 'INCOMPLETE'}",
+        f"- labels written: {meta['labels_written']} of {gen.sentences_asked} sentences "
+        f"({gen.requests} of {gen.batches_total} batches answered, {from_cassette} of them "
+        f"from cassettes without a request; {counting.count} HTTP requests sent this run)",
+        *([f"- stopped: {gen.stopped}", "- the one allowed generation is NOT spent: no ledger "
+           "entry, no labels file; run the same command again to resume from the cassettes"]
+          if not gen.complete else [f"- labels file written; sha256 {sha}"]),
+        *route_probe.render_token_guard(tg),
+    ]) + "\n"  # fmt: skip
+    live.write_outputs(out_dir, rep, md, cassette, cassette_ctx, env)
+    return {"meta": meta, "labels_sha256": sha, "out_dir": str(out_dir), "labels": str(labels),
+            "complete": gen.complete, "markdown": md}  # fmt: skip

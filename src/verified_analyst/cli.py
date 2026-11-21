@@ -289,19 +289,24 @@ def cmd_docs_binder_model(args: argparse.Namespace) -> int:
                 schema_hash,
                 warehouse_content_hash,
             )  # fmt: skip
-            from .llm.live import default_out_dir, redact  # noqa: PLC0415
+            from .llm.live import redact  # noqa: PLC0415
             from .llm.settings import load_router_settings  # noqa: PLC0415
 
             ctx = CassetteContext(layer_hash(), schema_hash(),
                                   warehouse_content_hash(readonly_database_url()))  # fmt: skip
             out = bm.run_generation(
                 load_router_settings(), provider=args.provider, model=args.model,
-                out_dir=Path(args.out_dir) if args.out_dir else default_out_dir(
-                    args.provider, args.model),
-                env=os.environ, seed_report=Path(args.seed_run) if args.seed_run else None,
-                max_tokens=args.max_tokens, cassette_ctx=ctx,
+                # one fixed folder, so an unfinished run is resumed from its cassettes
+                out_dir=Path(args.out_dir or bm.WORK_DIR),
+                env=os.environ, seed_report=Path(args.seed_run)
+                if args.seed_run else None, max_tokens=args.max_tokens, cassette_ctx=ctx,
             )  # fmt: skip
-            print(redact(json.dumps(out, indent=2), os.environ))
+            print(redact(out["markdown"], os.environ))
+            print(f"files written to: {out['out_dir']}")
+            if not out["complete"]:
+                print("INCOMPLETE: run the same command again to resume; nothing was spent.",
+                      file=sys.stderr)  # fmt: skip
+                return 3
             print("Labels written once; commit eval/binder_model_labels/labels.yaml, then run "
                   "`va docs binder-model-dev`. Do not open the locked-half claims.")  # fmt: skip
             return 0

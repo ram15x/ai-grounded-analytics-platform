@@ -129,8 +129,8 @@ class Cassette:
         env: Mapping[str, str] | None = None,
         now: Any = time.time,
     ):
-        if mode not in ("record", "replay"):
-            raise ValueError("mode must be 'record' or 'replay'")
+        if mode not in ("record", "replay", "resume"):
+            raise ValueError("mode must be 'record', 'replay' or 'resume'")
         self.directory = Path(directory)
         self.mode = mode
         self.ctx = ctx

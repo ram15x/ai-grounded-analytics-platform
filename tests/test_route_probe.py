@@ -579,7 +579,6 @@ def test_compare_refuses_route_only(tmp_path):
         )  # fmt: skip
 
 
-
 TPM = (
     b'{"error":{"message":"Rate limit reached for model `openai/gpt-oss-20b` on tokens per '
     b'minute (TPM): Limit 8000, Used 7900, Requested 900."}}'

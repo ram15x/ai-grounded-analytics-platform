@@ -367,6 +367,43 @@ def token_guard(runs: list[RunContext], counting: live.CountingTransport) -> dic
     }
 
 
+def render_token_guard(tg: dict[str, Any], effort_sent: str | None = None) -> list[str]:
+    lines = [
+        "",
+        "## Token guard and rate limits",
+        f"- reasoning_effort sent: {effort_sent or 'no (not configured)'}. "
+        "UNVERIFIED: that a lower setting reduces reasoning tokens; only a compare run "
+        "can show it.",
+        f"- waits for the token bucket: {tg['bucket_waits']} ({tg['bucket_wait_seconds']} s); "
+        f"HTTP 429 received: {tg['http_429']}; wait-and-retry after a 429: "
+        f"{tg['rate_limit_retries']} ({tg['rate_limit_retry_seconds']} s); "
+        f"requests sent with a doubled allowance: {tg['requests_doubled_allowance']}",
+    ]
+    lines += [
+        f"- HTTP 429 by the limit its body names: {json.dumps(tg['http_429_by_limit_named'])} "
+        "(the body is the provider's wording; 'not named' means none of tokens/requests per "
+        "minute/day appeared in the first 300 characters)",
+    ]
+    for r in tg["http_429_detail"]:
+        lines += [
+            f"  - 429 {r['question']} {r['task']} attempt {r['attempt']}: limit named "
+            f"{r['limit_named'] or 'none'}; Retry-After {r['retry_after_header'] or 'not sent'}; "
+            f"x-ratelimit {json.dumps(r['ratelimit_headers'])}",
+            f"    body: {r['body'] or '(empty)'}",
+        ]
+    for e in tg["provider_events"]:
+        lines.append(
+            f"- PROVIDER {e['kind'].upper().replace('_', ' ')} at {e['question']}: {e['reason']}"
+            + (f" (number: {e['retry_after_s']:g} s)" if e.get("retry_after_s") is not None else "")
+        )
+    lines += [
+        f"  - wait: {w['task']} {w['kind']}{' by ' + w['basis'] if w.get('basis') else ''} "
+        f"{w['seconds']} s"
+        for w in tg["each_wait"]
+    ]
+    return lines
+
+
 def build_report(
     opts: RouteProbeOptions, s: RouterSettings, layer: SemanticLayer, tap: _Tap,
     runs: list[RunContext], rows: list[dict[str, Any]], inj_rows: list[dict[str, Any]],
@@ -493,40 +530,7 @@ def render_report(rep: dict[str, Any]) -> str:
         "when a reply was empty with finish length, so at most 3; a provider with 2 refusals "
         "in a row is dropped for that question)",
     ]
-    tg = rep["token_guard"]
-    lines += [
-        "",
-        "## Token guard and rate limits",
-        f"- reasoning_effort sent: {h['reasoning_effort_sent'] or 'no (not configured)'}. "
-        "UNVERIFIED: that a lower setting reduces reasoning tokens; only a compare run "
-        "can show it.",
-        f"- waits for the token bucket: {tg['bucket_waits']} ({tg['bucket_wait_seconds']} s); "
-        f"HTTP 429 received: {tg['http_429']}; wait-and-retry after a 429: "
-        f"{tg['rate_limit_retries']} ({tg['rate_limit_retry_seconds']} s); "
-        f"requests sent with a doubled allowance: {tg['requests_doubled_allowance']}",
-    ]
-    lines += [
-        f"- HTTP 429 by the limit its body names: {json.dumps(tg['http_429_by_limit_named'])} "
-        "(the body is the provider's wording; 'not named' means none of tokens/requests per "
-        "minute/day appeared in the first 300 characters)",
-    ]
-    for r in tg["http_429_detail"]:
-        lines += [
-            f"  - 429 {r['question']} {r['task']} attempt {r['attempt']}: limit named "
-            f"{r['limit_named'] or 'none'}; Retry-After {r['retry_after_header'] or 'not sent'}; "
-            f"x-ratelimit {json.dumps(r['ratelimit_headers'])}",
-            f"    body: {r['body'] or '(empty)'}",
-        ]
-    for e in tg["provider_events"]:
-        lines.append(
-            f"- PROVIDER {e['kind'].upper().replace('_', ' ')} at {e['question']}: {e['reason']}"
-            + (f" (number: {e['retry_after_s']:g} s)" if e.get("retry_after_s") is not None else "")
-        )
-    lines += [
-        f"  - wait: {w['task']} {w['kind']}{' by ' + w['basis'] if w.get('basis') else ''} "
-        f"{w['seconds']} s"
-        for w in tg["each_wait"]
-    ]
+    lines += render_token_guard(rep["token_guard"], h["reasoning_effort_sent"])
     mal = rep["malformed_replies"]
     lines += ["", f"## Unusable HTTP 200 replies (n={len(mal)})"]
     for m in mal:

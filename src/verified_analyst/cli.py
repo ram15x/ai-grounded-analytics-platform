@@ -915,7 +915,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_eval_e2e(args: argparse.Namespace) -> int:
-    """Dev: eval/questions/dev.yaml, gold from t1. Locked: see e2e_locked, gold from t2, one shot."""
+    """Dev: dev.yaml, gold from t1. Locked: see e2e_locked, gold from t2, one shot."""
     import json as _json  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415

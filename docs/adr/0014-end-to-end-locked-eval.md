@@ -31,3 +31,9 @@ table. No claim beyond "n questions, one author, one model". Withheld questions 
 ## Known limits
 Author-written questions; one corpus; a figure-level match does not prove the answer addressed the
 question asked; free-plan quota may leave `no_reply` rows, which are reported as such.
+
+## Guard tests relaxed on purpose
+`tests/test_heldout.py` and `tests/test_docs_cli.py` forbid any product module from naming the locked
+question file. They now allow exactly one more module, `src/verified_analyst/e2e_locked.py`, which
+holds only the path. The locked file is read by one command, `va eval e2e --split locked
+--confirm-locked`, which refuses a second run per model. This mirrors `va docs heldout`.

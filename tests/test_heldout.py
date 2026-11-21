@@ -203,7 +203,9 @@ def test_no_product_code_reads_or_embeds_the_held_out_file():
     # `va docs heldout` is the one deliberate exception (heldout_run.py plus its command word in
     # cli.py); it reads the DOCUMENT question file only. The text-to-SQL held-out file is still
     # named nowhere in src.
-    allowed = {"heldout_run.py", "cli.py"}
+    # e2e_locked.py (ADR-0014) is the second deliberate exception: the text-to-SQL locked file is
+    # read only by `va eval e2e --split locked --confirm-locked`, once per model (ledger).
+    allowed = {"heldout_run.py", "cli.py", "e2e_locked.py"}
     hits = [
         p
         for p in (ROOT / "src").rglob("*.py")
@@ -211,6 +213,8 @@ def test_no_product_code_reads_or_embeds_the_held_out_file():
     ]
     assert hits == []
     for p in (ROOT / "src").rglob("*.py"):
+        if p.name == "e2e_locked.py":
+            continue
         assert "questions/heldout" not in p.read_text("utf-8").replace("\\", "/"), p
     from verified_analyst.llm.prompts import PROMPT_TEMPLATES
 

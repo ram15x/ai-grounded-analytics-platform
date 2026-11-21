@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
@@ -150,18 +151,30 @@ class HostedProvider(Provider):
                 )  # fmt: skip
         if status != 200:
             raise ProviderError(BAD_REQUEST, f"HTTP {status}", status=status)
+        raw = _raw(resp.body, key)
         try:
             data = json.loads(resp.body.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
-            raise ProviderError(MALFORMED, "response body is not JSON") from exc
+            raise ProviderError(
+                MALFORMED, "response body is not JSON", raw_body=raw, malformed_kind="body_not_json"
+            ) from exc
         try:
             text, p_tok, c_tok, finish, usage_missing, r_tok = self._extract(data)
         except ProviderError:
             raise
         except (KeyError, IndexError, TypeError, AttributeError) as exc:
-            raise ProviderError(MALFORMED, "response JSON has an unexpected shape") from exc
+            kind = "error_object" if isinstance(data, dict) and "error" in data else "no_content"
+            raise ProviderError(
+                MALFORMED, "response JSON has an unexpected shape", raw_body=raw,
+                malformed_kind=kind,
+            ) from exc  # fmt: skip
         if not isinstance(text, str) or not text.strip():
-            raise ProviderError(MALFORMED, "empty completion")
+            kind = "content_null" if text is None else "content_empty"
+            raise ProviderError(
+                MALFORMED, "empty completion", raw_body=raw, malformed_kind=kind,
+                prompt_tokens=p_tok, completion_tokens=c_tok, reasoning_tokens=r_tok,
+                finish_reason=finish,
+            )  # fmt: skip
         return LLMResponse(
             text=text,
             provider=self.name,
@@ -173,6 +186,20 @@ class HostedProvider(Provider):
             tokens_estimated=usage_missing,
             reasoning_tokens=r_tok,
         )
+
+
+_BEARER = re.compile(r"(?i)bearer\s+\S+")
+RAW_BODY_CHARS = 300
+
+
+def _raw(body: bytes, key: str) -> str:
+    """What the provider sent, safe to store: whitespace collapsed, the key and any `Bearer ...`
+    text replaced, cut to 300 characters."""
+    text = " ".join(body.decode("utf-8", errors="replace").split())
+    text = _BEARER.sub("Bearer <redacted>", text)
+    if key:
+        text = text.replace(key, "<redacted>")
+    return text[:RAW_BODY_CHARS]
 
 
 def _int(value: Any) -> int | None:

@@ -25,6 +25,7 @@ from .settings import RouterSettings
 from .types import (
     INTERNAL,
     JSON_REJECTED,
+    MALFORMED,
     PUBLIC,
     RATE_LIMIT,
     RETRYABLE,
@@ -69,6 +70,11 @@ class TokenBucket:
         """Return an over-reservation. Never lifts the level above capacity."""
         self._refill()
         self.level = min(self.capacity, self.level + amount)
+
+
+# 400 json_validate_failed answers in a row, per provider and question, after which the provider
+# gets no more requests for that question
+JSON_STREAK_LIMIT = 2
 
 
 def estimate_tokens(req: LLMRequest) -> int:
@@ -142,8 +148,17 @@ class Router:
         for name in order:
             if self.settings.providers[name].hosted and sensitivity != PUBLIC:
                 run.add(CallRecord(0, req.task, name, "-", "refused_sensitivity"))
+            elif run.json_streak.get(name, 0) >= JSON_STREAK_LIMIT:
+                # this provider refused JSON mode twice in a row for this question: no more
+                # requests to it for the question; the next provider (if any) is tried
+                run.add(CallRecord(0, req.task, name, "-", "json_streak_skip"))
             else:
                 eligible.append(name)
+        if not eligible and any(r.outcome == "json_streak_skip" for r in run.records):
+            raise AllProvidersFailed(
+                [{"provider": r.provider, "outcome": r.outcome}
+                 for r in run.records if r.outcome == "json_streak_skip"]
+            )  # fmt: skip
         if not eligible:
             raise SensitivityRefusal(
                 f"task {req.task!r} has no non-hosted provider and the payload is "
@@ -238,6 +253,12 @@ class Router:
                         retry_after_s=exc.retry_after,
                         max_tokens=req.max_tokens,
                         json_mode_off=not req.json_mode and json_rejects > 0,
+                        prompt_tokens=exc.prompt_tokens,
+                        completion_tokens=exc.completion_tokens,
+                        reasoning_tokens=exc.reasoning_tokens,
+                        finish_reason=exc.finish_reason,
+                        raw_body=exc.raw_body,
+                        malformed_kind=exc.malformed_kind,
                     )  # fmt: skip
                 )
                 attempts.append({"provider": name, "outcome": exc.kind, "attempt": attempt})
@@ -251,6 +272,9 @@ class Router:
                     # answers JSON_REJECTED, hand the text back as unparseable (repair path).
                     self._consec_429[name] = 0
                     json_rejects += 1
+                    run.json_streak[name] = run.json_streak.get(name, 0) + 1
+                    if run.json_streak[name] >= JSON_STREAK_LIMIT:
+                        return None  # second in a row for this question: stop, next provider
                     if json_rejects == 1 and req.json_mode:
                         req = dataclasses.replace(req, json_mode=False)
                         continue
@@ -269,6 +293,19 @@ class Router:
                         return None
                 else:
                     self._consec_429[name] = 0
+                if json_rejects > 0 and exc.kind == MALFORMED:
+                    # the one JSON-off retry came back as an unusable HTTP 200 (seen: empty
+                    # content, 0 completion tokens). Do not repeat it: 2 requests at most for a
+                    # JSON refusal. The text goes back unparseable, as for a second refusal.
+                    return LLMResponse(
+                        text="",
+                        provider=name,
+                        model=model,
+                        latency_ms=elapsed,
+                        finish_reason=JSON_REJECTED,
+                    )
+                if json_rejects > 0:
+                    return None  # any other failure of the JSON-off retry ends the path
                 if exc.kind not in RETRYABLE or attempt == retry.max_retries:
                     return None
                 delay = self._delay(exc, attempt)
@@ -279,6 +316,7 @@ class Router:
                 attempt += 1
                 continue
             self._consec_429[name] = 0
+            run.json_streak[name] = 0
             rec = self._record(req, resp, "ok", attempt, wait_ms)
             rec = dataclasses.replace(rec, json_mode_off=json_rejects > 0 and not req.json_mode)
             run.add(rec)

@@ -618,10 +618,83 @@ def test_the_json_retry_does_not_use_up_the_normal_retry_budget():
     assert len(tr["groq"].calls) == 2
 
 
-def test_the_json_retry_can_be_followed_by_a_normal_server_retry():
-    router, run, tr, clock = rig(groq=[jv(), status(500), ok_openai()])
+def empty_200(content="", finish="stop", c=0):
+    body = {
+        "choices": [{"message": {"content": content, "reasoning": "thinking"},
+                     "finish_reason": finish}],
+        "usage": {"prompt_tokens": 40, "completion_tokens": c},
+    }  # fmt: skip
+    return HttpResponse(200, json.dumps(body).encode())
+
+
+def test_a_server_error_on_the_json_off_retry_ends_the_path_with_two_requests():
+    router, run, tr, _ = rig(groq=[jv(), status(500), ok_openai()], gemini=[ok_gemini()])
+    assert router.call(req(), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 2  # not three: the normal retry budget is not used here
+
+
+def test_an_empty_200_after_the_json_off_retry_is_not_repeated_and_the_reply_is_recorded():
+    # seen on Groq gpt-oss-20b: 400 json_validate_failed, then HTTP 200 with empty content and 0
+    # completion tokens, which used to be retried as `malformed` (max_retries = 3, four calls)
+    router, run, tr, _ = rig(groq=[jv(), empty_200(), ok_openai(), ok_openai(), ok_openai()])
+    r = router.call(req(), run)
+    assert len(tr["groq"].calls) == 2
+    assert (r.text, r.finish_reason, r.provider) == ("", "json_rejected", "groq")
+    rej, mal = run.records
+    assert (rej.outcome, mal.outcome) == ("json_rejected", "malformed")
+    assert mal.json_mode_off and mal.malformed_kind == "content_empty"
+    assert (mal.completion_tokens, mal.prompt_tokens, mal.finish_reason) == (0, 40, "stop")
+    assert mal.raw_body.startswith('{"choices"') and len(mal.raw_body) <= 300
+
+
+def test_a_malformed_reply_without_a_json_refusal_keeps_the_normal_retries():
+    router, run, tr, _ = rig(groq=[empty_200(), empty_200(), ok_openai()])
+    assert router.call(req(), run).text == '{"ok": true}'
+    assert [x.outcome for x in run.records] == ["malformed", "malformed", "ok"]
+    assert all(x.malformed_kind == "content_empty" for x in run.records[:2])
+
+
+def test_content_null_and_non_json_bodies_are_recorded_with_their_kind_and_the_key_is_redacted():
+    null = HttpResponse(200, b'{"choices":[{"message":{"content":null},"finish_reason":"length"}]}')
+    leak = HttpResponse(200, b"oops Bearer abc123 and gsk-test-key here")
+    router, run, tr, _ = rig(groq=[null, leak, ok_openai()])
     router.call(req(), run)
-    assert [x.outcome for x in run.records] == ["json_rejected", "server", "ok"]
+    a, b, _ = run.records
+    assert (a.malformed_kind, a.finish_reason) == ("content_null", "length")
+    assert b.malformed_kind == "body_not_json"
+    assert "abc123" not in b.raw_body and "Bearer <redacted>" in b.raw_body
+
+
+def test_the_second_json_refusal_in_a_row_stops_the_provider_for_the_question():
+    router, run, tr, _ = rig(
+        groq=[jv(), empty_200(), jv(), ok_openai()], gemini=[ok_gemini(), ok_gemini()]
+    )
+    first = router.call(req(), run)  # 400, then an empty JSON-off reply: handed back unparseable
+    assert first.finish_reason == "json_rejected"
+    second = router.call(req(), run)  # the second 400 in a row: groq is dropped, gemini answers
+    assert second.provider == "gemini" and len(tr["groq"].calls) == 3
+    third = router.call(req(), run)  # groq gets no more requests for this question
+    assert third.provider == "gemini" and len(tr["groq"].calls) == 3
+    assert [x.outcome for x in run.records if x.provider == "groq"][-1] == "json_streak_skip"
+
+
+def test_a_success_between_refusals_resets_the_streak():
+    router, run, tr, _ = rig(groq=[jv(), ok_openai(), jv(), ok_openai(), ok_openai()])
+    for _i in range(3):
+        assert router.call(req(), run).provider == "groq"
+    assert len(tr["groq"].calls) == 5
+
+
+def test_with_no_other_provider_the_second_refusal_in_a_row_ends_the_question():
+    cfg = settings()
+    cfg.tasks = {t: ["groq"] for t in ("route", "plan", "compose", "repair")}
+    router, run, tr, _ = rig(cfg, groq=[jv(), empty_200(), jv(), ok_openai()])
+    router.call(req(), run)
+    with pytest.raises(AllProvidersFailed):
+        router.call(req(), run)
+    with pytest.raises(AllProvidersFailed):
+        router.call(req(), run)
+    assert len(tr["groq"].calls) == 3
 
 
 @pytest.mark.parametrize(

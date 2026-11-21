@@ -77,6 +77,12 @@ class ProviderError(LLMError):
         status: int | None = None,
         retry_after: float | None = None,
         failed_generation: str | None = None,
+        raw_body: str = "",
+        malformed_kind: str = "",
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        finish_reason: str = "",
     ):
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
@@ -84,6 +90,14 @@ class ProviderError(LLMError):
         self.status = status
         self.retry_after = retry_after
         self.failed_generation = failed_generation
+        # for a reply that was HTTP 200 but unusable: what the provider actually sent (redacted,
+        # cut), what kind of unusable it was, and the usage and finish reason it reported
+        self.raw_body = raw_body
+        self.malformed_kind = malformed_kind
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.reasoning_tokens = reasoning_tokens
+        self.finish_reason = finish_reason
 
 
 class SensitivityRefusal(LLMError):

@@ -31,6 +31,8 @@ class CallRecord:
     from_cassette: bool = False
     max_tokens: int | None = None  # the completion allowance this request carried
     json_mode_off: bool = False  # the retry after a JSON-mode refusal sends JSON mode off
+    raw_body: str = ""  # an unusable HTTP 200 reply: the body as sent (redacted, first 300 chars)
+    malformed_kind: str = ""  # content_empty | content_null | no_content | body_not_json | ...
 
     @property
     def tokens(self) -> int:
@@ -61,6 +63,7 @@ class RunContext:
     token_cap: int
     records: list[CallRecord] = field(default_factory=list)
     tokens_used: int = 0
+    json_streak: dict[str, int] = field(default_factory=dict)  # provider -> 400s in a row
 
     def add(self, rec: CallRecord) -> None:
         rec.seq = len(self.records) + 1

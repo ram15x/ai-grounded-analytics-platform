@@ -43,6 +43,7 @@ CORPUS_DESCRIPTION = (
 )
 BINDER_REASONS = (
     "label_not_in_passage_window",
+    "label_not_in_passage_sentence",
     "label_not_in_sentence",
     "entity_not_in_passage",
     "label_empty",

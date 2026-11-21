@@ -7,7 +7,13 @@ import pytest
 
 from verified_analyst.documents import binder_locked as bl
 from verified_analyst.documents import binder_study as bs
-from verified_analyst.documents.binding import DEFAULT, BinderConfig, check_binding
+from verified_analyst.documents.binding import (
+    CURRENT,
+    DEFAULT,
+    NAMED,
+    BinderConfig,
+    check_binding,
+)
 from verified_analyst.documents.store import DocumentError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,16 +40,18 @@ def _tmp_corpus(tmp_path: Path, half: str) -> Path:
     return d
 
 
-def test_default_is_the_old_r1():
-    assert BinderConfig(1.0, 6, False, False, False) == DEFAULT
+def test_default_is_s2_and_the_old_rule_is_the_named_variant_current():
+    assert DEFAULT == bl.config_of("S2") == NAMED["S2"]
+    assert CURRENT == BinderConfig() == bl.config_of("current") and CURRENT.name == "current"
+    assert DEFAULT.scope == "sentence" and DEFAULT.nearest and DEFAULT.skip_units
     text = TEXTS[0]
     s = text.index("14")
-    # the shipped rule refuses a label whose words sit more than 6 words before the number ...
-    far = check_binding(
-        "time limit for claiming a parcel", "The time limit is 14 days.", text, s, s + 2
-    )
+    prose = "The time limit is 14 days."
+    # the old rule refuses a label whose words sit more than 6 words before the number ...
+    far = check_binding("time limit for claiming a parcel", prose, text, s, s + 2, CURRENT)
     assert far is not None and far[0] == "label_not_in_passage_window"
-    # ... and accepts one that sits next to it
+    # ... the default accepts it (same sentence), and still accepts one next to the number
+    assert check_binding("time limit for claiming a parcel", prose, text, s, s + 2) is None
     assert check_binding("damaged parcel", "The damaged parcel is 14 days.", text, s, s + 2) is None
 
 
@@ -95,7 +103,8 @@ def _kw(tmp_path, **over):
     return kw
 
 
-def test_locked_refuses_unless_adr_committed_unchanged_and_matching(tmp_path):
+def test_locked_refuses_unless_adr_committed_unchanged_and_matching(tmp_path, monkeypatch):
+    monkeypatch.setattr(bl, "SPENT_BY", None)  # the ADR checks are tested on invented input
     with pytest.raises(DocumentError, match="not been committed"):
         bl.run_locked(**_kw(tmp_path, git=_git(committed=False)))
     with pytest.raises(DocumentError, match="changed since"):
@@ -107,12 +116,16 @@ def test_locked_refuses_unless_adr_committed_unchanged_and_matching(tmp_path):
     assert not (tmp_path / "l.jsonl").exists()
 
 
-def test_locked_accepts_only_all_registered_variants(tmp_path):
+def test_locked_accepts_only_all_registered_variants(tmp_path, monkeypatch):
+    monkeypatch.setattr(bl, "SPENT_BY", None)  # the ADR checks are tested on invented input
     with pytest.raises(DocumentError, match="pre-registered"):
         bl.run_locked(**_kw(tmp_path, candidates_arg="C1"))
 
 
-def test_locked_runs_once_on_invented_documents_and_decides_by_the_rule(tmp_path):
+def test_locked_runs_once_on_invented_documents_and_decides_by_the_rule(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        bl, "SPENT_BY", None
+    )  # the real locked half is spent; this is invented text
     corpus = _tmp_corpus(tmp_path, "locked")  # invented text, never the project corpus
     rep = bl.run_locked(**_kw(tmp_path, corpus_dir=corpus))
     assert set(rep["rows"]) == set(bl.PRE_REGISTERED) and rep["half"] == "locked"
@@ -140,21 +153,21 @@ def test_only_the_locked_module_builds_the_locked_half():
     assert bl.parse_candidates(ADR.read_text("utf-8")) == bl.PRE_REGISTERED
 
 
-def test_sentence_scope_accepts_the_real_courier_label_and_refuses_a_swap():
+def test_the_default_accepts_the_courier_label_and_refuses_a_label_swapped_to_another_sentence():
     text = TEXTS[0]
     s = text.index("14")
     label = "time limit for claiming a late or damaged parcel"
     prose = f"The {label} is 14 days."
-    sent = bl.config_of("S1")
-    assert check_binding(label, prose, text, s, s + 2, DEFAULT) is not None
-    assert check_binding(label, prose, text, s, s + 2, sent) is None
+    assert check_binding(label, prose, text, s, s + 2, CURRENT) is not None
+    assert check_binding(label, prose, text, s, s + 2) is None
     t = text.index("12 percent")  # a number in a different sentence of the same passage
-    assert check_binding(label, prose, text, t, t + 2, sent) is not None
+    swapped = check_binding(label, prose, text, t, t + 2)
+    assert swapped is not None and swapped[0] == "label_not_in_passage_sentence"
 
 
 def test_nearest_number_rule_only_applies_with_several_numbers():
     text = "Claims for a damaged parcel must arrive within 14 days of delivery, not 30 days."
-    s2 = bl.config_of("S2")
+    s2 = DEFAULT
     a = text.index("14")
     b = text.index("30")
     lab = "claim window for a damaged parcel"
@@ -164,3 +177,10 @@ def test_nearest_number_rule_only_applies_with_several_numbers():
     one = "Claims for a damaged parcel must arrive within 14 days of delivery."
     c = one.index("14")
     assert check_binding(lab, prose, one, c, c + 2, s2) is None
+
+
+def test_the_locked_half_is_spent_and_cannot_be_scored_again(tmp_path):
+    assert bl.SPENT_BY == "docs/adr/0012-binder-default.md"
+    with pytest.raises(DocumentError, match="spent"):
+        bl.run_locked(**_kw(tmp_path))
+    assert not (tmp_path / "l.jsonl").exists()

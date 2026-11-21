@@ -54,7 +54,7 @@ def test_a_handle_for_a_number_that_was_not_listed_is_refused():
 def test_a_label_for_a_different_number_does_not_bind():
     r, _ = run("The courier charge is {c1}.", [pclaim("c1", "courier charge", "number", "n2")])
     reasons = {v.reason for v in r.report.verdicts}
-    assert "label_not_in_passage_window" in reasons
+    assert "label_not_in_passage_sentence" in reasons
     assert r.status != "verified"
 
 

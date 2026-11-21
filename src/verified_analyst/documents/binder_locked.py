@@ -27,8 +27,9 @@ Git = Callable[[Sequence[str]], tuple[int, str]]
 ROOT = Path(__file__).resolve().parents[3]
 ADR_PATH = ROOT / "docs" / "adr" / "0011-binder-variants.md"
 LEDGER_PATH = ROOT / "data" / "binder_locked_ledger.jsonl"
-# Set to the path of the outcome ADR once the locked half has informed a decision.
-SPENT_BY: str | None = None
+# The locked half was scored once (2026-11-21) and informed the decision in ADR-0012. It cannot
+# be scored again, and nothing else may use it to choose a rule.
+SPENT_BY: str | None = "docs/adr/0012-binder-default.md"
 
 
 def _spec(frac: float, window: int, skip: bool, scope: str = "window", nearest: bool = False):

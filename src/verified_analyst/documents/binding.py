@@ -3,8 +3,12 @@
 A cell number is bound to its label by the semantic layer. A passage has no layer, so the binder
 checks three things from the stored text alone, and fails closed:
 
-  R1  the claim label's content words occur within WINDOW words of the number in the passage
-      (every label word the passage uses must be there; at least one must be);
+  R1  the claim label's content words occur in the SENTENCE of the passage that holds the number
+      (all the label words the passage uses, unit words such as "days" not counted; when that
+      sentence holds several numbers, the cited one must be the number nearest a matched label
+      word, or within 8 tokens of one). This is variant S2 of docs/adr/0011-binder-variants.md,
+      adopted as the default in docs/adr/0012-binder-default.md. The earlier rule (label words
+      within 6 words of the number) is kept as the named variant `current`;
   R2  the label's content words occur in the prose sentence that carries the number;
   R3  every capitalised, non-initial word in that sentence occurs in the cited chunk
       (an entity the passage never mentions cannot be attached to its number).
@@ -77,6 +81,8 @@ class BinderConfig:
 
     @property
     def name(self) -> str:
+        if self == CURRENT:
+            return "current"
         tail = "/skip_units" if self.skip_units else ""
         if self.scope == "sentence":
             return f"sent/frac{self.frac:g}{tail}" + (
@@ -91,7 +97,11 @@ class BinderConfig:
         )
 
 
-DEFAULT = BinderConfig()
+# The rule used before ADR-0012: label words within 6 words of the number.
+CURRENT = BinderConfig()
+# S2, the shipped default: sentence scope, units skipped, nearest-number rule, window 8.
+DEFAULT = BinderConfig(1.0, 8, False, False, True, "sentence", True)
+NAMED = {"current": CURRENT, "S2": DEFAULT}
 UNIT_WORDS = frozenset(
     [
         "day",
@@ -209,6 +219,11 @@ def check_binding(
     if not want:
         return "label_empty", ""
     if not _r1_ok(label, passage, start, end, cfg):
+        if cfg.scope == "sentence":
+            a, b = sentence_span(passage, start, end)
+            pool = want - {stem(w) for w in UNIT_WORDS} if cfg.skip_units else want
+            used = (pool & content(passage)) or pool
+            return "label_not_in_passage_sentence", ",".join(sorted(used - content(passage[a:b])))
         near = _window_words(passage, start, end, cfg.window)
         used = want & content(passage)
         return "label_not_in_passage_window", ",".join(sorted((used - near) or want))
@@ -221,14 +236,25 @@ def check_binding(
 
 
 def explain(
-    reason: str, label: str, sentence: str, passage: str, start: int, end: int, cut: int = 200
+    reason: str,
+    label: str,
+    sentence: str,
+    passage: str,
+    start: int,
+    end: int,
+    cut: int = 200,
+    cfg: BinderConfig = DEFAULT,
 ) -> str:
     """JSON text for a refusal: the label, the sentence, the words near the number in the passage,
     and the label words that are missing (each part cut). For the probe report and for people;
     nothing decides on it."""
     want = content(label)
     near = _window_words(passage, start, end)
-    if reason == "label_not_in_passage_window":
+    if reason == "label_not_in_passage_sentence":
+        a, b = sentence_span(passage, start, end)
+        pool = want - {stem(w) for w in UNIT_WORDS} if cfg.skip_units else want
+        missing = ((pool & content(passage)) - content(passage[a:b])) or pool
+    elif reason == "label_not_in_passage_window":
         missing = (want & content(passage)) - near or want
     elif reason == "label_not_in_sentence":
         missing = want - content(sentence)
@@ -236,13 +262,18 @@ def explain(
         missing = entities(sentence) - content(passage) - want
     else:
         missing = set()
-    window = " ".join(_WORD.findall(passage[:start])[-WINDOW:] + ["<number>"]
-                      + _WORD.findall(passage[end:])[:WINDOW])  # fmt: skip
+    if reason == "label_not_in_passage_sentence":
+        a, b = sentence_span(passage, start, end)
+        window = (passage[a:start] + "<number>" + passage[end:b]).strip()
+        window = " ".join(window.split())
+    else:
+        window = " ".join(_WORD.findall(passage[:start])[-WINDOW:] + ["<number>"]
+                          + _WORD.findall(passage[end:])[:WINDOW])  # fmt: skip
     return json.dumps(
         {
             "label": label[:cut],
             "sentence": sentence.strip()[:cut],
-            "window_words": window[:cut],
+            "window_words": window[:cut],  # the number's sentence when the rule is sentence-scoped
             "missing_label_words": ", ".join(sorted(missing))[:cut],
         }
     )

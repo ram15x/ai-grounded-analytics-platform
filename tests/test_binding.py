@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from verified_analyst.documents.binding import check_binding
+from verified_analyst.documents.binding import CURRENT, check_binding
 
 TEXT = (
     "The courier charge is 4.50 GBP per parcel. The scratch charge is 12 GBP. Returns in 28 days."
@@ -26,7 +26,9 @@ def test_a_label_next_to_its_number_binds():
 
 def test_a_label_from_another_sentence_of_the_passage_does_not_bind():
     r = ok("courier charge", "The courier charge is 12.", "12")
-    assert r and r[0] == "label_not_in_passage_window"
+    assert r and r[0] == "label_not_in_passage_sentence"
+    old = check_binding("courier charge", "The courier charge is 12.", TEXT, *at("12"), CURRENT)
+    assert old and old[0] == "label_not_in_passage_window"
 
 
 def test_the_prose_must_name_what_the_label_says():
@@ -63,3 +65,8 @@ def test_explain_gives_label_sentence_window_and_missing_words_cut_to_200():
     assert set(d) == {"label", "sentence", "window_words", "missing_label_words"}
     assert all(len(v) <= 200 for v in d.values())
     assert "<number>" in d["window_words"] and "courier" in d["missing_label_words"]
+    d = json.loads(explain("label_not_in_passage_sentence", "courier charge",
+                           "The courier charge is 12.", TEXT, i, j))  # fmt: skip
+    assert d["window_words"] == "The scratch charge is <number> GBP" and (
+        d["missing_label_words"] == "courier"
+    )

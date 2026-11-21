@@ -114,7 +114,11 @@ daemon where it was written).
 The recorded model replies come from real Groq calls and are replayed, not re-run; a question with
 no recording is shown as "no recording", not as a model abstention. See [demo/README.md](demo/README.md).
 
-#### Public tryout (bring your own key)
+#### Your own data (local only)
+
+`va serve --workspace` opens a "Your data" tab on this computer (it refuses any host but 127.0.0.1, because it accepts uploads). Upload a CSV, TSV or Excel file; the profile shows types, empty rates and example values, and flags possible personal data (never loaded). You say what the data is, what each column is (role guesses are yours to change), and define each number from a closed set (count, sum, average, min, max, distinct count, one filter). Give a figure you already know and the system recomputes it by a separate path: a definition that does not reproduce it is not published. Data is `internal` by default, which means a hosted provider is refused; use a local model (Ollama, no key, nothing leaves the machine) or mark it `public` yourself. Which local models answer usably on a given computer has not been measured.
+
+### Public tryout (bring your own key)
 
 `va serve --byok` serves a fixed menu of 12 questions (3 easy, 3 medium, 3 hard, 3 of your own) from `config/tryout.yaml`; each visitor may ask one from each group, so a free API key stays inside its limits. The visitor pastes their own key (Groq, OpenRouter or Gemini). It travels in a request header, is used for that one question and is never written to disk, a trace, a log or browser storage; error text is scrubbed of it. The per-visitor allowance is a courtesy limit held in memory against a cookie, not a security control. Difficulty is by question shape, not measured, and "hard" questions may be withheld.
 

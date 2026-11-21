@@ -207,3 +207,17 @@ def test_own_questions_are_never_cached(monkeypatch, tmp_path):
     )
     assert out["stored_replies_only"] is False
     assert list(tmp_path.iterdir()) == []  # nothing from an own question reaches the cache dir
+
+
+def test_models_endpoint_returns_headroom_headers_and_scrubs_the_key(monkeypatch):
+    from verified_analyst import cli
+
+    def fake_list(settings, name, env, *a, **k):
+        echo = env[settings.providers[name].env_key]
+        return {"provider": name, "models": [{"id": "m"}], "note": f"echo {echo}",
+                "rate_headers": {"x-ratelimit-remaining-tokens": "7000"}}  # fmt: skip
+
+    monkeypatch.setattr("verified_analyst.llm.live.list_provider_models", fake_list)
+    out = cli._byok_models("groq", KEY)
+    assert out["rate_headers"]["x-ratelimit-remaining-tokens"] == "7000"
+    assert KEY not in json.dumps(out)

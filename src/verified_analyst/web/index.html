@@ -255,15 +255,27 @@ function tryRender(){
    <div class="row"><select id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
    <input class="key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
    ${P.model?'':`<input id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn" id="lm" style="margin:0;background:none;color:inherit;border-color:var(--night-line)">List models</button>`}</div>
-   <div class="keynote">${esc(P.key_hint||'')} ${esc(P.note||'')}</div><div class="keynote" id="mlist"></div>
+   <div class="keynote">${esc(P.key_hint||'')} ${esc(P.note||'')}</div><div class="row"><button type="button" id="ck" style="background:none;border:1px solid var(--night-line);color:inherit;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px">Check my key (uses no tokens)</button></div><div class="keynote" id="mlist"></div>
    ${tier('easy','Easy')}${tier('medium','Medium')}${tier('hard','Hard (data and documents together; may be withheld)')}
    <div class="tier"><h4>Your own question<span class="left ${rem.own?'':'zero'}">${rem.own} of ${c.per_visitor.own} left</span></h4><div class="row"><input id="own" style="flex:1" maxlength="${c.own_max_chars}" placeholder="Ask something about the sales data or the documents" ${rem.own?'':'disabled'}><button type="button" class="go" id="ownbtn" style="padding:8px 16px" ${rem.own?'':'disabled'}>Ask</button></div></div>`;
   $('prov').onchange=e=>{T.provider=e.target.value;T.model='';tryRender();};
   $('key').oninput=e=>{T.key=e.target.value;}; if($('model')) $('model').oninput=e=>{T.model=e.target.value;};
-  if($('lm')) $('lm').onclick=listModels;
+  if($('lm')) $('lm').onclick=listModels; $('ck').onclick=checkKey;
   $('try').querySelectorAll('.tier button[data-t]').forEach(b=>b.onclick=()=>tryAsk(b.dataset.t,c.questions[b.dataset.t][+b.dataset.i]));
   $('ownbtn').onclick=()=>{const v=$('own').value.trim(); if(v) tryAsk('own',v);};
   $('own').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('ownbtn').click();}};
+}
+function headroom(d){
+  const h=d.rate_headers||{}, g=k=>Object.entries(h).find(([n])=>n.toLowerCase()===k);
+  const tok=g('x-ratelimit-remaining-tokens'), req=g('x-ratelimit-remaining-requests'), rt=g('x-ratelimit-reset-tokens');
+  if(!tok && !req) return 'This provider did not report remaining quota in its reply, so none is shown. That is not the same as unlimited.';
+  return 'Your key, as the provider reports it right now: '+(tok?tok[1]+' tokens left in the current window':'')+(tok&&req?'; ':'')+(req?req[1]+' requests left':'')+(rt?' (tokens refill in '+rt[1]+')':'')+'. A daily cap is not shown in these headers, so a daily limit can still stop a question. Nothing about your key is stored.';
+}
+async function checkKey(){
+  if(!T.key){ $('mlist').textContent=''; return; }
+  try{ const r=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json','X-Provider-Key':T.key},body:JSON.stringify({provider:T.provider})});
+    const d=await r.json(); $('mlist').textContent = d.error&&!d.rate_headers? 'Key check failed: '+d.error : headroom(d); }
+  catch(e){ $('mlist').textContent='Could not reach the server.'; }
 }
 async function listModels(){
   $('mlist').textContent='Asking the provider for its models…';
@@ -282,7 +294,7 @@ async function tryAsk(tier,question){
     else if(d.reason==='provider_error'){ $('hint').textContent=T.key?'The provider did not answer (wrong key, a rate limit, or a bad model id). This did not use up your question.':'No stored reply exists for this question yet, so it needs your own key. This did not use up your question.'; }
     else { $('hint').textContent=''; S.items.unshift(d); choose(0); refreshStats(); } }
   catch(e){ $('hint').textContent='Could not reach the server.'; }
-  S.busy=false; tryRender();
+  S.busy=false; tryRender(); checkKey();
 }
 async function tryInit(){
   try{ T.cfg=await (await fetch('/api/tryout')).json(); }catch(e){ return; }

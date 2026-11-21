@@ -251,6 +251,32 @@ def cmd_docs_heldout(args: argparse.Namespace) -> int:
     return res.exit_code
 
 
+def cmd_docs_binder_study(args: argparse.Namespace) -> int:
+    from .documents import binder_study as bs  # noqa: PLC0415
+
+    cases = bs.dev_cases()
+    print(bs.render(bs.dev_table(cases), "dev", cases))
+    return 0
+
+
+def cmd_docs_binder_locked(args: argparse.Namespace) -> int:
+    import time  # noqa: PLC0415
+
+    from .documents import binder_locked as bl  # noqa: PLC0415
+
+    try:
+        rep = bl.run_locked(candidates_arg=args.candidates)
+    except DocumentError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(bl.render_report(rep))
+    out = Path("data") / "live_runs" / f"{time.strftime('%Y%m%d_%H%M%S')}_binder_locked"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.json").write_text(json.dumps(rep, indent=2), encoding="utf-8")
+    print(f"report written to {out}")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     report = run_verify(Path(args.answer), readonly_database_url())
     print(json.dumps(report.as_dict(), indent=2) if args.json else render(report))
@@ -539,6 +565,19 @@ def build_parser() -> argparse.ArgumentParser:
     dh.add_argument("--embedder", required=True, help="a name from config/retrieval.yaml")
     dh.add_argument("--max-requests", type=int, default=None, help="at most 150")
     dh.set_defaults(fn=cmd_docs_heldout)
+    bsd = dc_sub.add_parser(
+        "binder-study",
+        help="measure the passage label binder variants on the dev half of the synthetic "
+        "documents (no model, no network)",
+    )
+    bsd.set_defaults(fn=cmd_docs_binder_study)
+    bl = dc_sub.add_parser(
+        "binder-locked",
+        help="score the pre-registered binder variants on the locked half, once (needs "
+        "docs/adr/0011 committed and unchanged)",
+    )
+    bl.add_argument("--candidates", required=True, help="must be exactly current,C1,C2,C3")
+    bl.set_defaults(fn=cmd_docs_binder_locked)
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)
     cc = cs_sub.add_parser(

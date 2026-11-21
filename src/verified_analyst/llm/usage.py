@@ -18,6 +18,7 @@ Sources, per run folder:
 from __future__ import annotations
 
 import json
+import os
 import statistics
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -29,8 +30,23 @@ from ..config import ConfigError
 from .accounting import RunContext
 
 ROOT = Path(__file__).resolve().parents[3]
-REPORT_ROOTS = (ROOT / "data" / "live_runs",)
-CASSETTE_ROOTS = (ROOT / "data" / "binder_model_labels_work",)
+
+
+def _data_dir() -> Path:
+    """data/ under the repository, or the folder in VA_DATA_DIR (the test suite points this at an
+    empty folder so that a developer's own reports never change a test result)."""
+    env = os.environ.get("VA_DATA_DIR")
+    return Path(env) if env else ROOT / "data"
+
+
+def default_report_roots() -> tuple[Path, ...]:
+    return (_data_dir() / "live_runs",)
+
+
+def default_cassette_roots() -> tuple[Path, ...]:
+    return (_data_dir() / "binder_model_labels_work",)
+
+
 WINDOW_H = 24
 ESTIMATE_REPORTS = 3  # the most recent reports of the same provider, model and mode
 
@@ -86,11 +102,13 @@ def collect_tally(
     provider: str,
     model: str,
     *,
-    report_roots: Sequence[Path] = REPORT_ROOTS,
-    cassette_roots: Sequence[Path] = CASSETTE_ROOTS,
+    report_roots: Sequence[Path] | None = None,
+    cassette_roots: Sequence[Path] | None = None,
     now: datetime | None = None,
     hours: float = WINDOW_H,
 ) -> Tally:
+    report_roots = default_report_roots() if report_roots is None else report_roots
+    cassette_roots = default_cassette_roots() if cassette_roots is None else cassette_roots
     now = now or datetime.now(UTC)
     since = now - timedelta(hours=hours)
     t = Tally(provider, model)
@@ -160,11 +178,12 @@ def estimate_run(
     mode: str,
     questions_planned: int,
     *,
-    report_roots: Sequence[Path] = REPORT_ROOTS,
+    report_roots: Sequence[Path] | None = None,
     multiplier: int = 1,
 ) -> Estimate:
     """Tokens per question from the last reports of the same provider, model and mode (the median
     of up to 3), times the questions planned (times `multiplier` runs)."""
+    report_roots = default_report_roots() if report_roots is None else report_roots
     found: list[tuple[str, float]] = []
     for root in report_roots:
         for f in sorted(root.rglob("report.json")) if root.is_dir() else []:
@@ -233,13 +252,15 @@ def start(
     say: Callable[[str], None] = print,
     multiplier: int = 1,
     planned_override: int | None = None,
-    report_roots: Sequence[Path] = REPORT_ROOTS,
-    cassette_roots: Sequence[Path] = CASSETTE_ROOTS,
+    report_roots: Sequence[Path] | None = None,
+    cassette_roots: Sequence[Path] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Print the usage line, then refuse (ConfigError) when the tally plus the planned budget
     would exceed the daily cap and `force` is not set. The planned budget is the estimate from the
     last reports, or, with none, the run's own token cap."""
+    report_roots = default_report_roots() if report_roots is None else report_roots
+    cassette_roots = default_cassette_roots() if cassette_roots is None else cassette_roots
     tally = collect_tally(provider, model, report_roots=report_roots,
                           cassette_roots=cassette_roots, now=now)  # fmt: skip
     cap, source = cap_for(settings, provider, model)

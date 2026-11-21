@@ -228,3 +228,10 @@ def default_reader_role(docs_db):
     if not existed:
         with psycopg.connect(base, autocommit=True) as c:
             c.execute(f'DROP ROLE "{role}"')
+
+
+@pytest.fixture(autouse=True)
+def _isolate_data_dir(tmp_path_factory, monkeypatch):
+    """The daily token tally reads data/live_runs. Point it at an empty folder so that a
+    developer's own reports never change a test result (tests that need reports pass roots)."""
+    monkeypatch.setenv("VA_DATA_DIR", str(tmp_path_factory.mktemp("data")))

@@ -52,7 +52,7 @@ from .transport import (
 from .types import PUBLIC, LLMRequest, ProviderError, SensitivityRefusal
 
 HARD_MAX_REQUESTS = 60  # per probe run; the default cap is 25 (config `probe.max_requests`)
-PROBE_BUCKET_MAX_WAIT_S = 120.0  # a probe has one provider and no fallback, so it waits
+PROBE_BUCKET_MAX_WAIT_S = 60.0  # the most one wait may last; a probe has no fallback, so it waits
 ERROR_BODY_CHARS = 300
 _sleep: Callable[[float], None] = time.sleep  # tests replace this
 
@@ -523,6 +523,7 @@ class ProbeOptions:
     max_tokens: int | None = None
     quota_check: bool = False
     record: bool = True
+    reasoning_effort: str | None = None  # overrides the config value for this run
 
 
 def slug(text: str) -> str:
@@ -551,7 +552,11 @@ def probe_settings(base: RouterSettings, opts: ProbeOptions) -> RouterSettings:
             raise ConfigError(f"--max-requests must be between 1 and {HARD_MAX_REQUESTS}")
         s.probe.max_requests = opts.max_requests
     # one provider, no fallback: waiting for the token bucket is better than abstaining
-    s.bucket.max_wait_s = max(s.bucket.max_wait_s, PROBE_BUCKET_MAX_WAIT_S)
+    s.bucket.max_wait_s = min(s.bucket.max_wait_s, PROBE_BUCKET_MAX_WAIT_S)
+    if opts.reasoning_effort:
+        if s.providers[opts.provider].kind != "groq":
+            raise ConfigError("--reasoning-effort is only wired for groq")
+        s.providers[opts.provider].reasoning_effort = opts.reasoning_effort
     if opts.token_cap:
         s.probe.token_cap = min(opts.token_cap, s.probe.token_cap)
     return s
@@ -728,7 +733,9 @@ def build_report(
                 "requests_per_minute": s.providers[opts.provider].rpm,
                 "max_wait_s": s.bucket.max_wait_s,
             },
-            "reasoning_effort_sent": s.providers[opts.provider].reasoning_effort,
+            "reasoning_effort_sent": (
+                s.providers[opts.provider].reasoning_effort if "gpt-oss" in opts.model else None
+            ),
             "scope": "one model, public data only; raw results; no accuracy claim, no ranking",
             "prompt_note": "prompts are first drafts, not tuned or proven "
             f"({', '.join(sorted(active_prompt_hashes()))}): "

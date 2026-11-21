@@ -482,11 +482,11 @@ def test_the_token_cap_can_only_be_lowered(tmp_path):
     assert probe_settings(settings(), opts(tmp_path, token_cap=500)).probe.token_cap == 500
 
 
-def test_a_probe_waits_for_the_bucket_longer_than_the_router_default(tmp_path):
+def test_a_probe_wait_is_capped_at_60_seconds(tmp_path):
     s = probe_settings(settings(bucket={"fraction": 0.5, "max_wait_s": 10}), opts(tmp_path))
-    assert s.bucket.max_wait_s == 120
+    assert s.bucket.max_wait_s == 10  # the config value, when it is below the 60 s cap
     s = probe_settings(settings(bucket={"fraction": 0.5, "max_wait_s": 500}), opts(tmp_path))
-    assert s.bucket.max_wait_s == 500  # never lowered
+    assert s.bucket.max_wait_s == 60  # a single wait never exceeds 60 s
 
 
 @pytest.mark.parametrize(
@@ -886,11 +886,10 @@ def test_report_states_the_bucket_and_whether_reasoning_effort_was_sent(env, tmp
         "tokens/minute 8000" in out["markdown"] and "reasoning_effort sent: no" in out["markdown"]
     )
     cfg.providers["groq"].reasoning_effort = "low"
-    m = Model()
+    m = Model()  # a model that is not gpt-oss never gets the parameter
     out = probe(env, m, tmp_path / "b", cfg=cfg, qs=load_probe_questions()[:1])
-    assert out["report"]["header"]["reasoning_effort_sent"] == "low"
-    assert {r["body"].get("reasoning_effort") for r in m.requests} == {"low"}
-    assert "reasoning_effort sent: low" in out["markdown"]
+    assert out["report"]["header"]["reasoning_effort_sent"] is None
+    assert {r["body"].get("reasoning_effort") for r in m.requests} == {None}
 
 
 def _jv():
@@ -1035,3 +1034,26 @@ def test_report_lists_429_quota_names_without_the_body(env, tmp_path, monkeypatc
     assert "HTTP 429 quota details" in md and "a limit of 0 was reported" in md
     assert "SECRET-PROJECT-TEXT" not in md
     assert "SECRET-PROJECT-TEXT" not in (tmp_path / "run" / "report.json").read_text()
+
+
+@pytest.mark.db
+def test_live_probe_sends_reasoning_effort_to_gpt_oss_and_the_flag_overrides_config(env, tmp_path):
+    cfg = settings(datasets={"analytics.sales_lines": "public"})
+    cfg.providers["groq"].reasoning_effort = "low"
+    cfg.providers["groq"].models = {"default": "openai/gpt-oss-20b"}
+    m = Model()
+    out = run_probe(
+        cfg, opts(tmp_path, model="openai/gpt-oss-20b"),
+        layer=env[0], readonly_url=env[1], questions=load_probe_questions()[:1],
+        known_values=env[2], env=KEYS, inner_transport=m,
+    )  # fmt: skip
+    assert out["report"]["header"]["reasoning_effort_sent"] == "low"
+    assert {r["body"].get("reasoning_effort") for r in m.requests} == {"low"}
+    m2 = Model()
+    out = run_probe(
+        cfg, opts(tmp_path / "b", model="openai/gpt-oss-20b", reasoning_effort="medium"),
+        layer=env[0], readonly_url=env[1], questions=load_probe_questions()[:1],
+        known_values=env[2], env=KEYS, inner_transport=m2,
+    )  # fmt: skip
+    assert out["report"]["header"]["reasoning_effort_sent"] == "medium"
+    assert {r["body"].get("reasoning_effort") for r in m2.requests} == {"medium"}

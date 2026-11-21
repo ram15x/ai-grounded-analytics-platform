@@ -469,11 +469,21 @@ def cmd_route_probe(args: argparse.Namespace) -> int:
         route_only=args.route_only,
         record=args.record,
         injection_only=args.injection_only,
+        reasoning_effort=args.reasoning_effort,
     )
-    out = route_probe.run_route_probe(
-        load_router_settings(), opts, layer=layer, readonly_url=url,
-        known_values=catalogue(layer, url), env=os.environ,
-    )  # fmt: skip
+    kw = {"layer": layer, "readonly_url": url, "known_values": catalogue(layer, url),
+          "env": os.environ}  # fmt: skip
+    if args.compare_reasoning:
+        if args.reasoning_effort:
+            raise SystemExit("--compare-reasoning sets the effort itself; drop --reasoning-effort")
+        efforts = tuple(e.strip() for e in args.compare_reasoning.split(",") if e.strip())
+        if len(efforts) != 2:
+            raise SystemExit("--compare-reasoning takes exactly two settings, e.g. low,medium")
+        cmp = route_probe.run_reasoning_compare(load_router_settings(), opts, efforts, **kw)
+        print(redact(cmp["markdown"], os.environ))
+        print(f"files written to: {cmp['out_dir']}")
+        return 0
+    out = route_probe.run_route_probe(load_router_settings(), opts, **kw)
     print(redact(out["markdown"], os.environ))
     print(f"files written to: {out['out_dir']}")
     c = out["cassette"]
@@ -631,6 +641,15 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument(
         "--injection-only", action="store_true",
         help="only the 5 injection questions (fits under the token cap; not with --route-only)",
+    )  # fmt: skip
+    rp.add_argument(
+        "--reasoning-effort", default=None, metavar="LEVEL",
+        help="overrides reasoning_effort in config/router.yaml for this run (groq gpt-oss only)",
+    )  # fmt: skip
+    rp.add_argument(
+        "--compare-reasoning", default=None, metavar="A,B",
+        help="the 5 injection questions once per setting, e.g. low,medium (two runs, each with "
+        "its own request cap)",
     )  # fmt: skip
     rp.add_argument(
         "--record", action="store_true",

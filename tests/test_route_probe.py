@@ -510,3 +510,70 @@ def test_route_only_and_injection_only_cannot_be_combined(tmp_path):
             layer=load_semantic_layer(), readonly_url="x", known_values=None, env=KEYS,
             questions=[], injection=[],
         )  # fmt: skip
+
+
+GPT_OSS = "openai/gpt-oss-20b"
+
+
+def _oss_cfg():
+    return settings(
+        datasets={"analytics.sales_lines": "public", "docs.public": "public"},
+        providers={
+            "groq": {"kind": "groq", "hosted": True, "env_key": "GROQ_API_KEY",
+                     "models": {"default": GPT_OSS}, "reasoning_effort": "low"},
+            "local": {"kind": "fake", "hosted": False, "models": {"default": "m-local"}},
+        },
+        tasks={t: ["groq", "local"] for t in ("route", "plan", "compose", "repair")},
+    )  # fmt: skip
+
+
+@pytest.mark.db
+def test_reasoning_effort_override_is_sent_only_to_a_gpt_oss_model(env, tmp_path):
+    layer, url, known, docs_db = env
+    m = Model()
+    out = run_route_probe(
+        _oss_cfg(),
+        RouteProbeOptions("groq", GPT_OSS, tmp_path / "r", max_requests=60, injection_only=True,
+                          reasoning_effort="medium"),
+        layer=layer, readonly_url=url, known_values=known, env=KEYS,
+        retriever=make_retriever(docs_db.readonly_url, k=3), inner_transport=m,
+    )  # fmt: skip
+    assert m.requests and all(r.get("reasoning_effort") == "medium" for r in m.requests)
+    assert out["report"]["header"]["reasoning_effort_sent"] == "medium"
+    assert "UNVERIFIED" in out["markdown"] and "Token guard" in out["markdown"]
+    # a non-gpt-oss model never gets the parameter, even with the override
+    m2 = Model()
+    probe(env, m2, tmp_path / "x", max_requests=60, injection_only=True, reasoning_effort="medium")
+    assert m2.requests and not any("reasoning_effort" in r for r in m2.requests)
+
+
+@pytest.mark.db
+def test_compare_runs_the_same_five_questions_once_per_setting(env, tmp_path):
+    layer, url, known, docs_db = env
+    m = Model()
+    out = route_probe.run_reasoning_compare(
+        _oss_cfg(),
+        RouteProbeOptions("groq", GPT_OSS, tmp_path / "cmp", max_requests=60),
+        ("low", "medium"),
+        layer=layer, readonly_url=url, known_values=known, env=KEYS,
+        retriever=make_retriever(docs_db.readonly_url, k=3), inner_transport=m,
+    )  # fmt: skip
+    low, med = out["summaries"]
+    assert (low["effort"], med["effort"]) == ("low", "medium")
+    assert low["questions"] == med["questions"] == 5
+    sent = [r.get("reasoning_effort") for r in m.requests]
+    assert set(sent) == {"low", "medium"}
+    assert sent == sorted(sent, key=lambda e: e != "low")  # all low first, then all medium
+    assert (tmp_path / "cmp" / "compare.md").exists()
+    assert "n=5" in out["markdown"] and "UNVERIFIED" in out["markdown"]
+    assert low["http_400"] == 0 and "per_call" in low
+
+
+def test_compare_refuses_route_only(tmp_path):
+    from verified_analyst.config import ConfigError
+
+    with pytest.raises(ConfigError):
+        route_probe.run_reasoning_compare(
+            _oss_cfg(), RouteProbeOptions("groq", GPT_OSS, tmp_path, route_only=True),
+            layer=None, readonly_url="x", known_values=None, env=KEYS,
+        )  # fmt: skip

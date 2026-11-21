@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -74,6 +74,7 @@ class RouteProbeOptions:
     injection_only: bool = False  # only the 5 injection questions (fits under the token cap)
     route_only: bool = False  # only the route call for each router question (fewest requests)
     record: bool = False  # record cassettes (public data and public documents only)
+    reasoning_effort: str | None = None  # --reasoning-effort; overrides config/router.yaml
 
 
 class _Tap:
@@ -106,7 +107,8 @@ def route_settings(base: RouterSettings, opts: RouteProbeOptions) -> RouterSetti
     s = live.probe_settings(
         base,
         live.ProbeOptions(opts.provider, opts.model, opts.out_dir, opts.max_requests,
-                          opts.token_cap, opts.max_tokens, record=opts.record),
+                          opts.token_cap, opts.max_tokens, record=opts.record,
+                          reasoning_effort=opts.reasoning_effort),
     )  # fmt: skip
     s.tasks = {t: [opts.provider] for t in ("route", "plan", "compose", "repair")}
     return s
@@ -149,7 +151,7 @@ def call_details(run: RunContext) -> list[dict[str, Any]]:
          "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens,
          "max_tokens": r.max_tokens, "json_mode_off": r.json_mode_off,
          "prompt_tokens": r.prompt_tokens, "raw_body": r.raw_body,
-         "malformed_kind": r.malformed_kind}
+         "malformed_kind": r.malformed_kind, "max_tokens_doubled": r.max_tokens_doubled}
         for r in run.records
     ]  # fmt: skip
 
@@ -321,6 +323,25 @@ def build_router_section(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def token_guard(runs: list[RunContext], counting: live.CountingTransport) -> dict[str, Any]:
+    """Waits for the token bucket and the single wait-and-retry after an HTTP 429, with the
+    seconds waited and the basis (Retry-After header or the bucket estimate)."""
+    waits = [dict(w) for r in runs for w in r.waits]
+    bucket = [w for w in waits if w.get("kind") != "rate_limit_retry"]
+    retries = [w for w in waits if w.get("kind") == "rate_limit_retry"]
+    return {
+        "bucket_waits": len(bucket),
+        "bucket_wait_seconds": round(sum(w["seconds"] for w in bucket), 1),
+        "rate_limit_retries": len(retries),
+        "rate_limit_retry_seconds": round(sum(w["seconds"] for w in retries), 1),
+        "http_429": sum(1 for e in counting.events if e.status == 429),
+        "requests_doubled_allowance": sum(
+            bool(c["max_tokens_doubled"]) for r in runs for c in call_details(r)
+        ),
+        "each_wait": waits,
+    }
+
+
 def build_report(
     opts: RouteProbeOptions, s: RouterSettings, layer: SemanticLayer, tap: _Tap,
     runs: list[RunContext], rows: list[dict[str, Any]], inj_rows: list[dict[str, Any]],
@@ -347,6 +368,9 @@ def build_report(
             "prompts": routed_prompt_hashes(),
             "caps": {"max_requests": s.probe.max_requests, "token_cap": s.probe.token_cap,
                      "max_tokens": opts.max_tokens or 1024},
+            "reasoning_effort_sent": (
+                s.providers[opts.provider].reasoning_effort if "gpt-oss" in opts.model else None
+            ),
             "mode": "route only" if opts.route_only else "injection questions only"
                     if opts.injection_only else "route plus full answer",
             "recording": opts.record,
@@ -363,6 +387,7 @@ def build_report(
                  "error_bodies": [{"seq": e.seq, "status": e.status, "body": e.error_body}
                                   for e in counting.events if e.error_body is not None]},
         "accounting": merge_summaries(runs) if runs else None,
+        "token_guard": token_guard(runs, counting),
         "router": build_router_section(rows),
         "router_questions": rows,
         "schema_valid": {
@@ -439,8 +464,26 @@ def render_report(rep: dict[str, Any]) -> str:
         f"- completion allowance per call (max_tokens): {h['caps']['max_tokens']}",
         "- most requests one question made for one task: "
         + json.dumps(rep["most_requests_per_task_in_one_question"], sort_keys=True)
-        + " (after a JSON refusal at most 2; a provider with 2 refusals in a row is dropped "
-        "for that question)",
+        + " (after a JSON refusal at most 2, plus one retry with a doubled allowance "
+        "when a reply was empty with finish length, so at most 3; a provider with 2 refusals "
+        "in a row is dropped for that question)",
+    ]
+    tg = rep["token_guard"]
+    lines += [
+        "",
+        "## Token guard and rate limits",
+        f"- reasoning_effort sent: {h['reasoning_effort_sent'] or 'no (not configured)'}. "
+        "UNVERIFIED: that a lower setting reduces reasoning tokens; only a compare run "
+        "can show it.",
+        f"- waits for the token bucket: {tg['bucket_waits']} ({tg['bucket_wait_seconds']} s); "
+        f"HTTP 429 received: {tg['http_429']}; wait-and-retry after a 429: "
+        f"{tg['rate_limit_retries']} ({tg['rate_limit_retry_seconds']} s); "
+        f"requests sent with a doubled allowance: {tg['requests_doubled_allowance']}",
+    ]
+    lines += [
+        f"  - wait: {w['task']} {w['kind']}{' by ' + w['basis'] if w.get('basis') else ''} "
+        f"{w['seconds']} s"
+        for w in tg["each_wait"]
     ]
     mal = rep["malformed_replies"]
     lines += ["", f"## Unusable HTTP 200 replies (n={len(mal)})"]
@@ -685,3 +728,131 @@ def run_route_probe(
         "stopped_on_auth": kind == "auth",
         "stopped_early": kind in ("provider_unavailable", "model_gone", "sensitivity"),
     }  # fmt: skip
+
+
+EFFORTS_COMPARED = ("low", "medium")
+
+
+def _pct(vals: list[int | float], p: int) -> float | None:
+    return live.percentile([float(v) for v in vals], p) if vals else None
+
+
+def summarize_effort(rep: dict[str, Any], effort: str) -> dict[str, Any]:
+    rows = rep["injection"]["questions"]
+    calls = [c for r in rows for c in r["calls"]]
+    ok = [c for c in calls if c["outcome"] == "ok"]
+    reasoning = [c["reasoning_tokens"] for c in calls if c["reasoning_tokens"] is not None]
+    comp = [c["completion_tokens"] for c in calls if c["completion_tokens"] is not None]
+    by_status = rep["http"]["by_status"]
+    return {
+        "effort": effort,
+        "questions": len(rows),
+        "calls": len(calls),
+        "calls_ok": len(ok),
+        "completion_tokens": {"n": len(comp), "total": sum(comp), "median": _pct(comp, 50)},
+        "reasoning_tokens": {"n": len(reasoning), "total": sum(reasoning),
+                             "median": _pct(reasoning, 50)},
+        "finish_reasons": _counts([c["finish_reason"] or "(none)" for c in calls]),
+        "http_400": by_status.get("400", 0),
+        "http_429": by_status.get("429", 0),
+        "http_by_status": by_status,
+        "requests_sent": rep["http"]["requests_sent"],
+        "verdicts": _counts([f"{r['outcome']}" + (f": {r['reason']}" if r["reason"] else "")
+                             for r in rows]),
+        "reached_composer": rep["injection"]["reached_composer"],
+        "per_call": [{"id": r["id"], **{k: c[k] for k in (
+            "task", "outcome", "finish_reason", "completion_tokens", "reasoning_tokens",
+            "max_tokens", "max_tokens_doubled")}} for r in rows for c in r["calls"]],
+        "token_guard": {k: rep["token_guard"][k] for k in (
+            "bucket_waits", "bucket_wait_seconds", "rate_limit_retries", "http_429")},
+        "stop": rep["stop"]["reason"],
+    }  # fmt: skip
+
+
+def render_compare(summaries: list[dict[str, Any]], opts: RouteProbeOptions) -> str:
+    lines = [
+        f"# reasoning_effort compare: {opts.provider} / {opts.model}",
+        "",
+        "Same 5 injection questions, one run per setting, in this order: "
+        + ", ".join(s["effort"] for s in summaries)
+        + ". Raw counts, no accuracy claim, no "
+        "ranking. Two single runs cannot separate the setting from run-to-run variation, "
+        "and the 5 questions are one small set (n=5 per setting).",
+        "",
+        "| | " + " | ".join(s["effort"] for s in summaries) + " |",
+        "|---|" + "---|" * len(summaries),
+    ]
+
+    def row(label: str, f: Any) -> None:
+        lines.append(f"| {label} | " + " | ".join(str(f(s)) for s in summaries) + " |")
+
+    row("questions", lambda s: s["questions"])
+    row("model calls", lambda s: s["calls"])
+    row("calls with a usable reply", lambda s: f"{s['calls_ok']} of {s['calls']}")
+    row(
+        "completion tokens, total (n calls)",
+        lambda s: f"{s['completion_tokens']['total']} (n={s['completion_tokens']['n']})",
+    )
+    row("completion tokens, median per call", lambda s: s["completion_tokens"]["median"])
+    row(
+        "reasoning tokens, total (n calls reporting)",
+        lambda s: f"{s['reasoning_tokens']['total']} (n={s['reasoning_tokens']['n']})",
+    )
+    row("reasoning tokens, median per call", lambda s: s["reasoning_tokens"]["median"])
+    row("finish reasons", lambda s: json.dumps(s["finish_reasons"], sort_keys=True))
+    row("HTTP 400", lambda s: s["http_400"])
+    row("HTTP 429", lambda s: s["http_429"])
+    row("requests sent", lambda s: s["requests_sent"])
+    row("verdicts", lambda s: json.dumps(s["verdicts"], sort_keys=True))
+    row(
+        "reached the composer",
+        lambda s: f"{s['reached_composer']['k']} of {s['reached_composer']['n']}",
+    )
+    row(
+        "bucket waits / 429 retries",
+        lambda s: f"{s['token_guard']['bucket_waits']} / {s['token_guard']['rate_limit_retries']}",
+    )
+    row("run ended", lambda s: s["stop"])
+    for s in summaries:
+        lines += ["", f"## per call, effort {s['effort']} (n={len(s['per_call'])})"]
+        lines += [
+            f"- {c['id']} {c['task']}: {c['outcome']}, finish {c['finish_reason'] or '(none)'}, "
+            f"completion {c['completion_tokens']} tok, reasoning {c['reasoning_tokens']} tok, "
+            f"allowance {c['max_tokens']}{' (doubled)' if c['max_tokens_doubled'] else ''}"
+            for c in s["per_call"]
+        ]
+    lines += [
+        "",
+        "Whether a lower setting reduces reasoning tokens stays UNVERIFIED unless "
+        "the reasoning rows above show it with this n; nothing here is a general claim.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def run_reasoning_compare(
+    settings: RouterSettings,
+    opts: RouteProbeOptions,
+    efforts: tuple[str, ...] = EFFORTS_COMPARED,
+    **kw: Any,
+) -> dict[str, Any]:
+    """One injection-only run per reasoning_effort setting, each in its own sub-folder, then a
+    side-by-side report. The request cap and token cap apply to each run separately."""
+    if opts.route_only:
+        raise ConfigError("the compare uses the 5 injection questions; not with --route-only")
+    summaries: list[dict[str, Any]] = []
+    outs: dict[str, str] = {}
+    for eff in efforts:
+        sub = replace(opts, out_dir=opts.out_dir / f"effort_{eff}", reasoning_effort=eff,
+                      injection_only=True)  # fmt: skip
+        out = run_route_probe(settings, sub, **kw)
+        summaries.append(summarize_effort(out["report"], eff))
+        outs[eff] = out["out_dir"]
+        if out["stopped_on_auth"] or out["stopped_early"]:
+            break
+    md = render_compare(summaries, opts)
+    opts.out_dir.mkdir(parents=True, exist_ok=True)
+    (opts.out_dir / "compare.md").write_text(md, encoding="utf-8")
+    (opts.out_dir / "compare.json").write_text(
+        json.dumps({"summaries": summaries, "runs": outs}, indent=2, sort_keys=True),
+        encoding="utf-8")  # fmt: skip
+    return {"summaries": summaries, "markdown": md, "out_dir": str(opts.out_dir), "runs": outs}

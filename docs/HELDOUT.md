@@ -75,7 +75,7 @@ that reads it. No such command exists yet.
 ## Binder locked half
 
 The locked half of the binder study (documents whose key hashes to "locked") is built only by
-`documents/binder_locked.py`, run once with `va docs binder-locked --candidates current,C1,C2,C3`
+`documents/binder_locked.py`, run once with `va docs binder-locked --candidates current,C1,C2,S1,S2,SL`
 after docs/adr/0011-binder-variants.md is committed. A ledger (`data/binder_locked_ledger.jsonl`)
 refuses a second run. Nothing else may read it or choose a variant with it. The 12 locked router
 questions (`eval/router_questions/heldout.yaml`) are separate and still have no gated command.

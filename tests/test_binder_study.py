@@ -85,7 +85,7 @@ def _git(committed=True, dirty=False):
 
 def _kw(tmp_path, **over):
     kw = {
-        "candidates_arg": "current,C1,C2,C3",
+        "candidates_arg": "current,C1,C2,S1,S2,SL",
         "ledger": tmp_path / "l.jsonl",
         "git": _git(),
         "adr_path": ADR,
@@ -138,3 +138,29 @@ def test_only_the_locked_module_builds_the_locked_half():
         if p.name not in {"cli.py", "binder_study.py"}:
             assert "binder_locked" not in t, p
     assert bl.parse_candidates(ADR.read_text("utf-8")) == bl.PRE_REGISTERED
+
+
+def test_sentence_scope_accepts_the_real_courier_label_and_refuses_a_swap():
+    text = TEXTS[0]
+    s = text.index("14")
+    label = "time limit for claiming a late or damaged parcel"
+    prose = f"The {label} is 14 days."
+    sent = bl.config_of("S1")
+    assert check_binding(label, prose, text, s, s + 2, DEFAULT) is not None
+    assert check_binding(label, prose, text, s, s + 2, sent) is None
+    t = text.index("12 percent")  # a number in a different sentence of the same passage
+    assert check_binding(label, prose, text, t, t + 2, sent) is not None
+
+
+def test_nearest_number_rule_only_applies_with_several_numbers():
+    text = "Claims for a damaged parcel must arrive within 14 days of delivery, not 30 days."
+    s2 = bl.config_of("S2")
+    a = text.index("14")
+    b = text.index("30")
+    lab = "claim window for a damaged parcel"
+    prose = "The claim window for a damaged parcel is 14 days."
+    assert check_binding(lab, prose, text, a, a + 2, s2) is None
+    assert check_binding(lab, prose, text, b, b + 2, s2) is not None
+    one = "Claims for a damaged parcel must arrive within 14 days of delivery."
+    c = one.index("14")
+    assert check_binding(lab, prose, one, c, c + 2, s2) is None

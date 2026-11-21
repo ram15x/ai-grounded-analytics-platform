@@ -576,7 +576,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="score the pre-registered binder variants on the locked half, once (needs "
         "docs/adr/0011 committed and unchanged)",
     )
-    bl.add_argument("--candidates", required=True, help="must be exactly current,C1,C2,C3")
+    bl.add_argument("--candidates", required=True, help="must be exactly current,C1,C2,S1,S2,SL")
     bl.set_defaults(fn=cmd_docs_binder_locked)
     cs = sub.add_parser("cassettes", help="inspect recorded model-call cassettes")
     cs_sub = cs.add_subparsers(dest="cassette_cmd", required=True)

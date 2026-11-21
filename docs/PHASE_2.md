@@ -333,9 +333,17 @@ falsely rejects 229 of 461 correct cases (all 65 of the "distant" style) and fal
 met by changing R1 alone and is not expected on the locked half either. Wider windows lower false
 rejects but raise false accepts.
 
-Pre-registered in docs/adr/0011-binder-variants.md: `current`, `C1` (units skipped), `C2` (also
-75% of label words), `C3` (60%). The locked half is scored once by `va docs binder-locked
---candidates current,C1,C2,C3`, which refuses unless the ADR is committed and unchanged. A candidate
+Pre-registered in docs/adr/0011-binder-variants.md (amendment 1, before any locked run): `current`,
+`C1`, `C2`, and the sentence family `S1`, `S2`, `SL`. The locked half is scored once by `va docs
+binder-locked --candidates current,C1,C2,S1,S2,SL`, which refuses unless the ADR is committed and unchanged. A candidate
 is put forward only if its locked false accepts are no higher than current's and its false rejects
 are lower; otherwise R1 stays. The shipped default has not changed. The corpus is synthetic and the
 labels are generated, so this is a screen, not a benchmark.
+
+Sentence family (dev half, FR of 461 / FA of 873, false accepts split same passage / other document):
+current 229 / 73 (19 / 54); C1 228 / 58 (21 / 37); C2 153 / 66 (29 / 37); S1 (label words in the cited
+number's sentence, units skipped) 6 / 37 (0 / 37); S2 (S1 plus the nearest-number rule when the
+sentence holds several numbers) 37 / 33 (0 / 33); SL (sentence only) 6 / 52 (0 / 52). The correct
+cases take their label from the number's own sentence, so the sentence family passes them almost by
+construction; the false-reject figure is a floor. The shipped default has not changed and the locked
+half has not been scored.

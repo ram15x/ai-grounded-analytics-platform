@@ -30,16 +30,27 @@ LEDGER_PATH = ROOT / "data" / "binder_locked_ledger.jsonl"
 # Set to the path of the outcome ADR once the locked half has informed a decision.
 SPENT_BY: str | None = None
 
+
+def _spec(frac: float, window: int, skip: bool, scope: str = "window", nearest: bool = False):
+    return {
+        "frac": frac,
+        "window": window,
+        "ignore_repeated": False,
+        "head_noun": False,
+        "skip_units": skip,
+        "scope": scope,
+        "nearest": nearest,
+    }
+
+
 PRE_REGISTERED: dict[str, dict[str, Any]] = {
-    "current": {"frac": 1.0, "window": 6, "ignore_repeated": False, "head_noun": False,
-                "skip_units": False},
-    "C1": {"frac": 1.0, "window": 6, "ignore_repeated": False, "head_noun": False,
-           "skip_units": True},
-    "C2": {"frac": 0.75, "window": 6, "ignore_repeated": False, "head_noun": False,
-           "skip_units": True},
-    "C3": {"frac": 0.6, "window": 6, "ignore_repeated": False, "head_noun": False,
-           "skip_units": True},
-}  # fmt: skip
+    "current": _spec(1.0, 6, False),
+    "C1": _spec(1.0, 6, True),
+    "C2": _spec(0.75, 6, True),
+    "S1": _spec(1.0, 6, True, "sentence"),
+    "S2": _spec(1.0, 8, True, "sentence", True),
+    "SL": _spec(1.0, 6, False, "sentence"),
+}
 RULE = (
     "A candidate is put forward for review only if, on the locked half, its false accepts on the "
     "swapped cases are no higher than current's AND its false rejects on the correct cases are "

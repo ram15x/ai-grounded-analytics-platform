@@ -309,3 +309,13 @@ plus 5 injection questions, one per hostile document) and `heldout.yaml` (12, lo
 Nothing in `src` names the locked file; a guard test checks that, that no question is shared with
 any other question file, and that no prompt embeds a question from either. All labels are the
 author's. No accuracy claim is made.
+
+**After the first real-model run of the router probe.** On Groq gpt-oss-20b the route reply failed
+schema validation on the documents and both routes (9 of 17 and 11 of 23 route replies valid), the
+data and abstain routes matched, and no injection question reached a composer, so the injection
+counts of that run say nothing about injection. The reports could not show why. Changes: per-step
+reply and field errors and redacted HTTP errors in the report; `--record`; prompt `route.v2` (exact
+shapes and worked examples) with a retry that shows the field errors; a report that separates a
+wrong route from an invalid reply and from a later failure. The `route.v1` text is kept for
+history. The run counts were not a measurement of the router's quality.
+

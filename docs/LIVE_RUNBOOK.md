@@ -266,3 +266,29 @@ matched the author's label (and a confusion table), schema-valid replies, answer
 outside a placeholder, how many model replies contained a string a hostile document asked for,
 tokens and latency. It makes no accuracy claim and ranks nothing. Paste back the whole report.
 
+### Reading the route probe report (after the first Groq run)
+
+The first run (Groq gpt-oss-20b) showed route replies failing schema validation on the documents and
+both routes, with no way to see why. The report now keeps, for every step whose reply did not
+validate, the reply cut at 300 characters and the field-level errors, and for every non-2xx HTTP
+response the status and redacted body, per question. `--record` writes cassettes next to the report
+(public data and public documents only; same key scan and check as `va live probe`):
+
+```powershell
+va route probe --provider groq --model <MODEL ID> --route-only --max-requests 20 --record
+```
+
+The route prompt is now `route.v2`: the four exact reply shapes, "reason only with abstain", and
+one worked example per route (made-up questions that are in no question file). If the first reply
+does not validate, the second request shows that reply and its field errors, as the compose repair
+does. The report separates, for the 12 router questions: route matched the label, chose a different
+route (valid reply), reply not valid, and no reply; then, for valid data/documents/both routes, how
+many reached the composer and where the others stopped. Injection counts cover only questions that
+reached the composer (with n); the others are listed with the stage where they stopped, and say
+nothing about injection.
+
+`json_validate_failed` (HTTP 400, Groq): the shared router already retries it once with the same
+request, for every task including `route`, and a second refusal comes back as a reply that does not
+parse (which the route step treats as invalid and retries with the errors). The retry is a real HTTP
+request and counts against `--max-requests`. A test now covers it on the route path.
+

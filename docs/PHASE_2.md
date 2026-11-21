@@ -272,9 +272,11 @@ unit compatible, and the binder. Handles never include a number inside flagged t
 was not listed is `unknown_passage_number`. Decimals and scale are not allowed on a passage number.
 Derived claims over passage numbers are not built.
 
-**Label binding (`documents/binding.py`, default on, fails closed).** R1: the words of the claim
-label that the passage itself uses must all sit within six words of the number in the passage, and
-at least one label word must (`label_not_in_passage_window`). R2: the label words must occur in
+**Label binding (`documents/binding.py`, default on, fails closed).** R1 (S2, docs/adr/0012): the words
+of the claim label that the passage itself uses must occur in the sentence of the passage that holds the number
+(unit words not counted); if that sentence holds several numbers the cited one must be nearest a matched
+label word or within 8 tokens of one (`label_not_in_passage_sentence`; the earlier six-word-window rule is the
+named variant `current`, `label_not_in_passage_window`). R2: the label words must occur in
 the prose sentence that carries the number (`label_not_in_sentence`). R3: every capitalised,
 non-initial word in that sentence that is not a label word must occur in the cited passage
 (`entity_not_in_passage`). Stemming is a simple suffix strip. This catches a number moved to a
@@ -347,3 +349,11 @@ sentence holds several numbers) 37 / 33 (0 / 33); SL (sentence only) 6 / 52 (0 /
 cases take their label from the number's own sentence, so the sentence family passes them almost by
 construction; the false-reject figure is a floor. The shipped default has not changed and the locked
 half has not been scored.
+
+### Binder default (ADR-0012)
+
+The locked half of the binder study was scored once by the owner (false rejects of 664 correct cases,
+false accepts of 1289 swapped cases): current 193 and 251; C1 193 and 232; C2 145 and 244; S1 14 and 16;
+S2 40 and 15; SL 14 and 25. S2 is now the shipped default; `current` stays as a named variant. S1 against
+S2 (16 against 15) is within noise; the choice rests on the nearest-number design argument, and false
+rejects on composer-written labels are unmeasured. The locked half is spent.

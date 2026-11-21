@@ -123,16 +123,24 @@ really is in a document still verifies as a quote; see docs/INJECTION.md.
 ## Passage claims and the label binder (slice 2e)
 
 A passage claim must also pass three checks on words (`documents/binding.py`): R1 the label words
-that the passage uses sit within six words of the number in the passage; R2 the label words occur
-in the prose sentence; R3 capitalised, non-initial words in that sentence occur in the passage.
-They fail closed. They do not check meaning: "price" near "50" in the passage still passes for a
-claim that means a different price, and a fair paraphrase can be refused (a label word that the
-passage uses but not next to the number). Cell numbers are bound by the semantic layer; passage
-numbers are bound by these heuristics only.
+that the passage uses occur in the sentence of the passage that holds the number (unit words such as
+"days" not counted), and when that sentence holds several numbers the cited one is nearest a matched
+label word or within 8 tokens of one (S2, ADR-0012); R2 the label words occur in the prose sentence; R3
+capitalised, non-initial words in that sentence occur in the passage. They fail closed. They do not
+check meaning: "price" in the same sentence as "50" still passes for a claim that means a different
+price, and a fair paraphrase can be refused (a label word that the passage uses but not in that
+sentence). Cell numbers are bound by the semantic layer; passage numbers are bound by these heuristics
+only.
 
 ### Binder false rejects and false accepts (measured on synthetic data)
 
-On the dev half of a generated test set, the R1 window rule refuses 229 of 461 correct labels and
-accepts 73 of 873 labels moved onto another number. It is a heuristic that fails closed, so it
-over-refuses; it is not a proof that a label describes its number. See docs/adr/0011 and
-`va docs binder-study`.
+Locked half of a generated test set, scored once (ADR-0012): the shipped rule S2 wrongly accepts 15 of
+1289 labels moved onto another number (about 1.2%) and wrongly refuses 40 of 664 correct labels; the
+earlier six-word rule (`current`) wrongly accepts 251 of 1289 and wrongly refuses 193 of 664. Labels
+swapped to another document are still accepted: on the dev half all 33 of S2's false accepts (of 873)
+are of that kind, none inside the same passage, and the cause is generic label words ("parcel",
+"delivery", "day", "order") that also occur in the cited sentence of the other document. The
+false-reject figure is a floor: the correct cases take their label from the number's own sentence, so
+the sentence rule passes them almost by construction, and false rejects on labels written by a model
+are unmeasured. The rule fails closed but is not a proof that a label describes its number. See
+docs/adr/0011, docs/adr/0012 and `va docs binder-study`.

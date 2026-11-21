@@ -23,9 +23,14 @@ providers:
     # from reset-tokens values of 1 to 56 seconds, not from documentation. It applies to this
     # key and model, may differ for others, and may differ from what a plan change gives.
     tpm: 8000
-    # reasoning_effort: low   # UNVERIFIED and NOT SET: no real call has sent it. Whether Groq
-    #                         # accepts it for this model, and with which values, is unknown.
-    #                         # It is sent only if you uncomment it, and then only to Groq.
+    # UNVERIFIED: that `low` reduces reasoning tokens (and so the empty `length` replies) for
+    # openai/gpt-oss models. Sent only to Groq models whose id contains "gpt-oss"; override per
+    # run with --reasoning-effort (assumptions rows 36 and 48). `va route probe --compare-reasoning
+    # low,medium` measures it on the injection questions.
+    reasoning_effort: low
+    # The model reports reasoning tokens in its usage block (probe reports, 2026-11-20 and
+    # 2026-11-21): compose and repair get a completion allowance of at least `reasoning_min_tokens`.
+    reasoning_min_tokens: 2048
     models:
       default: openai/gpt-oss-20b   # UNVERIFIED ID
   gemini:
@@ -36,6 +41,7 @@ providers:
     # finished in 18.4-28.4 s and 13 hit a 30 s limit. Where the real latency tail ends is not
     # known; 90 may still be too short or may only make failures slower. Groq stays at 30.
     timeout_s: 90
+    reasoning_min_tokens: 2048   # reports reasoning (thoughts) tokens: gemini-3.5-flash report 2026-11-20
     models:
       default: REPLACE-WITH-CURRENT-GEMINI-FLASH-MODEL-ID
   openrouter:
@@ -43,6 +49,7 @@ providers:
     hosted: true
     env_key: OPENROUTER_API_KEY
     timeout_s: 30
+    reasoning_min_tokens: 2048   # reports reasoning tokens: nvidia nemotron reasoning report 2026-11-20
     models:
       default: REPLACE-WITH-A-CURRENT-FREE-MODEL-ID
 
@@ -65,16 +72,25 @@ retry:
   base_s: 1.0
   cap_s: 20.0
   jitter: 0.5
-  max_retry_after_s: 30   # a longer retry-after falls through to the next provider instead
+
+# HTTP 429: wait the provider's Retry-After (with none: until the token guard says the request
+# fits), retry ONCE; a wait above max_wait_s is not shortened, the provider is given up for the
+# call. Every wait is recorded and reported.
+rate_limit:
+  max_wait_s: 60
+  retries: 1
 
 breaker:
   consecutive_429: 3
   cooldown_s: 60
 
+# Token guard: before a request, prompt characters / 4 plus max_tokens is taken from the
+# per-minute bucket; if it does not fit, the router waits (at most max_wait_s, each wait reported).
+# fraction 0.9 (UNVERIFIED): at 0.5 a compose request of about 2,600 prompt tokens plus a 2,048
+# allowance (4,650) could never fit Groq's 8,000 tokens/minute.
 bucket:
-  fraction: 0.5
-  max_wait_s: 10          # a longer wait for the bucket falls through to the next provider
-                          # (a probe has no fallback and waits up to 120 s instead)
+  fraction: 0.9
+  max_wait_s: 60          # a longer wait for the bucket falls through to the next provider
 
 budget:
   per_run_tokens: 30000   # UNVERIFIED assumption (PHASE_1C.md section b)

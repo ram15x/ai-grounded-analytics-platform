@@ -31,6 +31,9 @@ class ProviderSettings(_M):
     # Sent as `reasoning_effort` on every request to this provider, only when set. UNVERIFIED:
     # whether a given Groq model accepts it, and which values, is not known. Groq only for now.
     reasoning_effort: str | None = Field(default=None, pattern=r"^[a-z]{1,16}$")
+    # For a model that reports reasoning tokens: compose and repair requests get at least this
+    # completion allowance (a request with a fixed allowance, such as `--max-tokens`, keeps it).
+    reasoning_min_tokens: int | None = Field(default=None, gt=0)
     models: dict[str, str] = Field(default_factory=dict)  # task or "default" -> model id
 
     def model_for(self, task: str) -> str:
@@ -45,7 +48,16 @@ class RetrySettings(_M):
     base_s: float = Field(default=1.0, ge=0)
     cap_s: float = Field(default=20.0, ge=0)
     jitter: float = Field(default=0.5, ge=0, le=1)  # fraction of the delay that is random
-    max_retry_after_s: float = Field(default=30.0, ge=0)  # longer waits fall through instead
+
+
+class RateLimitSettings(_M):
+    """HTTP 429: wait the provider's Retry-After (or, if it sent none, until the token bucket can
+    cover the request again) and retry this many times; a wait longer than max_wait_s falls
+    through to the next provider instead of being shortened (a shortened wait would just be a
+    blind retry)."""
+
+    max_wait_s: float = Field(default=60.0, ge=0)
+    retries: int = Field(default=1, ge=0, le=3)
 
 
 class BreakerSettings(_M):
@@ -72,6 +84,7 @@ class RouterSettings(_M):
     tasks: dict[str, list[str]]
     datasets: dict[str, Literal["public", "internal"]] = Field(default_factory=dict)
     retry: RetrySettings = Field(default_factory=RetrySettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     breaker: BreakerSettings = Field(default_factory=BreakerSettings)
     bucket: BucketSettings = Field(default_factory=BucketSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)

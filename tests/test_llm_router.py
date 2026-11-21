@@ -155,15 +155,42 @@ def test_missing_key_and_placeholder_model_fall_through():
 # ---- circuit breaker ----
 
 
-def test_breaker_opens_after_three_consecutive_429s_and_skips_provider():
+def test_a_429_is_retried_once_after_retry_after_and_a_second_429_gives_the_provider_up():
     router, run, tr, clock = rig(
-        groq=[status(429, {"Retry-After": "1"})] * 3, gemini=[ok_gemini(), ok_gemini()]
+        groq=[status(429, {"Retry-After": "2"}), status(429, {"Retry-After": "2"}), ok_openai()],
+        gemini=[ok_gemini()],
     )
     assert router.call(req(), run).provider == "gemini"
-    assert router.breaker_state("groq") == "open"
-    assert len(tr["groq"].calls) == 3
-    # a second call does not touch groq at all while the breaker is open
+    assert len(tr["groq"].calls) == 2 and clock.slept == [2.0]  # one wait, one retry, no more
+    assert run.waits == [{"provider": "groq", "task": "plan", "kind": "rate_limit_retry",
+                          "basis": "retry_after", "seconds": 2.0}]  # fmt: skip
+
+
+def test_a_429_without_retry_after_waits_for_the_token_guard_never_blind():
+    router, run, tr, clock = rig(groq=[status(429), ok_openai()])
+    assert router.call(req(), run).provider == "groq"
+    (w,) = [x for x in run.waits if x["kind"] == "rate_limit_retry"]
+    assert w["basis"] == "token_guard" and 0 < w["seconds"] <= 60
+    assert clock.slept[0] == w["seconds"]
+
+
+def test_a_retry_after_above_60_s_is_not_shortened_the_provider_is_given_up():
+    router, run, tr, clock = rig(groq=[status(429, {"Retry-After": "61"})], gemini=[ok_gemini()])
     assert router.call(req(), run).provider == "gemini"
+    assert clock.slept == [] and len(tr["groq"].calls) == 1 and run.waits == []
+    router, run, tr, clock = rig(groq=[status(429, {"Retry-After": "60"}), ok_openai()])
+    assert router.call(req(), run).provider == "groq" and clock.slept == [60.0]
+
+
+def test_breaker_opens_after_three_consecutive_429s_and_skips_provider():
+    router, run, tr, clock = rig(
+        groq=[status(429, {"Retry-After": "1"})] * 3, gemini=[ok_gemini(), ok_gemini(), ok_gemini()]
+    )
+    assert router.call(req(), run).provider == "gemini"  # 429, wait, 429: given up (2 in a row)
+    assert router.breaker_state("groq") == "closed" and len(tr["groq"].calls) == 2
+    assert router.call(req(), run).provider == "gemini"  # the third 429 in a row opens it
+    assert router.breaker_state("groq") == "open" and len(tr["groq"].calls) == 3
+    assert router.call(req(), run).provider == "gemini"  # not touched while open
     assert len(tr["groq"].calls) == 3
     assert any(x.outcome == "breaker_open" for x in run.records)
 
@@ -173,10 +200,11 @@ def test_breaker_half_open_probe_and_reopen():
         groq=[status(429, {"Retry-After": "1"})] * 4 + [ok_openai()], gemini=[ok_gemini()] * 3
     )
     router.call(req(), run)
-    assert router.breaker_state("groq") == "open"
+    router.call(req(), run)
+    assert router.breaker_state("groq") == "open" and len(tr["groq"].calls) == 3
     clock.t += 61  # cooldown over
     assert router.breaker_state("groq") == "closed"
-    router.call(req(), run)  # one probe, 429 again: re-opens at once (1 call, not 3)
+    router.call(req(), run)  # one probe, 429 again: re-opens at once (1 call, not 2)
     assert len(tr["groq"].calls) == 4 and router.breaker_state("groq") == "open"
     clock.t += 61
     assert router.call(req(), run).provider == "groq"  # probe succeeds, breaker closes
@@ -184,23 +212,19 @@ def test_breaker_half_open_probe_and_reopen():
 
 
 def test_non_429_error_resets_the_consecutive_count():
-    router, run, tr, _ = rig(
-        settings(retry={"max_retries": 6}),
-        groq=[status(429, {"Retry-After": "1"}), status(429, {"Retry-After": "1"}),
-              status(500), status(429, {"Retry-After": "1"}), ok_openai()]
-    )  # fmt: skip
+    router, run, tr, _ = rig(groq=[status(429, {"Retry-After": "1"}), status(500), ok_openai()])
     assert router.call(req(), run).provider == "groq"
-    assert router.breaker_state("groq") == "closed"
+    assert router.breaker_state("groq") == "closed" and router._consec_429["groq"] == 0
 
 
 def test_success_resets_the_consecutive_count():
     router, run, tr, _ = rig(
-        groq=[status(429, {"Retry-After": "1"}), status(429, {"Retry-After": "1"}), ok_openai(),
-              status(429, {"Retry-After": "1"}), status(429, {"Retry-After": "1"}), ok_openai()]
+        groq=[status(429, {"Retry-After": "1"}), ok_openai(),
+              status(429, {"Retry-After": "1"}), ok_openai()]
     )  # fmt: skip
     router.call(req(), run)
     router.call(req(), run)
-    assert router.breaker_state("groq") == "closed"
+    assert router.breaker_state("groq") == "closed" and router._consec_429["groq"] == 0
 
 
 def test_all_providers_failing_raises_with_the_attempt_list():
@@ -536,21 +560,29 @@ def test_estimated_usage_keeps_the_full_reservation():
     assert router._tpm["groq"].level == pytest.approx(120 - est)
 
 
-def test_the_shipped_config_has_the_observed_groq_minute_limit_and_no_reasoning_effort():
+def test_the_shipped_config_has_the_observed_groq_minute_limit_and_low_effort_for_groq_only():
     s = load_router_settings(ROOT / "config" / "router.yaml")
     assert s.providers["groq"].tpm == 8000
-    assert all(p.reasoning_effort is None for p in s.providers.values())  # UNVERIFIED: not set
+    assert s.providers["groq"].reasoning_effort == "low"  # UNVERIFIED that it helps (row 48)
+    assert [n for n, p in s.providers.items() if p.reasoning_effort] == ["groq"]
+    assert (s.bucket.max_wait_s, s.rate_limit.max_wait_s, s.rate_limit.retries) == (60, 60, 1)
+    assert all(p.reasoning_min_tokens == 2048 for p in s.providers.values())
 
 
 # ---- reasoning_effort from config ----
 
 
-def test_configured_reasoning_effort_is_sent_to_groq_and_only_then():
+def test_configured_reasoning_effort_is_sent_to_groq_gpt_oss_models_and_only_then():
     cfg = settings()
     cfg.providers["groq"].reasoning_effort = "low"
+    cfg.providers["groq"].models["default"] = "openai/gpt-oss-20b"
     router, run, tr, _ = rig(cfg, groq=[ok_openai()])
     router.call(req(), run)
     assert tr["groq"].calls[0]["body"]["reasoning_effort"] == "low"
+    cfg.providers["groq"].models["default"] = "some-other/model"  # a Groq model that is not gpt-oss
+    router, run, tr, _ = rig(cfg, groq=[ok_openai()])
+    router.call(req(), run)
+    assert "reasoning_effort" not in tr["groq"].calls[0]["body"]
     router, run, tr, _ = rig(settings(), groq=[ok_openai()])
     router.call(req(), run)
     assert "reasoning_effort" not in tr["groq"].calls[0]["body"]
@@ -655,12 +687,12 @@ def test_a_malformed_reply_without_a_json_refusal_keeps_the_normal_retries():
 
 
 def test_content_null_and_non_json_bodies_are_recorded_with_their_kind_and_the_key_is_redacted():
-    null = HttpResponse(200, b'{"choices":[{"message":{"content":null},"finish_reason":"length"}]}')
+    null = HttpResponse(200, b'{"choices":[{"message":{"content":null},"finish_reason":"stop"}]}')
     leak = HttpResponse(200, b"oops Bearer abc123 and gsk-test-key here")
     router, run, tr, _ = rig(groq=[null, leak, ok_openai()])
     router.call(req(), run)
     a, b, _ = run.records
-    assert (a.malformed_kind, a.finish_reason) == ("content_null", "length")
+    assert (a.malformed_kind, a.finish_reason) == ("content_null", "stop")
     assert b.malformed_kind == "body_not_json"
     assert "abc123" not in b.raw_body and "Bearer <redacted>" in b.raw_body
 
@@ -749,3 +781,89 @@ def test_each_provider_call_gets_that_providers_timeout():
     assert router.call(req(), run).provider == "gemini"
     assert tr["groq"].calls[0]["timeout"] == 30
     assert tr["gemini"].calls[0]["timeout"] == 90
+
+
+# ---- va_next23: empty `length` replies, the completion floor, the token guard ----
+
+
+def test_an_empty_reply_that_ended_on_length_is_retried_once_with_the_allowance_doubled():
+    router, run, tr, _ = rig(groq=[empty_200(finish="length", c=1024), ok_openai('{"a": 1}')])
+    r = router.call(req(task="compose", max_tokens=1024), run)
+    assert r.text == '{"a": 1}'
+    assert [c["body"]["max_tokens"] for c in tr["groq"].calls] == [1024, 2048]  # never identical
+    mal, ok = run.records
+    assert (mal.outcome, mal.finish_reason, mal.max_tokens) == ("malformed", "length", 1024)
+    assert (ok.max_tokens, ok.max_tokens_doubled) == (2048, True)
+
+
+def test_the_doubled_allowance_is_capped_at_4096_and_never_repeats_the_same_value():
+    router, run, tr, _ = rig(groq=[empty_200(finish="length"), ok_openai()])
+    router.call(req(task="compose", max_tokens=3000), run)
+    assert [c["body"]["max_tokens"] for c in tr["groq"].calls] == [3000, 4096]
+    router, run, tr, _ = rig(groq=[empty_200(finish="length"), ok_openai()], gemini=[ok_gemini()])
+    assert router.call(req(task="compose", max_tokens=4096), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 1  # already at the cap: no identical retry
+
+
+def test_a_second_empty_length_reply_is_not_retried_again():
+    router, run, tr, _ = rig(
+        groq=[empty_200(finish="length")] * 3 + [ok_openai()], gemini=[ok_gemini()]
+    )
+    assert router.call(req(task="compose", max_tokens=1024), run).provider == "gemini"
+    assert len(tr["groq"].calls) == 2  # the original and one doubled retry, nothing identical
+
+
+def test_an_empty_reply_that_did_not_end_on_length_keeps_the_normal_retries():
+    router, run, tr, _ = rig(groq=[empty_200(finish="stop"), ok_openai()])
+    router.call(req(task="compose", max_tokens=1024), run)
+    assert [c["body"]["max_tokens"] for c in tr["groq"].calls] == [1024, 1024]
+
+
+def test_after_a_json_refusal_an_empty_length_reply_gets_one_doubled_retry_with_json_off():
+    # the case seen in 20261121T064538Z: 400, then HTTP 200 empty with 1022 of 1024 tokens reasoning
+    router, run, tr, _ = rig(groq=[jv(), empty_200(finish="length", c=1024), ok_openai('{"a": 1}')])
+    assert router.call(req(task="compose", max_tokens=1024), run).text == '{"a": 1}'
+    bodies = [c["body"] for c in tr["groq"].calls]
+    assert [b["max_tokens"] for b in bodies] == [1024, 1024, 2048]
+    assert ["response_format" in b for b in bodies] == [True, False, False]
+
+
+def reasoning_cfg(**groq):
+    cfg = settings()
+    cfg.providers["groq"].reasoning_min_tokens = 2048
+    for k, v in groq.items():
+        setattr(cfg.providers["groq"], k, v)
+    return cfg
+
+
+def test_compose_and_repair_get_at_least_the_reasoning_floor_and_other_tasks_do_not():
+    for task, want in (("compose", 2048), ("repair", 2048), ("plan", 1024), ("route", 1024)):
+        router, run, tr, _ = rig(reasoning_cfg(), groq=[ok_openai()])
+        router.call(req(task=task), run)
+        assert tr["groq"].calls[0]["body"]["max_tokens"] == want, task
+
+
+def test_a_max_tokens_chosen_by_the_caller_is_not_raised_and_a_larger_one_is_kept():
+    router, run, tr, _ = rig(reasoning_cfg(), groq=[ok_openai()])
+    router.call(req(task="compose", max_tokens=1024, max_tokens_fixed=True), run)
+    assert tr["groq"].calls[0]["body"]["max_tokens"] == 1024
+    router, run, tr, _ = rig(reasoning_cfg(), groq=[ok_openai()])
+    router.call(req(task="compose", max_tokens=3000), run)
+    assert tr["groq"].calls[0]["body"]["max_tokens"] == 3000
+
+
+def test_the_token_guard_waits_for_headroom_records_the_wait_and_never_exceeds_60_s():
+    cfg = tpm_cfg(240, max_wait=60)  # bucket capacity 120 tokens, refill 2 per second
+    router, run, tr, clock = rig(cfg, groq=[ok_openai("{}", 50, 50), ok_openai("{}", 10, 5)])
+    router.call(req(text="x" * 4, max_tokens=100), run)  # reserves about 101 of 120 tokens
+    router.call(req(text="x" * 4, max_tokens=100), run)  # needs about 101 again: waits
+    (w,) = [x for x in run.waits if x["kind"] == "bucket"]
+    assert 0 < w["seconds"] <= 60 and clock.slept == [w["seconds"]]
+    assert len(tr["groq"].calls) == 2  # a wait is not a request
+
+
+def test_a_request_that_can_never_fit_the_bucket_is_not_sent_and_not_waited_for():
+    cfg = tpm_cfg(240, max_wait=60)  # capacity 120 tokens
+    router, run, tr, clock = rig(cfg, groq=[ok_openai()], gemini=[ok_gemini()])
+    assert router.call(req(max_tokens=500), run).provider == "gemini"
+    assert tr["groq"].calls == [] and clock.slept == [] and run.waits == []

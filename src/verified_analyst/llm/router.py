@@ -75,6 +75,10 @@ class TokenBucket:
 # 400 json_validate_failed answers in a row, per provider and question, after which the provider
 # gets no more requests for that question
 JSON_STREAK_LIMIT = 2
+# An empty reply that ended on finish_reason `length` is retried once with the completion allowance
+# doubled, never above this.
+LENGTH_RETRY_CAP = 4096
+EMPTY_KINDS = frozenset(["content_empty", "content_null"])
 
 
 def estimate_tokens(req: LLMRequest) -> int:
@@ -220,13 +224,17 @@ class Router:
         wait_ms = 0.0
         reserved = estimate_tokens(req)
         json_rejects = 0
+        rl_retries = 0
+        len_retried = False
         attempt = 0
         while attempt <= retry.max_retries:
             wait = self._bucket_wait(name, reserved)
-            if wait > self.settings.bucket.max_wait_s:
+            if wait > self.settings.bucket.max_wait_s or wait == float("inf"):
                 fail("throttled", model, attempt=attempt)
                 return None
             if wait > 0:
+                run.waits.append({"provider": name, "task": req.task, "kind": "bucket",
+                                  "seconds": round(wait, 3)})  # fmt: skip
                 self.sleep(wait)
                 wait_ms += wait * 1000
             self._bucket_take(name, reserved)
@@ -253,6 +261,7 @@ class Router:
                         retry_after_s=exc.retry_after,
                         max_tokens=req.max_tokens,
                         json_mode_off=not req.json_mode and json_rejects > 0,
+                        max_tokens_doubled=len_retried,
                         prompt_tokens=exc.prompt_tokens,
                         completion_tokens=exc.completion_tokens,
                         reasoning_tokens=exc.reasoning_tokens,
@@ -291,12 +300,49 @@ class Router:
                     if n >= self.settings.breaker.consecutive_429:
                         self._open_breaker(name)
                         return None
-                else:
-                    self._consec_429[name] = 0
+                    # one retry, after the wait the provider asked for; with no Retry-After, after
+                    # the token guard says the request fits again (never a blind retry). A wait
+                    # above the cap is not shortened: the provider is given up for this call.
+                    rl = self.settings.rate_limit
+                    if rl_retries >= rl.retries:
+                        return None
+                    if exc.retry_after is not None:
+                        delay, basis = exc.retry_after, "retry_after"
+                    else:
+                        need = self._bucket_wait(name, reserved)
+                        delay = max(
+                            self.settings.retry.base_s, 0.0 if need == float("inf") else need
+                        )
+                        basis = "token_guard"
+                    if delay > rl.max_wait_s:
+                        return None
+                    run.waits.append({"provider": name, "task": req.task,
+                                      "kind": "rate_limit_retry", "basis": basis,
+                                      "seconds": round(delay, 3)})  # fmt: skip
+                    wait_ms += delay * 1000
+                    self.sleep(delay)
+                    rl_retries += 1
+                    continue
+                self._consec_429[name] = 0
+                if (
+                    exc.kind == MALFORMED
+                    and exc.malformed_kind in EMPTY_KINDS
+                    and exc.finish_reason == "length"
+                    and not len_retried
+                    and min(req.max_tokens * 2, LENGTH_RETRY_CAP) > req.max_tokens
+                ):
+                    # the model used its whole allowance (reasoning) and wrote nothing: ask once
+                    # more with a larger allowance, never with the identical request
+                    len_retried = True
+                    req = dataclasses.replace(
+                        req, max_tokens=min(req.max_tokens * 2, LENGTH_RETRY_CAP)
+                    )
+                    reserved = estimate_tokens(req)
+                    continue
                 if json_rejects > 0 and exc.kind == MALFORMED:
-                    # the one JSON-off retry came back as an unusable HTTP 200 (seen: empty
-                    # content, 0 completion tokens). Do not repeat it: 2 requests at most for a
-                    # JSON refusal. The text goes back unparseable, as for a second refusal.
+                    # the JSON-off retry came back as an unusable HTTP 200 (seen: empty content,
+                    # finish length). Do not repeat it: the text goes back unparseable, as for a
+                    # second refusal.
                     return LLMResponse(
                         text="",
                         provider=name,
@@ -304,13 +350,18 @@ class Router:
                         latency_ms=elapsed,
                         finish_reason=JSON_REJECTED,
                     )
-                if json_rejects > 0:
-                    return None  # any other failure of the JSON-off retry ends the path
+                empty_length = (
+                    exc.kind == MALFORMED
+                    and exc.malformed_kind in EMPTY_KINDS
+                    and exc.finish_reason == "length"
+                )
+                if json_rejects > 0 or empty_length:
+                    # the JSON-off or doubled-allowance retry failed, or the allowance cannot be
+                    # raised any further: an identical request would only repeat the failure
+                    return None
                 if exc.kind not in RETRYABLE or attempt == retry.max_retries:
                     return None
                 delay = self._delay(exc, attempt)
-                if delay > retry.max_retry_after_s:
-                    return None
                 wait_ms += delay * 1000
                 self.sleep(delay)
                 attempt += 1
@@ -318,6 +369,7 @@ class Router:
             self._consec_429[name] = 0
             run.json_streak[name] = 0
             rec = self._record(req, resp, "ok", attempt, wait_ms)
+            rec = dataclasses.replace(rec, max_tokens_doubled=len_retried)
             rec = dataclasses.replace(rec, json_mode_off=json_rejects > 0 and not req.json_mode)
             run.add(rec)
             if not rec.tokens_estimated:  # settle the reservation against what the provider said
@@ -327,11 +379,26 @@ class Router:
 
     # ---- helpers ----
     def _for_provider(self, name: str, req: LLMRequest) -> LLMRequest:
-        """The request as this provider will see it: its configured reasoning effort, if any,
-        becomes part of the request (and so of the cassette key)."""
-        effort = self.settings.providers[name].reasoning_effort
-        if effort and req.reasoning_effort != effort:
-            return dataclasses.replace(req, reasoning_effort=effort)
+        """The request as this provider will see it: its configured reasoning effort (only for
+        Groq gpt-oss models) and, for compose and repair on a model that reports reasoning
+        tokens, a completion allowance of at least `reasoning_min_tokens`. Both become part of
+        the request and so of the cassette key."""
+        cfg = self.settings.providers[name]
+        try:
+            model = cfg.model_for(req.task)
+        except ConfigError:
+            model = ""
+        effort = cfg.reasoning_effort
+        if effort and "gpt-oss" in model.lower() and req.reasoning_effort != effort:
+            req = dataclasses.replace(req, reasoning_effort=effort)
+        floor = cfg.reasoning_min_tokens
+        if (
+            floor
+            and req.task in ("compose", "repair")
+            and not req.max_tokens_fixed
+            and req.max_tokens < floor
+        ):
+            req = dataclasses.replace(req, max_tokens=floor)
         return req
 
     def _record(

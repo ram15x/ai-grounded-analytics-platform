@@ -214,7 +214,7 @@ def run_question(
 
     def call(req) -> LLMResponse | QuestionRun:
         if max_tokens:
-            req = dataclasses.replace(req, max_tokens=max_tokens)
+            req = dataclasses.replace(req, max_tokens=max_tokens, max_tokens_fixed=True)
         try:
             return router.call(req, run)
         except BudgetExceeded:

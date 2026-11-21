@@ -36,6 +36,7 @@ class LLMRequest:
     json_mode: bool = True
     temperature: float = 0.0
     max_tokens: int = 1024
+    max_tokens_fixed: bool = False  # set when a caller chose max_tokens (a probe option)
     prompt_id: str = ""
     prompt_hash: str = ""
     schema_name: str = ""

@@ -383,6 +383,31 @@ def test_a_json_validate_failed_400_on_the_route_path_is_retried_once(env, tmp_p
     assert "JSON-mode refusals" in out["markdown"] and "json-off" in out["markdown"]
 
 
+def test_an_empty_200_after_the_json_off_retry_is_reported_with_its_raw_body_and_not_repeated(
+    env, tmp_path
+):
+    body = b'{"error": {"code": "json_validate_failed", "failed_generation": ""}}'
+    empty = json.dumps(
+        {"choices": [{"message": {"content": "", "reasoning": "x"}, "finish_reason": "stop"}],
+         "usage": {"prompt_tokens": 90, "completion_tokens": 0}}
+    ).encode()  # fmt: skip
+    from llm_helpers import HttpResponse  # noqa: PLC0415
+
+    m = Model(statuses=[status(400, body=body), HttpResponse(200, empty)])
+    out = probe(env, m, tmp_path, route_only=True, max_requests=3)
+    rep = out["report"]
+    first = rep["router_questions"][0]
+    assert [c["outcome"] for c in first["calls"][:2]] == ["json_rejected", "malformed"]
+    assert rep["most_requests_per_task_in_one_question"]["route"] <= 3  # 2, then a normal retry
+    (mal,) = rep["malformed_replies"]
+    assert mal["kind"] == "content_empty" and mal["completion_tokens"] == 0
+    assert mal["prompt_tokens"] == 90 and mal["finish_reason"] == "stop"
+    assert "empty content, no error object" in mal["what"]
+    assert mal["raw_body"].startswith('{"choices"') and len(mal["raw_body"]) <= 300
+    assert "Unusable HTTP 200 replies (n=1)" in out["markdown"]
+    assert "raw body (first 300 chars)" in out["markdown"]
+
+
 # ---- separating route errors, invalid replies and later failures ----
 
 

@@ -146,9 +146,56 @@ def call_details(run: RunContext) -> list[dict[str, Any]]:
     return [
         {"task": r.task, "outcome": r.outcome, "finish_reason": r.finish_reason,
          "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens,
-         "max_tokens": r.max_tokens, "json_mode_off": r.json_mode_off}
+         "max_tokens": r.max_tokens, "json_mode_off": r.json_mode_off,
+         "prompt_tokens": r.prompt_tokens, "raw_body": r.raw_body,
+         "malformed_kind": r.malformed_kind}
         for r in run.records
     ]  # fmt: skip
+
+
+def _what_it_was(c: dict[str, Any]) -> str:
+    """One plain sentence on an unusable HTTP 200 reply: empty content, an error object, or not
+    JSON. Only what the provider's body and usage block show; no cause is claimed."""
+    k = c["malformed_kind"]
+    if k in ("content_empty", "content_null"):
+        word = "null" if k == "content_null" else "empty"
+        tail = " (completion_tokens 0)" if c["completion_tokens"] == 0 else ""
+        return f"HTTP 200 with {word} content, no error object{tail}"
+    if k == "error_object":
+        return "HTTP 200 whose body carries an error object"
+    if k == "body_not_json":
+        return "HTTP 200 whose body is not JSON"
+    return "HTTP 200 whose body has no usable message"
+
+
+def malformed_replies(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every HTTP 200 reply that could not be used, with the raw body (first 300 characters),
+    the usage and finish reason the provider reported, and what it was."""
+    out = []
+    for r in rows:
+        for c in r["calls"]:
+            if c["outcome"] == "malformed":
+                out.append({"id": r["id"], "task": c["task"], "kind": c["malformed_kind"],
+                            "what": _what_it_was(c), "json_mode_off": c["json_mode_off"],
+                            "prompt_tokens": c["prompt_tokens"],
+                            "completion_tokens": c["completion_tokens"],
+                            "reasoning_tokens": c["reasoning_tokens"],
+                            "finish_reason": c["finish_reason"] or None,
+                            "raw_body": c["raw_body"][:300]})  # fmt: skip
+    return out
+
+
+def calls_per_task(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """The most model requests one question made for one task (cap after a JSON refusal: 2)."""
+    worst: dict[str, int] = {}
+    for r in rows:
+        n: dict[str, int] = {}
+        for c in r["calls"]:
+            if c["outcome"] not in ("json_streak_skip", "refused_sensitivity", "budget"):
+                n[c["task"]] = n.get(c["task"], 0) + 1
+        for t, k in n.items():
+            worst[t] = max(worst.get(t, 0), k)
+    return worst
 
 
 def json_retries(run: RunContext) -> list[dict[str, Any]]:
@@ -330,6 +377,8 @@ def build_report(
         },
         "router_breakdown": build_breakdown(rows),
         "json_mode_refusals": _json_summary([*rows, *inj_rows]),
+        "malformed_replies": malformed_replies([*rows, *inj_rows]),
+        "most_requests_per_task_in_one_question": calls_per_task([*rows, *inj_rows]),
         "injection": {
             "questions": inj_rows,
             "reached_composer": {"k": len(reached), "n": len(inj_rows)},
@@ -387,7 +436,23 @@ def render_report(rep: dict[str, Any]) -> str:
         f"- refused: {jm['refused']}; the one retry with JSON mode off got HTTP 200: "
         f"{jm['retry_got_http_200']} of {jm['refused']} (n={jm['refused']}). {jm['note']}",
         f"- completion allowance per call (max_tokens): {h['caps']['max_tokens']}",
+        "- most requests one question made for one task: "
+        + json.dumps(rep["most_requests_per_task_in_one_question"], sort_keys=True)
+        + " (after a JSON refusal at most 2; a provider with 2 refusals in a row is dropped "
+        "for that question)",
     ]
+    mal = rep["malformed_replies"]
+    lines += ["", f"## Unusable HTTP 200 replies (n={len(mal)})"]
+    for m in mal:
+        lines.append(
+            f"- {m['id']} {m['task']}{' (JSON mode off)' if m['json_mode_off'] else ''}: "
+            f"{m['what']}; prompt {m['prompt_tokens']} tok, completion {m['completion_tokens']} "
+            f"tok, reasoning {m['reasoning_tokens']} tok, finish {m['finish_reason'] or '(none)'}"
+        )
+        lines.append(f"  - raw body (first 300 chars): {m['raw_body'] or '(empty)'}")
+    if not mal:
+        lines.append("- none")
+    lines += ["", "## Per-call detail"]
     for q in [*rep["router_questions"], *rep["injection"]["questions"]]:
         lines.append(
             f"  - {q['id']}: "
@@ -396,6 +461,7 @@ def render_report(rep: dict[str, Any]) -> str:
                 f"{c['completion_tokens']}tok"
                 + (f" ({c['reasoning_tokens']} reasoning)" if c["reasoning_tokens"] else "")
                 + (" json-off" if c["json_mode_off"] else "")
+                + (f" [{c['malformed_kind']}]" if c["malformed_kind"] else "")
                 for c in q["calls"]
             )
         )

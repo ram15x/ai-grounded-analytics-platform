@@ -696,6 +696,20 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--build-static", metavar="DIR", help="write DIR/index.html and exit")
     sv.set_defaults(fn=cmd_serve)
 
+    ak = sub.add_parser("ask", help="answer one question (replay of recorded replies, or live)")
+    ak.add_argument("question")
+    ak.add_argument(
+        "--replay",
+        nargs="?",
+        const="demo/recordings.jsonl",
+        metavar="FILE",
+        help="use recorded model replies (no key, no network); the database is needed",
+    )
+    ak.add_argument("--provider", help="live: provider name from config/router.yaml")
+    ak.add_argument("--model", help="live: model id")
+    ak.add_argument("--trace-dir", default="data/traces", help="a JSON trace is written here")
+    ak.set_defaults(fn=cmd_ask)
+
     rp_ = sub.add_parser("report", help="draft a report, then approve it to write the file")
     rp_sub = rp_.add_subparsers(dest="report_cmd", required=True)
     rd = rp_sub.add_parser("draft", help="collect verified answers into a pending report")
@@ -787,6 +801,51 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     rp.set_defaults(fn=cmd_route_probe)
     return p
+
+
+def cmd_ask(args: argparse.Namespace) -> int:
+    import json as _json  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from .llm import route_probe  # noqa: PLC0415
+    from .llm.answer import answer_question, make_retriever  # noqa: PLC0415
+    from .llm.providers import build_one  # noqa: PLC0415
+    from .llm.replay import ReplayProvider  # noqa: PLC0415
+    from .llm.router import Router  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+
+    layer = load_semantic_layer()
+    url = readonly_database_url()
+    base = load_router_settings()
+    if args.replay:
+        name, provider = "groq", ReplayProvider.from_file(Path(args.replay))
+        s = base
+        s.tasks = {t: [name] for t in ("route", "plan", "compose", "repair")}
+        router = Router(s, {name: provider}, sleep=lambda _x: None)
+    else:
+        if not (args.provider and args.model):
+            raise SystemExit("give --replay, or --provider and --model for a live call")
+        opts = route_probe.RouteProbeOptions(args.provider, args.model, Path(args.trace_dir))
+        s = route_probe.route_settings(base, opts)
+        for rel in (layer.source.relation, "docs.public"):
+            if s.sensitivity_of((rel,)) != "public":
+                raise SystemExit(f"refusing: {rel} is not tagged public in router.yaml")
+        router = Router(s, {args.provider: build_one(s, args.provider, env=os.environ)})
+    run = router.new_run("ask", token_cap=s.probe.token_cap)
+    res = answer_question(
+        args.question, layer=layer, readonly_url=url, router=router, run=run,
+        retrieve=route_probe.public_only(make_retriever(url, k=3)),
+        corpus_description=route_probe.CORPUS_DESCRIPTION, known_values=catalogue(layer, url),
+    )  # fmt: skip
+    rec = {"asked_at": datetime.now(UTC).isoformat(), "mode": "replay" if args.replay else "live",
+           **res.as_dict()}  # fmt: skip
+    out = Path(args.trace_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{datetime.now(UTC):%Y%m%dT%H%M%S}.json"
+    path.write_text(_json.dumps(rec, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+    print(res.render_md())
+    print(f"trace: {path}")
+    return 0 if res.outcome != "abstain" else 1
 
 
 def cmd_report_draft(args: argparse.Namespace) -> int:

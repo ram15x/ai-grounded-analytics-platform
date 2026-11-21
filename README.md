@@ -50,9 +50,9 @@ Router and injection probes (`va route probe`, Groq `openai/gpt-oss-20b`, 12 dev
 | Driver-claim verification | Design only, [ADR-0007](docs/adr/0007-driver-claim-verification.md). Not implemented. |
 | Pre-commit config and GitHub Actions CI (lint, format, tests with a Postgres service, Python 3.11 and 3.12) | Run #1 passed on GitHub (see above). |
 | Model router, provider adapters (Groq, Gemini, OpenRouter), cassettes, scripted plan/compose/verify pipeline | Implemented; tests use mocked HTTP and a fake provider. Real providers were probed (table above) with first-draft prompts. Every provider assumption, with its status, is in [docs/PHASE_1C1_ASSUMPTIONS.md](docs/PHASE_1C1_ASSUMPTIONS.md); most are still unverified. After a JSON-mode refusal the router makes at most 2 requests and drops a provider after 2 refusals in a row for one question. |
-| Documents (Phase 2a-2c): store with character spans, keyword, vector and hybrid search, local and hosted embedder and reranker clients, passage citations checked against stored text, retrieval metrics | Implemented and tested on a synthetic corpus. Two embedders were probed on dev and held-out; the shipped hybrid default stays and the fusion choice is **undecided** (ADR-0010; the 12 held-out document questions are spent). No reranker in the default pipeline. Slice 2d adds injection handling (scanner, delimited prompt block, flagged text cannot be cited); one model, 5 questions, see above ([docs/INJECTION.md](docs/INJECTION.md)). Slice 2e adds a router (data, documents, both, abstain), mixed answers with system-written passage figures and a heuristic label binder (default S2, ADR-0012). Not an accuracy claim: one author, one corpus. See [docs/PHASE_2.md](docs/PHASE_2.md) See [docs/PHASE_2.md](docs/PHASE_2.md) |
-| SQL agent loop with a real model in the product path, reranking in the default pipeline, orchestration, approvals, scheduled reports | Does not exist. A scripted plan, compose and verify pipeline has run against real providers in probes only. |
-| API, auth, web UI, deployment, observability | Does not exist. There is no UI and nothing is deployed. |
+| Documents (Phase 2a-2c): store with character spans, keyword, vector and hybrid search, local and hosted embedder and reranker clients, passage citations checked against stored text, retrieval metrics | Implemented and tested on a synthetic corpus. Two embedders were probed on dev and held-out; the shipped hybrid default stays and the fusion choice is **undecided** (ADR-0010; the 12 held-out document questions are spent). No reranker in the default pipeline. Slice 2d adds injection handling (scanner, delimited prompt block, flagged text cannot be cited); one model, 5 questions, see above ([docs/INJECTION.md](docs/INJECTION.md)). Slice 2e adds a router (data, documents, both, abstain), mixed answers with system-written passage figures and a heuristic label binder (default S2, ADR-0012). Not an accuracy claim: one author, one corpus. See [docs/PHASE_2.md](docs/PHASE_2.md) |
+| `va ask`, approved reports, local web view, stored-results gate | Implemented. `va ask "<question>" --replay` runs the real pipeline on recorded model replies (needs the local database, no key); `--provider/--model` runs it live on public data. Each run writes a JSON trace to `data/traces/`. `va report draft` then `va report approve` writes a Markdown file only after a named approval by digest; nothing is sent. `va serve` shows 17 recorded dev runs with SQL, rows, passages and verdicts. A test fails if a verified figure has no trace to its stored cell or passage. Scheduled runs, auth and a live model in a hosted product do not exist. |
+| Auth, deployment | Does not exist. Nothing is deployed; the web view is local and read-only. |
 | Evals and benchmark scores | Does not exist. The measurements above are small single-author screens with their n, not benchmarks. **No accuracy figure is claimed.** |
 
 ### About the mutation tests
@@ -95,6 +95,18 @@ pytest
 
 Database tests run only when `VA_TEST_DATABASE_URL` points at a Postgres server where the user can
 create databases and roles; otherwise they are skipped.
+
+### Try the app (no key)
+
+```
+va serve                      # http://127.0.0.1:8000, recorded runs, no database needed
+va ask "Which five countries had the highest net revenue?" --replay   # needs the local warehouse
+va report draft --title "Weekly check"
+va report approve --who "<name>" --digest <digest printed by draft>
+```
+
+The recorded model replies come from real Groq calls and are replayed, not re-run; a question with
+no recording is shown as "no recording", not as a model abstention. See [demo/README.md](demo/README.md).
 
 ### Try the verifier
 

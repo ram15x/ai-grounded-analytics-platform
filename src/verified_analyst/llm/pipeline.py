@@ -87,6 +87,9 @@ class QuestionRun:
             "route": self.route,
             "passage_labels": self.passage_labels,
             "evidence": self.evidence,
+            # per model reply: step, json_ok, schema_ok and, for a failure, the field-level errors
+            # and the start of the reply (cut by REPLY_CHARS); lets a report say why a plan failed
+            "events": self.events,
             "attempts": [
                 {
                     "kind": a.kind,

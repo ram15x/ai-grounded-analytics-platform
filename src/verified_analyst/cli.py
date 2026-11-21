@@ -741,6 +741,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="required with --split locked; the run is recorded in a one-shot ledger",
     )
+    e2.add_argument("--only", metavar="IDS", help="dev only: comma-separated question ids to run")
     e2.add_argument("--out-dir", default="data/e2e_runs")
     e2.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
     e2.add_argument("--provider")
@@ -950,6 +951,13 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
         raise SystemExit(f"raw file not found: {raw}")
     qfile = e2e_locked.QUESTIONS if locked else root / "eval" / "questions" / "dev.yaml"
     qs = yaml.safe_load(qfile.read_text(encoding="utf-8"))["questions"]
+    if args.only:
+        if locked:
+            raise SystemExit("--only is for the dev split; the locked split always runs whole")
+        want = {i.strip() for i in args.only.split(",")}
+        qs = [q for q in qs if q["id"] in want]
+        if not qs:
+            raise SystemExit(f"no dev question matches --only {args.only}")
     df = (t2 if locked else t1).load_raw(raw)
     setup = _ask_setup(args)
     rows = []

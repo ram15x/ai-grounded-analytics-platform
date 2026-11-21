@@ -38,6 +38,44 @@ def score(run: dict[str, Any], gold: str, decimals: int) -> str:
     return "verified_wrong" if verdicts or shown else "withheld"
 
 
+def _numbers(cells: list[str]) -> list[Decimal]:
+    out = []
+    for c in cells:
+        try:
+            out.append(Decimal(c))
+        except Exception:  # noqa: BLE001 - labels such as '2011-11' or 'Germany' are not figures
+            continue
+    return out
+
+
+def score_table(run: dict[str, Any], rows: list[list[str]], decimals: int) -> str:
+    """Gold is a table. Correct only if EVERY numeric gold cell appears among the shown figures
+    (extra shown figures are allowed). A verified answer that misses any is verified_wrong."""
+    if run["outcome"] == "not_recorded" or run.get("reason") == "provider_error":
+        return "no_reply"
+    if run["outcome"] != "verified":
+        return "withheld"
+    shown = [
+        _round(Decimal(p["true_value"]), decimals)
+        for p in ((run.get("verification") or {}).get("placeholders") or [])
+        if p.get("true_value") is not None
+    ]
+    need = [_round(x, decimals) for r in rows for x in _numbers(r)]
+    pool = list(shown)
+    for x in need:
+        if x in pool:
+            pool.remove(x)
+        else:
+            return "verified_wrong"
+    return "correct" if need else "withheld"
+
+
+def score_entry(run: dict[str, Any], entry: dict[str, Any], decimals: int) -> str:
+    if entry["kind"] == "scalar":
+        return score(run, entry["value"], decimals)
+    return score_table(run, entry["rows"], decimals)
+
+
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     if n == 0:
         return (0.0, 1.0)

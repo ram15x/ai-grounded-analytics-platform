@@ -730,6 +730,17 @@ def build_parser() -> argparse.ArgumentParser:
     e2.add_argument(
         "--raw", default="data/Online Retail.xlsx", help="the raw UCI file (gold source)"
     )
+    e2.add_argument(
+        "--split",
+        choices=["dev", "locked"],
+        default="dev",
+        help="locked = the 15 held-out questions: one run per model, ever (ADR-0014)",
+    )
+    e2.add_argument(
+        "--confirm-locked",
+        action="store_true",
+        help="required with --split locked; the run is recorded in a one-shot ledger",
+    )
     e2.add_argument("--out-dir", default="data/e2e_runs")
     e2.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
     e2.add_argument("--provider")
@@ -904,7 +915,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_eval_e2e(args: argparse.Namespace) -> int:
-    """Dev questions only. Gold values come from eval/gold/t1.py over the raw file."""
+    """Dev: eval/questions/dev.yaml, gold from t1. Locked: heldout.yaml, gold from t2, one shot."""
     import json as _json  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
@@ -914,38 +925,62 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
     from . import e2e  # noqa: PLC0415
 
     root = Path(__file__).resolve().parents[2]
+    locked = args.split == "locked"
+    ledger = Path("data") / "e2e_locked_ledger.jsonl"
+    who = "replay" if args.replay else f"{args.provider}/{args.model}"
+    if locked:
+        if not args.confirm_locked:
+            raise SystemExit(
+                "--split locked needs --confirm-locked: the held-out set is run once per model"
+            )
+        if args.replay:
+            raise SystemExit("the locked split is not run on replay")
+        if ledger.exists() and any(
+            _json.loads(line).get("model") == who
+            for line in ledger.read_text().splitlines()
+            if line
+        ):
+            raise SystemExit(f"refusing: the locked split was already run for {who} (see {ledger})")
     _sys.path.insert(0, str(root / "eval" / "gold"))
     import t1  # noqa: PLC0415
+    import t2  # noqa: PLC0415
 
     raw = Path(args.raw)
     if not raw.exists():
         raise SystemExit(f"raw file not found: {raw}")
-    qs = yaml.safe_load((root / "eval" / "questions" / "dev.yaml").read_text(encoding="utf-8"))
-    qs = qs["questions"]
-    df = t1.load_raw(raw)
+    qfile = root / "eval" / "questions" / ("heldout.yaml" if locked else "dev.yaml")
+    qs = yaml.safe_load(qfile.read_text(encoding="utf-8"))["questions"]
+    df = (t2 if locked else t1).load_raw(raw)
     setup = _ask_setup(args)
     rows = []
     for q in qs:
-        gold = str(t1.GOLD_FUNCTIONS[q["gold_fn"]](df))
+        if locked:
+            res = t2.GOLD_FUNCTIONS[q["gold_fn"]](df, **q.get("gold_args", {}))
+            entry = (
+                {"kind": "scalar", "value": str(res["value"])} if res["kind"] == "scalar" else res
+            )
+        else:
+            entry = {"kind": "scalar", "value": str(t1.GOLD_FUNCTIONS[q["gold_fn"]](df))}
         d = _ask_one(q["question"], q["id"], setup).as_dict()
         d["id"] = q["id"]
         if d["reason"] == "provider_error" and args.replay:
             d["outcome"], d["reason"] = "not_recorded", "no_recording"
-        sc = e2e.score(d, gold, q["decimals"])
-        rows.append({"id": q["id"], "question": q["question"], "gold": gold, "score": sc,
+        sc = e2e.score_entry(d, entry, q["decimals"])
+        rows.append({"id": q["id"], "question": q["question"], "score": sc,
+                     "gold": entry if not locked else "(withheld from the report until review)",
                      "expressible": q["expressible_as_metric_query"], "run": d})  # fmt: skip
     summary = e2e.summarise(rows)
-    out = (
-        Path(args.out_dir)
-        / f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}_{'replay' if args.replay else args.provider}"
-    )
+    stamp = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+    out = Path(args.out_dir) / f"{stamp}_{args.split}_{'replay' if args.replay else args.provider}"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "results.json").write_text(
-        _json.dumps({"summary": summary, "rows": rows}, indent=1, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
-    md = e2e.render_md(summary, rows, "End-to-end dev run")
+    (out / "results.json").write_text(_json.dumps({"split": args.split, "summary": summary,
+        "rows": rows}, indent=1, ensure_ascii=False, default=str), encoding="utf-8")  # fmt: skip
+    md = e2e.render_md(summary, rows, f"End-to-end {args.split} run")
     (out / "report.md").write_text(md, encoding="utf-8")
+    if locked:  # written only after the whole run completed
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps({"model": who, "at": stamp, "summary": summary}) + "\n")
     print(md)
     print(f"files written to: {out}")
     return 1 if summary["verified_wrong"] else 0

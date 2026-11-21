@@ -36,3 +36,13 @@ def test_summary_and_interval():
     assert (s["n"], s["answered"], s["correct"]) == (4, 3, 2)
     lo, hi = wilson(2, 3)
     assert 0 < lo < 0.67 < hi < 1
+
+
+def test_table_gold_needs_every_numeric_cell_and_ignores_labels():
+    from verified_analyst.e2e import score_table
+
+    gold = [["Germany", "100.50"], ["France", "90.00"]]
+    ok = run(values=("100.50", "90.00", "7"))  # an extra figure is allowed
+    assert score_table(ok, gold, 2) == "correct"
+    assert score_table(run(values=("100.50",)), gold, 2) == "verified_wrong"
+    assert score_table(run("abstain", reason="ambiguous"), gold, 2) == "withheld"

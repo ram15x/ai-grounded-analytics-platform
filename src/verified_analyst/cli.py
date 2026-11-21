@@ -705,6 +705,11 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--model")
     sv.add_argument("--trace-dir", default="data/traces")
     sv.add_argument(
+        "--workspace",
+        action="store_true",
+        help="local only: upload your own data, fill in the boxes, load it and ask about it",
+    )
+    sv.add_argument(
         "--byok",
         action="store_true",
         help="public tryout: visitors bring their own API key (used once, never stored)",
@@ -976,6 +981,47 @@ def _byok_ask(
     return json.loads(redact(json.dumps(d, default=str), env))
 
 
+def _readonly_role() -> str | None:
+    from psycopg.conninfo import conninfo_to_dict  # noqa: PLC0415
+
+    return conninfo_to_dict(readonly_database_url()).get("user")
+
+
+def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, key: str) -> dict:
+    """A question about an uploaded dataset with the visitor's key (same handling as _byok_ask).
+    Internal datasets are refused for hosted providers by the router; nothing is stored."""
+    from .llm import route_probe  # noqa: PLC0415
+    from .llm.answer import Retrieved  # noqa: PLC0415
+    from .llm.live import redact  # noqa: PLC0415
+    from .llm.providers import build_one  # noqa: PLC0415
+    from .llm.router import Router  # noqa: PLC0415
+    from .llm.settings import apply_dataset_visibility, load_router_settings  # noqa: PLC0415
+
+    lp = ws.layer_path(dataset)
+    base = apply_dataset_visibility(load_router_settings(), lp)
+    env = {base.providers[provider].env_key: key} if key else {}
+    layer = load_semantic_layer(lp)
+    url = readonly_database_url()
+    try:
+        s = route_probe.route_settings(base, route_probe.RouteProbeOptions(
+            provider, model or "", Path(os.devnull)))  # fmt: skip
+        if s.sensitivity_of((layer.source.relation,)) != "public":
+            return {"outcome": "abstain", "reason": "sensitivity", "rendered": "",
+                    "error": "This dataset is marked internal, so it is not sent to a hosted "
+                    "model. Mark it public in its manifest, or use a local model."}  # fmt: skip
+        setup = (
+            layer, url, s,
+            lambda: Router(s, {provider: build_one(s, provider, env=env)}),
+            lambda _q: Retrieved([], "public"), catalogue(layer, url),
+        )  # fmt: skip
+        d = _ask_one(question, "ws", setup).as_dict()
+    except (ConfigError, LLMError) as exc:
+        return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
+                "error": redact(str(exc), env)}  # fmt: skip
+    d["id"], d["dataset"] = "WS", dataset
+    return json.loads(redact(json.dumps(d, default=str), env))
+
+
 def _byok_models(provider: str, key: str) -> dict:
     from .llm.live import list_provider_models, redact  # noqa: PLC0415
     from .llm.settings import load_router_settings  # noqa: PLC0415
@@ -1192,7 +1238,6 @@ def cmd_dataset_template(args: argparse.Namespace) -> int:
 
 
 def cmd_dataset_load(args: argparse.Namespace) -> int:
-    import yaml  # noqa: PLC0415
 
     from .datasets import load as dl  # noqa: PLC0415
     from .datasets import manifest as dm  # noqa: PLC0415
@@ -1210,16 +1255,10 @@ def cmd_dataset_load(args: argparse.Namespace) -> int:
     except (dm.ManifestError, dp.ProfileError, dl.LoadError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    from .datasets.workspace import write_outputs  # noqa: PLC0415
+
     out = Path(args.out_dir) / man.name
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "layer.yaml").write_text(
-        yaml.safe_dump(json.loads(layer.model_dump_json()), sort_keys=False), encoding="utf-8"
-    )
-    (out / "visibility.json").write_text(
-        json.dumps({"relation": info["relation"], "visibility": man.visibility}), "utf-8"
-    )
-    (out / "profile.json").write_text(json.dumps(prof.as_dict(), indent=1, default=str), "utf-8")
-    (out / "manifest.yaml").write_text(Path(args.manifest).read_text("utf-8"), encoding="utf-8")
+    write_outputs(out, man, prof, layer, info)
     unchecked = [k for k, s in man.metrics.items() if s.status == "approved" and not s.known]
     print(f"loaded {info['rows']} rows into {info['relation']}; not loaded: {info['not_loaded']}")
     print(f"approved metrics: {sorted(layer.metrics)}")
@@ -1240,6 +1279,23 @@ def cmd_serve(args: argparse.Namespace) -> int:
         out.mkdir(parents=True, exist_ok=True)
         (out / "index.html").write_text(static_page(load_payload()), encoding="utf-8")
         print(f"wrote {out / 'index.html'}")
+        return 0
+    if getattr(args, "workspace", False):
+        from .datasets.workspace import Workspace  # noqa: PLC0415
+
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            print("error: --workspace accepts uploads, so it only runs on this computer "
+                  "(host 127.0.0.1)", file=sys.stderr)  # fmt: skip
+            return 2
+        ws = Workspace(Path("data/workspace"), admin_database_url(), _readonly_role())
+        serve(
+            args.port,
+            args.host,
+            workspace=ws,
+            ws_ask_fn=lambda d, q, p, m, k: _ws_ask(ws, d, q, p, m, k),
+            models_fn=_byok_models,
+            tryout_cfg=None,
+        )
         return 0
     if getattr(args, "byok", False):
         from .tryout import load_config as load_tryout  # noqa: PLC0415

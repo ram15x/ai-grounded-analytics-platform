@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Verified Analyst</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -122,7 +123,7 @@ h2{font:700 22px var(--display);margin:40px 0 4px}.lede{color:var(--mute);margin
 <section class="hero">
   <div class="top">
     <div class="logo"><span class="mark" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg></span>Verified Analyst</div>
-    <div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-ev" aria-selected="false">Trust</button></div>
+    <div class="tabs" role="tablist"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-data" aria-selected="false" hidden>Your data</button><button role="tab" id="t-ev" aria-selected="false">Trust</button></div>
     <span class="mode" id="mode" title="Model replies are recorded; verification is recomputed">Replay mode</span>
   </div>
   <h1 class="h1">Every number, <em>checked</em> before you see it.</h1>
@@ -300,7 +301,119 @@ async function tryInit(){
   try{ T.cfg=await (await fetch('/api/tryout')).json(); }catch(e){ return; }
   $('sugg').hidden=true; $('form').hidden=true; $('try').hidden=false; tryRender();
 }
-function setTab(t){ S.tab=t; ['ask','rep','ev'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t)); ({ask:askView,rep:reportView,ev:trustView})[t](); }
+
+const W = {stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false};
+const AGG = ['sum','count','count_distinct','avg','min','max'];
+async function wsPost(path, body, headers){
+  const r = await fetch(path,{method:'POST',headers:headers||{'Content-Type':'application/json'},body:body});
+  return {ok:r.ok, d:await r.json()};
+}
+async function wsLoadList(){ try{ W.datasets = await (await fetch('/api/ws/datasets')).json(); }catch(e){ W.datasets=[]; } }
+function manifestFromForm(){
+  const cols={};
+  Object.entries(W.cols).forEach(([n,c])=>{ const o={role:c.role}; if(c.label) o.label=c.label; if(c.role==='dimension'&&c.enumerable) o.enumerable=true;
+    if(c.role==='date'&&c.date_order) o.date_order=c.date_order; if(c.sensitivity==='personal') o.sensitivity='personal'; cols[n]=o; });
+  const metrics={};
+  W.metrics.forEach(m=>{ if(!m.name) return; const o={status:m.approve?'approved':'draft', description:m.description||m.name, aggregate:m.aggregate,
+    unit:m.unit==='currency'?'currency:'+(W.meta.currency||'XXX'):m.unit, decimals:+m.decimals||0};
+    if(m.aggregate!=='count') o.column=m.column;
+    if(m.filterCol&&m.filterVal!=='') o.where=[{column:m.filterCol,op:'eq',value:m.filterVal}];
+    if(m.known!=='') o.known=[{value:String(m.known)}];
+    metrics[m.name]=o; });
+  return {name:W.meta.name, description:W.meta.description, grain:W.meta.grain, currency:W.meta.currency, visibility:W.meta.visibility, columns:cols, metrics, exclusions:[], glossary:{}, examples:[]};
+}
+function dataView(){
+  let h='<h2 style="margin-top:0">Your data</h2>';
+  if(!W.stage){
+    h+=`<p class="lede" style="max-width:70ch">Upload a CSV, TSV or Excel file (up to 25 MB). It is read on this computer only. You will see what the file looks like, say what it means, and define each number in a closed set of options. The system will refuse any definition that does not reproduce a figure you give it.</p>
+    <div class="card" style="padding:22px"><input type="file" id="file" accept=".csv,.tsv,.xlsx"> <span class="note" id="upmsg">${esc(W.msg)}</span></div>`;
+    h+=`<h2>Loaded datasets</h2>`+(W.datasets.length?W.datasets.map(d=>`<div class="card rsec"><h3>${esc(d.name)} <span class="chip ${d.visibility==='public'?'':'w'}">${esc(d.visibility)}</span></h3><p style="margin:0 0 6px">${esc(d.description)}</p><span class="note">Approved metrics: ${esc(d.metrics.join(', ')||'none')}</span><br><button class="btn" data-ask="${esc(d.name)}">Ask about this data</button></div>`).join(''):'<p class="note">None yet.</p>');
+    if(W.ds) h+=askPanel();
+  } else {
+    const p=W.stage.profile;
+    h+=`<p class="lede">${esc(p.source_file)}: ${p.rows.toLocaleString()} rows, ${p.columns.length} columns, ${p.duplicate_rows} exact duplicate rows.${(p.issues||[]).map(i=>' '+esc(i)).join('')}</p>`;
+    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 8px;font:600 17px var(--display)">1. What is this data?</h3>
+      <label class="note">Name (lower-case letters, digits, _)<br><input id="m-name" value="${esc(W.meta.name)}" style="width:260px"></label><br>
+      <label class="note">What is it, and whose?<br><input id="m-desc" value="${esc(W.meta.description)}" style="width:100%"></label><br>
+      <label class="note">What does one row stand for?<br><input id="m-grain" value="${esc(W.meta.grain)}" style="width:100%"></label><br>
+      <label class="note">Currency code (blank if none) <input id="m-cur" value="${esc(W.meta.currency)}" size="5"></label>
+      <label class="note" style="margin-left:18px">Who may see this data
+        <select id="m-vis"><option value="internal" ${W.meta.visibility==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.meta.visibility==='public'?'selected':''}>Public: query results may go to the model provider whose key you use</option></select></label></div>`;
+    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 8px;font:600 17px var(--display)">2. Columns (the role is a guess: you decide)</h3><div class="tw"><table class="ledger"><tr><th>Column</th><th>Type</th><th>Empty</th><th>Distinct</th><th>Examples</th><th>Role</th><th>Label</th></tr>`+
+      p.columns.map(c=>{ const w=W.cols[c.name]; const flags=[...(c.hints||[]),...(c.issues||[])].map(esc).join('; ');
+        return `<tr><td><b>${esc(c.name)}</b><br><span class="note">${flags}</span></td><td>${esc(c.type)}</td><td>${(c.null_rate*100).toFixed(1)}%</td><td>${c.distinct}</td><td class="note">${(c.samples||[]).slice(0,3).map(esc).join(', ')}</td>
+        <td><select data-role="${esc(c.name)}">${['date','dimension','identifier','measure','ignore'].map(r=>`<option ${w.role===r?'selected':''}>${r}</option>`).join('')}</select>${w.role==='dimension'?`<br><label class="note"><input type="checkbox" data-enum="${esc(c.name)}" ${w.enumerable?'checked':''}> small closed set</label>`:''}${w.role==='date'&&(c.issues||[]).some(i=>/day|month|order|ambig/i.test(i))?`<br><select data-dord="${esc(c.name)}"><option value="">order?</option><option value="dmy" ${w.date_order==='dmy'?'selected':''}>day first</option><option value="mdy" ${w.date_order==='mdy'?'selected':''}>month first</option></select>`:''}${w.sensitivity==='personal'?'<br><span class="chip w">personal: not loaded</span>':''}</td>
+        <td><input data-label="${esc(c.name)}" value="${esc(w.label||'')}" size="16"></td></tr>`; }).join('')+`</table></div></div>`;
+    const meas=Object.entries(W.cols).filter(([n,c])=>c.role==='measure'||c.role==='dimension'&&0).map(([n])=>n), allc=Object.entries(W.cols).filter(([n,c])=>c.role!=='ignore').map(([n])=>n);
+    h+=`<div class="card" style="padding:18px;margin-bottom:14px"><h3 style="margin:0 0 4px;font:600 17px var(--display)">3. Numbers you want answered</h3><p class="note" style="margin:0 0 8px">Each is one of: count, sum, average, minimum, maximum or distinct count, with at most one filter. Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
+      W.metrics.map((m,i)=>`<div class="rsec card" style="padding:12px"><div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
+        <select data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option ${m.aggregate===a?'selected':''}>${a}</option>`).join('')}</select>
+        ${m.aggregate==='count'?'<span class="note">rows</span>':`<select data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
+        <span class="note">where</span><select data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">
+        <select data-m="${i}" data-f="unit"><option value="count" ${m.unit==='count'?'selected':''}>a count</option><option value="currency" ${m.unit==='currency'?'selected':''}>money</option><option value="ratio" ${m.unit==='ratio'?'selected':''}>a plain number</option></select>
+        <input data-m="${i}" data-f="decimals" type="number" min="0" max="8" value="${esc(m.decimals)}" style="width:60px" title="decimals">
+      </div><div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px"><input data-m="${i}" data-f="description" placeholder="what it means" value="${esc(m.description)}" style="flex:1;min-width:200px">
+        <input data-m="${i}" data-f="known" placeholder="a figure you know" value="${esc(m.known)}" size="16"><label class="note"><input type="checkbox" data-m="${i}" data-f="approve" ${m.approve?'checked':''}> approve</label><button class="btn" style="margin:0" data-del="${i}">remove</button></div></div>`).join('')+
+      `<button class="btn" id="addm">Add a number</button></div>`;
+    h+=`<div class="row" style="display:flex;gap:10px;align-items:center"><button class="btn" id="chk">Check</button><button class="btn" id="load" style="background:var(--ink);color:var(--paper)">Load and reconcile</button><button class="btn" id="cancel">Start over</button> <span class="note" id="wmsg">${esc(W.msg)}</span></div>`;
+    if(W.result) h+=`<div class="card rsec" style="margin-top:12px">${W.result}</div>`;
+  }
+  $('app').innerHTML=h; wireData();
+}
+function askPanel(){
+  const P=(S.cfgProviders||{groq:{label:'Groq'},openrouter:{label:'OpenRouter'},gemini:{label:'Google Gemini'}});
+  const d=W.datasets.find(x=>x.name===W.ds);
+  return `<h2>Ask: ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede" style="color:var(--warn)">This data is internal, so it will not be sent to a hosted model. Asking will be refused until you mark it public (Start over and reload with Public) or a local model is available.</p>':''}
+   <div class="card" style="padding:18px"><div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><select id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
+   <input id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}" style="flex:1;min-width:220px"><input id="amodel" placeholder="Model id" value="${esc(W.model)}"></div>
+   <div class="row" style="display:flex;gap:8px;margin-top:10px"><input id="aq" style="flex:1" maxlength="300" placeholder="${esc((d&&d.examples[0])||'Ask a question about this data')}"><button class="btn" style="margin:0" id="ago">Ask</button></div><span class="note" id="amsg"></span></div>`;
+}
+function wireData(){
+  if($('file')) $('file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('upmsg').textContent='Reading…';
+    const r=await wsPost('/api/ws/upload',f,{'X-Filename':f.name});
+    if(!r.ok){ $('upmsg').textContent=r.d.error||'Upload failed.'; return; }
+    W.stage=r.d; const sk=r.d.skeleton; W.cols={}; Object.entries(sk.columns).forEach(([n,c])=>W.cols[n]={...c});
+    W.meta={name:sk.name,description:'',grain:'',currency:'',visibility:'internal'}; W.metrics=[]; W.result=null; W.msg=''; dataView(); };
+  const bind=(id,fn)=>{ if($(id)) $(id).oninput=fn; };
+  bind('m-name',e=>W.meta.name=e.target.value); bind('m-desc',e=>W.meta.description=e.target.value); bind('m-grain',e=>W.meta.grain=e.target.value); bind('m-cur',e=>W.meta.currency=e.target.value);
+  if($('m-vis')) $('m-vis').onchange=e=>W.meta.visibility=e.target.value;
+  $('app').querySelectorAll('[data-role]').forEach(n=>n.onchange=e=>{ W.cols[n.dataset.role].role=e.target.value; dataView(); });
+  $('app').querySelectorAll('[data-enum]').forEach(n=>n.onchange=e=>W.cols[n.dataset.enum].enumerable=e.target.checked);
+  $('app').querySelectorAll('[data-dord]').forEach(n=>n.onchange=e=>W.cols[n.dataset.dord].date_order=e.target.value||undefined);
+  $('app').querySelectorAll('[data-label]').forEach(n=>n.oninput=e=>W.cols[n.dataset.label].label=e.target.value);
+  $('app').querySelectorAll('[data-m]').forEach(n=>{ const m=W.metrics[+n.dataset.m], f=n.dataset.f;
+    n.oninput=n.onchange=e=>{ m[f]=n.type==='checkbox'?n.checked:n.value; if(f==='aggregate') dataView(); }; });
+  $('app').querySelectorAll('[data-del]').forEach(n=>n.onclick=()=>{ W.metrics.splice(+n.dataset.del,1); dataView(); });
+  if($('addm')) $('addm').onclick=()=>{ W.metrics.push({name:'',aggregate:'count',column:'',filterCol:'',filterVal:'',unit:'count',decimals:0,description:'',known:'',approve:false}); dataView(); };
+  if($('cancel')) $('cancel').onclick=()=>{ W.stage=null; W.result=null; W.msg=''; wsLoadList().then(dataView); };
+  if($('chk')) $('chk').onclick=()=>wsRun('/api/ws/check');
+  if($('load')) $('load').onclick=()=>wsRun('/api/ws/load');
+  $('app').querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>{ W.ds=n.dataset.ask; dataView(); });
+  if($('aprov')){ $('aprov').onchange=e=>W.prov=e.target.value; $('akey').oninput=e=>W.key=e.target.value; $('amodel').oninput=e=>W.model=e.target.value; $('ago').onclick=wsAsk; $('aq').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wsAsk();}}; }
+}
+async function wsRun(path){
+  W.metrics.forEach(m=>{ if(m.aggregate!=='count'&&!m.column){ const first=Object.entries(W.cols).find(([n,c])=>c.role==='measure'); m.column=first?first[0]:''; } });
+  W.msg='Working…'; $('wmsg').textContent=W.msg;
+  const body=JSON.stringify({token:W.stage.token, manifest:manifestFromForm(), overwrite:W.overwrite||false});
+  const r=await wsPost(path,body);
+  if(!r.ok){ W.msg=''; W.result=`<b>Not done.</b> ${esc(r.d.error||'failed')}`; if(/already exists/.test(r.d.error||'')) W.result+=` <button class="btn" id="over">Replace the existing one</button>`; dataView(); if($('over')) $('over').onclick=()=>{W.overwrite=true;wsRun('/api/ws/load');}; return; }
+  W.msg='';
+  if(path.endsWith('check')){ const d=r.d; W.result = d.ok ? `<b>Looks consistent.</b> Approved numbers: ${esc(d.approved.join(', ')||'none')}.${d.without_known_figure.length?` <span class="chip w">no figure to check</span> ${esc(d.without_known_figure.join(', '))}`:''}` : `<b>Fix these first:</b><ul>${d.problems.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`; dataView(); }
+  else { const d=r.d; W.overwrite=false; W.result=`<b>Loaded ${d.rows.toLocaleString()} rows as ${esc(d.name)}.</b> Not loaded: ${esc(d.not_loaded.join(', ')||'nothing')}.<table class="ledger" style="margin-top:8px"><tr><th>Number</th><th>You said</th><th>The data gives</th><th></th></tr>${d.reconciliation.map(x=>`<tr><td>${esc(x.metric)}</td><td>${esc(x.expected||'')}</td><td>${esc(x.got||'')}</td><td>${x.ok===true?'<span class="chip">matches</span>':x.ok===false?'<span class="chip w">differs</span>':'<span class="chip n">not checked</span>'}</td></tr>`).join('')}</table>`;
+    await wsLoadList(); W.ds=d.name; W.stage=null; dataView(); $('app').insertAdjacentHTML('afterbegin',`<div class="card rsec">${W.result}</div>`); W.result=null; }
+}
+async function wsAsk(){
+  if(W.busy) return; const q=$('aq').value.trim(); if(!q) return; if(!W.key){ $('amsg').textContent='Paste your own API key first.'; return; }
+  if(!W.model && W.prov!=='groq'){ $('amsg').textContent='Give a model id for this provider.'; return; }
+  W.busy=true; $('amsg').textContent='Running the pipeline…';
+  const r=await wsPost('/api/ws/ask',JSON.stringify({dataset:W.ds,question:q,provider:W.prov,model:W.model}),{'Content-Type':'application/json','X-Provider-Key':W.key});
+  W.busy=false;
+  if(!r.ok){ $('amsg').textContent=r.d.error||'Failed.'; return; }
+  if(r.d.reason==='provider_error'||r.d.reason==='sensitivity'){ $('amsg').textContent=r.d.error||'The provider did not answer.'; return; }
+  S.items.unshift(r.d); choose(0); refreshStats();
+}
+function setTab(t){ S.tab=t; ['ask','rep','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t)); ({ask:askView,rep:reportView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
   let i=S.items.findIndex(x=>x.question.toLowerCase()===t); if(i>=0) return i;
@@ -325,12 +438,12 @@ function init(data){
     try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text})}); const d=await r.json();
       if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; } else { S.items.unshift(d); choose(0); refreshStats(); } }
     catch(err){ $('hint').textContent='Could not reach the server.'; } S.busy=false; };
-  $('t-ask').onclick=()=>setTab('ask'); $('t-rep').onclick=()=>setTab('rep'); $('t-ev').onclick=()=>setTab('ev');
+  $('t-ask').onclick=()=>setTab('ask'); $('t-rep').onclick=()=>setTab('rep'); $('t-ev').onclick=()=>setTab('ev'); $('t-data').onclick=()=>setTab('data');
   $('foot')&&0; choose(0); 
   const f=document.createElement('p'); f.className='note'; f.style.cssText='max-width:1240px;margin:0 auto;padding:0 28px 40px'; f.textContent=data.note; document.body.appendChild(f);
 }
 if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
-  S.can=c.can_ask; S.mode=c.mode; if(c.mode==='byok') tryInit(); $('mode').textContent = c.mode==='byok'?'Tryout · your key':c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
+  S.can=c.can_ask; S.mode=c.mode; if(c.mode==='byok') tryInit(); if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; $('sugg').hidden=true; $('stats').hidden=true; document.querySelector('.sub').textContent='Upload your own table, say what each column and number means, and the system checks your definitions against figures you know. Answers are then verified against your data, or withheld.'; setTab('data'); } $('mode').textContent = c.mode==='workspace'?'Your data · local':c.mode==='byok'?'Tryout · your key':c.mode==='live'?'Live mode':c.mode==='replay'?'Replay mode':'Recorded runs';
   if(c.mode==='live'){ $('mode').style.color='#4FD18B'; $('mode').style.borderColor='#2d6b4a'; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});
 </script>

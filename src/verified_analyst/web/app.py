@@ -48,6 +48,8 @@ class _Handler(BaseHTTPRequestHandler):
     allowance = None  # tryout.Allowance
     byok_fn = None  # callable(question, provider, model, key) -> dict
     models_fn = None  # callable(provider, key) -> dict
+    workspace = None  # datasets.workspace.Workspace, local "Your data" mode only
+    ws_ask_fn = None  # callable(dataset, question, provider, model, key) -> dict
 
     def _visitor(self) -> tuple[str, bool]:
         """The visitor id from the cookie, or a new one. A random id with no meaning of its own."""
@@ -76,6 +78,7 @@ class _Handler(BaseHTTPRequestHandler):
                     {
                         "mode": self.mode,
                         "can_ask": self.ask_fn is not None or self.tryout is not None,
+                        "workspace": self.workspace is not None,
                     }
                 ).encode(),
                 "application/json",
@@ -85,6 +88,9 @@ class _Handler(BaseHTTPRequestHandler):
             body = {**self.tryout, "remaining": self.allowance.remaining(vid)}
             cookie = f"va_visitor={vid}; Path=/; HttpOnly; SameSite=Strict" if new else None
             self._send(200, json.dumps(body).encode(), "application/json", cookie)
+        elif self.path == "/api/ws/datasets" and self.workspace is not None:
+            body = json.dumps(self.workspace.datasets()).encode()
+            self._send(200, body, "application/json")
         elif self.path == "/api/results":
             body = json.dumps(self.payload, ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json")
@@ -145,6 +151,21 @@ class _Handler(BaseHTTPRequestHandler):
             cookie,
         )
 
+    def _models_any(self) -> None:
+        try:
+            provider = str(self._json_body(1024).get("provider", ""))
+        except (ValueError, TypeError):
+            return self._send(400, b'{"error":"bad request"}', "application/json")
+        key = self._key()
+        if not provider or not key:
+            return self._send(400, b'{"error":"provider and key needed"}', "application/json")
+        try:
+            out = self.models_fn(provider, key)
+        except Exception as exc:  # noqa: BLE001
+            msg = {"error": type(exc).__name__}
+            return self._send(500, json.dumps(msg).encode(), "application/json")
+        self._send(200, json.dumps(out).encode(), "application/json")
+
     def _models(self) -> None:
         try:
             n = int(self.headers.get("Content-Length", "0"))
@@ -162,7 +183,63 @@ class _Handler(BaseHTTPRequestHandler):
             )
         self._send(200, json.dumps(out).encode(), "application/json")
 
+    def _json_body(self, limit: int = 2_000_000) -> dict:
+        n = int(self.headers.get("Content-Length", "0"))
+        if n > limit:
+            raise ValueError("too large")
+        body = json.loads(self.rfile.read(n) or b"{}")
+        if not isinstance(body, dict):
+            raise ValueError("not an object")
+        return body
+
+    def _ws_post(self) -> None:
+        from ..datasets.workspace import MAX_UPLOAD, WorkspaceError  # noqa: PLC0415
+
+        ws = self.workspace
+        try:
+            if self.path == "/api/ws/upload":
+                n = int(self.headers.get("Content-Length", "0"))
+                if n > MAX_UPLOAD:
+                    return self._send(413, b'{"error":"file too large"}', "application/json")
+                name = (self.headers.get("X-Filename") or "").strip()[:200]
+                out = ws.stage(name, self.rfile.read(n))
+            elif self.path == "/api/ws/check":
+                b = self._json_body()
+                out = ws.check(str(b.get("token", "")), b.get("manifest") or {})
+            elif self.path == "/api/ws/load":
+                b = self._json_body()
+                out = ws.load(
+                    str(b.get("token", "")), b.get("manifest") or {}, bool(b.get("overwrite"))
+                )
+            elif self.path == "/api/ws/ask":
+                b = self._json_body(8192)
+                q = str(b.get("question", "")).strip()
+                if not q or len(q) > MAX_QUESTION_CHARS:
+                    raise WorkspaceError(f"question must be 1 to {MAX_QUESTION_CHARS} characters")
+                ws.layer_path(str(b.get("dataset", "")))
+                with self.lock:
+                    out = self.ws_ask_fn(
+                        str(b["dataset"]), q, str(b.get("provider", "")),
+                        str(b.get("model", "") or "").strip()[:120] or None, self._key(),
+                    )  # fmt: skip
+            else:
+                return self._send(404, b'{"error":"not found"}', "application/json")
+        except (WorkspaceError, ValueError) as exc:
+            return self._send(
+                400, json.dumps({"error": str(exc)[:600]}).encode(), "application/json"
+            )
+        except Exception as exc:  # noqa: BLE001 - never leak internals
+            msg = {"error": f"failed: {type(exc).__name__}"}
+            return self._send(500, json.dumps(msg).encode(), "application/json")
+        self._send(
+            200, json.dumps(out, ensure_ascii=False, default=str).encode(), "application/json"
+        )
+
     def do_POST(self) -> None:  # noqa: N802
+        if self.workspace is not None and self.path.startswith("/api/ws/"):
+            return self._ws_post()
+        if self.path == "/api/models" and self.models_fn is not None and self.tryout is None:
+            return self._models_any()
         if self.tryout is not None and self.path == "/api/ask":
             return self._byok()
         if self.tryout is not None and self.path == "/api/models":
@@ -200,11 +277,17 @@ def serve(
     byok_fn=None,
     models_fn=None,
     tryout_cfg: dict | None = None,
+    workspace=None,
+    ws_ask_fn=None,
 ) -> None:
     from ..tryout import Allowance, public_view  # noqa: PLC0415
 
     _Handler.payload = load_payload()
     _Handler.ask_fn, _Handler.mode = (staticmethod(ask_fn) if ask_fn else None), mode
+    if workspace is not None:
+        _Handler.workspace, _Handler.ws_ask_fn = workspace, staticmethod(ws_ask_fn)
+        _Handler.models_fn = staticmethod(models_fn) if models_fn else None
+        _Handler.mode = "workspace"
     if tryout_cfg is not None and byok_fn is not None:
         _Handler.tryout, _Handler.allowance = public_view(tryout_cfg), Allowance(tryout_cfg)
         _Handler.byok_fn = staticmethod(byok_fn)

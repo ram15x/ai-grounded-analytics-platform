@@ -138,7 +138,7 @@ class HostedProvider(Provider):
     def complete(self, req: LLMRequest, model: str, timeout: float) -> LLMResponse:
         # second line of defence behind the router's check: a hosted adapter refuses anything
         # the router has not stamped public
-        if req.sensitivity == INTERNAL:
+        if self.hosted and req.sensitivity == INTERNAL:
             raise SensitivityRefusal(f"{self.name}: refusing a request that is not tagged public")
         if not model or model.startswith(PLACEHOLDER_PREFIX):
             raise ConfigError(f"{self.name}: model id for task {req.task!r} is not configured")
@@ -294,6 +294,18 @@ class OpenRouterProvider(_OpenAICompatible):
     default_endpoint = "https://openrouter.ai/api/v1/chat/completions"  # UNVERIFIED
 
 
+class OllamaProvider(_OpenAICompatible):
+    """A model running on this computer (Ollama's OpenAI-compatible endpoint). Nothing leaves the
+    machine, so it may see internal data; it needs no key. Which models give usable answers on a
+    given computer is NOT known here: it has to be measured."""
+
+    hosted = False
+    default_endpoint = "http://localhost:11434/v1/chat/completions"  # UNVERIFIED
+
+    def _key(self) -> str:
+        return "local"  # Ollama ignores the header; a value keeps the shared code path unchanged
+
+
 class GeminiProvider(HostedProvider):
     default_endpoint = "https://generativelanguage.googleapis.com/v1beta/models"  # UNVERIFIED
 
@@ -336,6 +348,7 @@ ADAPTERS: dict[str, type[HostedProvider]] = {
     "groq": GroqProvider,
     "gemini": GeminiProvider,
     "openrouter": OpenRouterProvider,
+    "ollama": OllamaProvider,
 }
 
 

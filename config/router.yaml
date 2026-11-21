@@ -59,6 +59,16 @@ providers:
     models:
       default: REPLACE-WITH-A-CURRENT-FREE-MODEL-ID
 
+  # A model on this computer through Ollama. Not hosted: it may see internal data. Which model
+  # gives usable answers on a 4 GB GPU is UNMEASURED; name one you have pulled (`ollama list`).
+  ollama:
+    kind: ollama
+    hosted: false
+    endpoint: http://localhost:11434/v1/chat/completions
+    timeout_s: 180
+    models:
+      default: REPLACE-WITH-A-MODEL-YOU-HAVE-PULLED
+
 # Provider order per task (PHASE_1C.md section b). The local 3-4B tier for `route` is not built.
 tasks:
   route: [groq, gemini, openrouter]

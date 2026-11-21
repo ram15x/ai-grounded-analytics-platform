@@ -999,12 +999,24 @@ def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, k
 
     lp = ws.layer_path(dataset)
     base = apply_dataset_visibility(load_router_settings(), lp)
-    env = {base.providers[provider].env_key: key} if key else {}
+    if provider not in base.providers:
+        return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
+                "error": "unknown provider"}  # fmt: skip
+    local = base.providers[provider].kind == "ollama"
+    env = {base.providers[provider].env_key: key} if key and not local else {}
     layer = load_semantic_layer(lp)
     url = readonly_database_url()
     try:
-        s = route_probe.route_settings(base, route_probe.RouteProbeOptions(
-            provider, model or "", Path(os.devnull)))  # fmt: skip
+        if local:
+            if not model:
+                raise ConfigError("name the model you have pulled in Ollama")
+            s = base.model_copy(deep=True)
+            s.providers[provider].models = {"default": model}
+            s.tasks = {t: [provider] for t in ("route", "plan", "compose", "repair")}
+        else:
+            s = route_probe.route_settings(
+                base, route_probe.RouteProbeOptions(provider, model or "", Path(os.devnull))
+            )
         if s.sensitivity_of((layer.source.relation,)) != "public":
             return {"outcome": "abstain", "reason": "sensitivity", "rendered": "",
                     "error": "This dataset is marked internal, so it is not sent to a hosted "

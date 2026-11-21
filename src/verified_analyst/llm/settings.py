@@ -21,7 +21,7 @@ class _M(BaseModel):
 
 
 class ProviderSettings(_M):
-    kind: Literal["groq", "gemini", "openrouter", "fake"]
+    kind: Literal["groq", "gemini", "openrouter", "ollama", "fake"]
     hosted: bool
     env_key: str | None = None
     endpoint: str | None = None
@@ -39,6 +39,16 @@ class ProviderSettings(_M):
     # completion allowance (a request with a fixed allowance, such as `--max-tokens`, keeps it).
     reasoning_min_tokens: int | None = Field(default=None, gt=0)
     models: dict[str, str] = Field(default_factory=dict)  # task or "default" -> model id
+
+    @model_validator(mode="after")
+    def _hosted_matches_kind(self) -> ProviderSettings:
+        # a remote adapter must be declared hosted, and only the local one may be declared not:
+        # a config typo must not turn a remote provider into one that may see internal data
+        if self.kind in ("groq", "gemini", "openrouter") and not self.hosted:
+            raise ValueError(f"{self.kind} is a remote provider and must have hosted: true")
+        if self.kind == "ollama" and self.hosted:
+            raise ValueError("ollama runs on this computer and must have hosted: false")
+        return self
 
     def model_for(self, task: str) -> str:
         model = self.models.get(task) or self.models.get("default")

@@ -255,7 +255,7 @@ def test_default_transport_refuses_plain_http_and_never_connects():
 
 
 def test_adapter_registry_matches_config_kinds():
-    assert set(ADAPTERS) == {"groq", "gemini", "openrouter"}
+    assert set(ADAPTERS) == {"groq", "gemini", "openrouter", "ollama"}
 
 
 def test_the_test_suite_blocks_outbound_network_connections():

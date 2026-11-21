@@ -563,7 +563,7 @@ def test_the_shipped_config_has_the_observed_groq_minute_limit_and_low_effort_fo
     assert s.providers["groq"].reasoning_effort == "low"  # UNVERIFIED that it helps (row 48)
     assert [n for n, p in s.providers.items() if p.reasoning_effort] == ["groq"]
     assert (s.bucket.max_wait_s, s.rate_limit.max_wait_s, s.rate_limit.retries) == (60, 60, 1)
-    assert all(p.reasoning_min_tokens == 2048 for p in s.providers.values())
+    assert all(p.reasoning_min_tokens == 2048 for p in s.providers.values() if p.hosted)
 
 
 # ---- reasoning_effort from config ----

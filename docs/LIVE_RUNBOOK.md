@@ -70,7 +70,10 @@ once (two runs of the 5 injection questions, `low` then `medium`, each with its 
 va route probe --provider groq --model <GPT-OSS ID> --injection-only --compare-reasoning low,medium --record
 ```
 
-It writes `compare.md` and `compare.json` plus one sub-folder per setting. Compose and repair ask
+It writes `compare.md` and `compare.json` plus one sub-folder per setting. Between the two runs it
+waits up to 120 s (60 s after the first run's last request, or the longest Retry-After it was given)
+so that the second starts with a fresh minute bucket, and reports the wait. If the first run was
+given up (a Retry-After above 60 s, or a per-day limit) the second is not started. Compose and repair ask
 for at least 2048 completion tokens on models that report reasoning tokens; an empty reply with
 finish `length` is retried once with the allowance doubled (cap 4096).
 `--max-tokens N` sets the allowance for every call, `--token-cap N` lowers the cap (`va live
@@ -336,7 +339,10 @@ git commit -m "Binder: model-written labels (one Groq run)"
 va docs binder-model-dev
 ```
 
-It sends 8 requests of 10 sentences (about 80 sentences). The dev command scores `current`, `S2` and
+It sends 8 requests of 10 sentences (about 80 sentences) and waits for the token bucket between them
+(a few minutes). If a rate limit stops it, it keeps the batches done, spends nothing (no ledger entry,
+no labels file) and says how many labels were written; run the same command again and it resumes
+from its cassettes in `data\\binder_model_labels_work` without asking for those batches again. The dev command scores `current`, `S2` and
 `SL` on the dev half only. Do not open the locked-half claims in the labels file. After the labels
 file is committed and unchanged:
 

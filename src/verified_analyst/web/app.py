@@ -105,6 +105,14 @@ class _Handler(BaseHTTPRequestHandler):
             body = {**self.tryout, "remaining": self.allowance.remaining(vid)}
             cookie = f"va_visitor={vid}; Path=/; HttpOnly; SameSite=Strict" if new else None
             self._send(200, json.dumps(body).encode(), "application/json", cookie)
+        elif self.path.startswith("/api/ws/docs/") and self.workspace is not None:
+            from ..datasets.workspace import WorkspaceError  # noqa: PLC0415
+
+            try:
+                body = json.dumps(self.workspace.documents(self.path.rsplit("/", 1)[-1])).encode()
+                self._send(200, body, "application/json")
+            except WorkspaceError:
+                self._send(404, b'{"error":"unknown dataset"}', "application/json")
         elif self.path == "/api/ws/datasets" and self.workspace is not None:
             body = json.dumps(self.workspace.datasets()).encode()
             self._send(200, body, "application/json")
@@ -220,6 +228,16 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(413, b'{"error":"file too large"}', "application/json")
                 name = (self.headers.get("X-Filename") or "").strip()[:200]
                 out = ws.stage(name, self.rfile.read(n))
+            elif self.path == "/api/ws/doc":
+                n = int(self.headers.get("Content-Length", "0"))
+                if n > MAX_UPLOAD:
+                    return self._send(413, b'{"error":"file too large"}', "application/json")
+                out = ws.add_document(
+                    (self.headers.get("X-Dataset") or "").strip(),
+                    (self.headers.get("X-Filename") or "").strip()[:200],
+                    self.rfile.read(n),
+                    (self.headers.get("X-Sensitivity") or "internal").strip(),
+                )
             elif self.path == "/api/ws/check":
                 b = self._json_body()
                 out = ws.check(str(b.get("token", "")), b.get("manifest") or {})

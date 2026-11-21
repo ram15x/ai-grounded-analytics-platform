@@ -120,9 +120,11 @@ def cmd_docs_ingest(args: argparse.Namespace) -> int:
     files: list[Path] = []
     for item in args.paths:
         p = Path(item)
-        files += sorted([*p.glob("*.md"), *p.glob("*.txt")]) if p.is_dir() else [p]
+        files += (
+            sorted([*p.glob("*.md"), *p.glob("*.txt"), *p.glob("*.pdf")]) if p.is_dir() else [p]
+        )
     if not files:
-        print("error: no .md or .txt files found", file=sys.stderr)
+        print("error: no .md, .txt or .pdf files found", file=sys.stderr)
         return 2
     docs = [(f, *read_document(f)) for f in files]  # every file is checked before connecting
     admin_url = admin_database_url()
@@ -990,8 +992,9 @@ def _readonly_role() -> str | None:
 def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, key: str) -> dict:
     """A question about an uploaded dataset with the visitor's key (same handling as _byok_ask).
     Internal datasets are refused for hosted providers by the router; nothing is stored."""
+    from .documents.store import search  # noqa: PLC0415
     from .llm import route_probe  # noqa: PLC0415
-    from .llm.answer import Retrieved  # noqa: PLC0415
+    from .llm.answer import make_retriever  # noqa: PLC0415
     from .llm.live import redact  # noqa: PLC0415
     from .llm.providers import build_one  # noqa: PLC0415
     from .llm.router import Router  # noqa: PLC0415
@@ -1024,9 +1027,18 @@ def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, k
         setup = (
             layer, url, s,
             lambda: Router(s, {provider: build_one(s, provider, env=env)}),
-            lambda _q: Retrieved([], "public"), catalogue(layer, url),
+            make_retriever(
+                url, k=3, search_fn=lambda q, k: search(url, q, k, doc_prefix=f"ws-{dataset}-")
+            ),
+            catalogue(layer, url),
         )  # fmt: skip
-        d = _ask_one(question, "ws", setup).as_dict()
+        docs = ws.documents(dataset)
+        corpus = (
+            "Documents uploaded for this dataset: " + "; ".join(d["title"] for d in docs) + "."
+            if docs
+            else "There are no documents for this dataset."
+        )
+        d = _ask_one(question, "ws", setup, corpus=corpus).as_dict()
     except (ConfigError, LLMError) as exc:
         return {"outcome": "abstain", "reason": "provider_error", "rendered": "",
                 "error": redact(str(exc), env)}  # fmt: skip
@@ -1044,7 +1056,9 @@ def _byok_models(provider: str, key: str) -> dict:
     return json.loads(redact(json.dumps(res, default=str), env))
 
 
-def _ask_one(question: str, qid: str, setup, plan_prompt: str = "plan.v1"):
+def _ask_one(
+    question: str, qid: str, setup, plan_prompt: str = "plan.v1", corpus: str | None = None
+):
     from .llm import route_probe  # noqa: PLC0415
     from .llm.answer import answer_question  # noqa: PLC0415
 
@@ -1053,7 +1067,7 @@ def _ask_one(question: str, qid: str, setup, plan_prompt: str = "plan.v1"):
     run = router.new_run(qid, token_cap=s.probe.token_cap)
     return answer_question(
         question, layer=layer, readonly_url=url, router=router, run=run, retrieve=retrieve,
-        corpus_description=route_probe.CORPUS_DESCRIPTION, known_values=known,
+        corpus_description=corpus or route_probe.CORPUS_DESCRIPTION, known_values=known,
         plan_prompt=plan_prompt,
     )  # fmt: skip
 

@@ -146,16 +146,57 @@ def key_from_filename(name: str) -> str:
     return stem[:64]
 
 
-def read_document(path: Path) -> tuple[str, str, str]:
-    """(doc_key, title, text) for a .md or .txt file. The source recorded is the file name only."""
-    if path.suffix.lower() not in (".md", ".txt"):
-        raise DocumentError(f"{path.name}: only .md and .txt files are supported")
-    raw = path.read_bytes()
+MAX_PDF_PAGES = 300
+
+
+def pdf_text(raw: bytes, name: str = "file.pdf") -> str:
+    """The text layer of a PDF, page by page. This reads text that is already in the file; it does
+    NOT recognise text in a scanned image (no OCR is available), and says so when a file has none.
+    Column order and table layout in the extracted text are whatever the PDF stores, so a figure
+    from a table can sit in an odd place: it is still only ever cited from the stored text."""
+    import io  # noqa: PLC0415
+
+    from pypdf import PdfReader  # noqa: PLC0415
+    from pypdf.errors import PyPdfError  # noqa: PLC0415
+
     try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise DocumentError(f"{path.name}: not valid UTF-8") from exc
-    key = key_from_filename(path.name)
+        reader = PdfReader(io.BytesIO(raw))
+        if reader.is_encrypted:
+            raise DocumentError(f"{name}: the PDF is password-protected")
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise DocumentError(f"{name}: more than {MAX_PDF_PAGES} pages")
+        pages = [(p.extract_text() or "").strip() for p in reader.pages]
+    except (PyPdfError, ValueError, OSError, KeyError, RecursionError) as exc:
+        raise DocumentError(f"{name}: cannot read this PDF ({type(exc).__name__})") from exc
+    text = "\n\n".join(p for p in pages if p)
+    if len(text) < 20:
+        raise DocumentError(
+            f"{name}: no text found in this PDF. It may be a scan (an image of a page); reading "
+            "scanned pages needs OCR, which is not available here"
+        )
+    return text
+
+
+def read_document(path: Path) -> tuple[str, str, str]:
+    """(doc_key, title, text) for a .md, .txt or .pdf file. The source recorded is the file name."""
+    if path.suffix.lower() not in (".md", ".txt", ".pdf"):
+        raise DocumentError(f"{path.name}: only .md, .txt and .pdf files are supported")
+    raw = path.read_bytes()
+    return read_document_bytes(path.name, raw)
+
+
+def read_document_bytes(name: str, raw: bytes) -> tuple[str, str, str]:
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext == "pdf":
+        text = pdf_text(raw, name)
+    elif ext in ("md", "txt"):
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise DocumentError(f"{name}: not valid UTF-8") from exc
+    else:
+        raise DocumentError(f"{name}: only .md, .txt and .pdf files are supported")
+    key = key_from_filename(name)
     first = next((ln for ln in text.splitlines() if ln.strip()), "")
     title = first.lstrip("# ").strip() or key
     return key, title[:200], text
@@ -184,7 +225,12 @@ def _grant_reader(conn: psycopg.Connection, role: str) -> None:
 
 
 def search(
-    readonly_url: str, query: str, k: int = 5, config: str = "english", mode: str = "any"
+    readonly_url: str,
+    query: str,
+    k: int = 5,
+    config: str = "english",
+    mode: str = "any",
+    doc_prefix: str | None = None,
 ) -> list[Hit]:
     """Keyword search over chunks. Ranking is deterministic: score, then document, then ordinal.
 
@@ -211,11 +257,13 @@ def search(
         f"FROM docs.chunks c JOIN docs.documents d USING (doc_key), "
         f"(SELECT {parse} AS query) AS q "
         f"WHERE c.{col} @@ q.query "
-        f"ORDER BY score DESC, c.doc_key, c.ordinal LIMIT %s"
+        + ("AND starts_with(c.doc_key, %s) " if doc_prefix else "")
+        + "ORDER BY score DESC, c.doc_key, c.ordinal LIMIT %s"
     )
     with psycopg.connect(readonly_url, **connect_kwargs(readonly_url)) as conn:
         conn.read_only = True
-        rows = conn.execute(stmt, (query[:500], k)).fetchall()
+        args = (query[:500], doc_prefix, k) if doc_prefix else (query[:500], k)
+        rows = conn.execute(stmt, args).fetchall()
     return [
         Hit(make_passage_id(r[0], r[2], r[6]), r[0], r[1], r[2], r[3], r[4], r[5], float(r[7]))
         for r in rows

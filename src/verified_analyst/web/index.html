@@ -403,12 +403,13 @@ async function tryInit(){
 }
 
 /* ---------- your data (local only) ---------- */
-const W = {stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false, est:null, room:''};
+const W = {docs:[], docMsg:'', docSens:'internal', stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false, est:null, room:''};
 const AGG = ['sum','count','count_distinct','avg','min','max'];
 async function wsPost(path, body, headers){
   const r = await fetch(path,{method:'POST',headers:headers||{'Content-Type':'application/json'},body:body});
   return {ok:r.ok, d:await r.json()};
 }
+async function wsLoadDocs(){ try{ W.docs = W.ds ? await (await fetch('/api/ws/docs/'+encodeURIComponent(W.ds))).json() : []; }catch(e){ W.docs=[]; } if(!Array.isArray(W.docs)) W.docs=[]; }
 async function wsLoadList(){ try{ W.datasets = await (await fetch('/api/ws/datasets')).json(); }catch(e){ W.datasets=[]; } }
 function manifestFromForm(){
   const cols={};
@@ -465,7 +466,10 @@ function dataView(){
 function askPanel(){
   const P={groq:'Groq',openrouter:'OpenRouter',gemini:'Google Gemini',ollama:'Local model (Ollama): nothing leaves this computer'};
   const d=W.datasets.find(x=>x.name===W.ds), local=W.prov==='ollama';
-  return `<h2>Ask about ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede flagtxt" style="font-weight:500">This data is internal, so a hosted provider is refused. Use the local model, or reload the data as Public if it is safe to send to your provider.</p>':''}
+  const docs=`<div class="pane"><h3>Documents for this data</h3><p class="note" style="margin-top:0">Add a PDF, Markdown or text file (policies, contracts, notes). Questions can then quote figures from it, and each quote is checked against the stored text. Only text already in the file is read: a scanned page needs OCR, which is not available here.</p>
+    ${W.docs.length?'<ul class="note" style="font-size:15px">'+W.docs.map(d=>`<li>${esc(d.title)} <span class="note">(${d.chunks} passages, ${esc(d.sensitivity)})</span></li>`).join('')+'</ul>':'<p class="note">No documents yet.</p>'}
+    <div class="row"><input type="file" id="docfile" accept=".pdf,.md,.txt"><select class="fld" id="docsens"><option value="internal" ${W.docSens==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.docSens==='public'?'selected':''}>Public: passages may go to your provider</option></select></div><span class="note" id="docmsg">${esc(W.docMsg)}</span></div>`;
+  return docs+`<h2>Ask about ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede flagtxt" style="font-weight:500">This data is internal, so a hosted provider is refused. Use the local model, or reload the data as Public if it is safe to send to your provider.</p>':''}
    <div class="pane"><div class="row"><select class="fld" id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v)}</option>`).join('')}</select>
    ${local?'':`<input class="fld key" id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}">`}<input class="fld" id="amodel" placeholder="Model id${local?' you have pulled in Ollama':''}" value="${esc(W.model)}">
    ${local?'':'<button class="btn text" id="ackey">Check my key (uses no tokens)</button>'}</div>
@@ -493,7 +497,12 @@ function wireData(){
   if($('cancel')) $('cancel').onclick=()=>{ W.stage=null; W.result=null; W.msg=''; wsLoadList().then(dataView); };
   if($('chk')) $('chk').onclick=()=>wsRun('/api/ws/check');
   if($('load')) $('load').onclick=()=>wsRun('/api/ws/load');
-  $('app').querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>{ W.ds=n.dataset.ask; dataView(); });
+  $('app').querySelectorAll('[data-ask]').forEach(n=>n.onclick=async ()=>{ W.ds=n.dataset.ask; W.docMsg=''; await wsLoadDocs(); dataView(); });
+  if($('docfile')){ $('docsens').onchange=e=>W.docSens=e.target.value;
+    $('docfile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('docmsg').textContent='Reading…';
+      const r=await wsPost('/api/ws/doc',f,{'X-Filename':f.name,'X-Dataset':W.ds,'X-Sensitivity':W.docSens});
+      if(!r.ok){ W.docMsg=r.d.error||'Could not read this file.'; } else { W.docMsg=`Stored ${r.d.chunks} passage(s) from ${r.d.title}.`+(r.d.flagged.length?` Text flagged as ${r.d.flagged.join(', ')} is kept as written but withheld from the model.`:''); }
+      await wsLoadDocs(); dataView(); }; }
   if($('aprov')){ $('aprov').onchange=e=>{W.prov=e.target.value;W.room='';dataView();}; if($('akey')) $('akey').oninput=e=>W.key=e.target.value; $('amodel').oninput=e=>W.model=e.target.value;
     if($('ackey')) $('ackey').onclick=wsRoom; $('ago').onclick=wsAsk; $('aq').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wsAsk();}}; }
 }
@@ -513,7 +522,7 @@ async function wsRun(path){
   W.msg='';
   if(path.endsWith('check')){ const d=r.d; W.result = d.ok ? `<b class="okt">Looks consistent.</b> Approved numbers: ${esc(d.approved.join(', ')||'none')}.${d.without_known_figure.length?` <span class="flagtxt">No figure to check against:</span> ${esc(d.without_known_figure.join(', '))}`:''}` : `<b class="flagtxt">Fix these first:</b><ul>${d.problems.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`; dataView(); }
   else { const d=r.d; W.overwrite=false; W.result=`<b>Loaded ${d.rows.toLocaleString()} rows as ${esc(d.name)}.</b> Not loaded: ${esc(d.not_loaded.join(', ')||'nothing')}.<table class="ledger" style="margin-top:8px"><tr><th>Number</th><th>You said</th><th>The data gives</th><th></th></tr>${d.reconciliation.map(x=>`<tr><td>${esc(x.metric)}</td><td>${esc(x.expected||'')}</td><td>${esc(x.got||'')}</td><td>${x.ok===true?'<span class="o ok">matches</span>':x.ok===false?'<span class="o w">differs</span>':'<span class="o n">not checked</span>'}</td></tr>`).join('')}</table>`;
-    await wsLoadList(); W.ds=d.name; W.stage=null; dataView(); $('app').insertAdjacentHTML('afterbegin',`<div class="pane">${W.result}</div>`); W.result=null; }
+    await wsLoadList(); W.ds=d.name; await wsLoadDocs(); W.stage=null; dataView(); $('app').insertAdjacentHTML('afterbegin',`<div class="pane">${W.result}</div>`); W.result=null; }
 }
 async function wsAsk(){
   if(W.busy) return; const q=$('aq').value.trim(); if(!q) return;

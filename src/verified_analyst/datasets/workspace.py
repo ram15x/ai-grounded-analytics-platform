@@ -154,6 +154,67 @@ class Workspace:
             "visibility": man.visibility,
         }
 
+    # -- documents that belong to a dataset ----------------------------------------------------
+    def _doc_prefix(self, dataset: str) -> str:
+        self.layer_path(dataset)  # the dataset must exist
+        return f"ws-{dataset}-"
+
+    def add_document(
+        self, dataset: str, filename: str, raw: bytes, sensitivity: str = "internal"
+    ) -> dict[str, Any]:
+        """Store a .pdf, .md or .txt file as passages that questions about this dataset can cite.
+        Only the text already in the file is read (no OCR). Text that looks like instructions to a
+        model is flagged, kept as written, and withheld from prompts, as for any document."""
+        import psycopg  # noqa: PLC0415
+
+        from ..config import connect_kwargs  # noqa: PLC0415
+        from ..documents.store import (  # noqa: PLC0415
+            DocumentError,
+            ingest,
+            key_from_filename,
+            read_document_bytes,  # noqa: PLC0415
+        )
+        from ..documents.untrusted import scan  # noqa: PLC0415
+
+        if sensitivity not in ("public", "internal"):
+            raise WorkspaceError("sensitivity must be public or internal")
+        if not raw or len(raw) > MAX_UPLOAD:
+            raise WorkspaceError(f"the file must be between 1 byte and {MAX_UPLOAD // 2**20} MB")
+        prefix = self._doc_prefix(dataset)
+        try:
+            _key, title, text = read_document_bytes(Path(filename or "").name, raw)
+            key = (prefix + key_from_filename(filename))[:64].rstrip("-_")
+            with psycopg.connect(self.admin_url, **connect_kwargs(self.admin_url)) as conn:
+                r = ingest(conn, key, title, Path(filename).name, text,
+                           reader_role=self.readonly_role, sensitivity=sensitivity)  # fmt: skip
+        except DocumentError as exc:
+            raise WorkspaceError(str(exc)) from exc
+        return {
+            "doc_key": r.doc_key,
+            "title": title,
+            "chunks": r.chunks,
+            "sensitivity": sensitivity,
+            "flagged": sorted({f.kind for f in scan(text)}),
+        }
+
+    def documents(self, dataset: str) -> list[dict[str, Any]]:
+        import psycopg  # noqa: PLC0415
+
+        from ..config import connect_kwargs  # noqa: PLC0415
+
+        prefix = self._doc_prefix(dataset)
+        try:
+            with psycopg.connect(self.admin_url, **connect_kwargs(self.admin_url)) as conn:
+                rows = conn.execute(
+                    "SELECT d.doc_key, d.title, d.sensitivity, count(c.*) FROM docs.documents d "
+                    "LEFT JOIN docs.chunks c USING (doc_key) WHERE starts_with(d.doc_key, %s) "
+                    "GROUP BY 1, 2, 3 ORDER BY 1",
+                    (prefix,),
+                ).fetchall()
+        except psycopg.errors.UndefinedTable:
+            return []
+        return [{"doc_key": r[0], "title": r[1], "sensitivity": r[2], "chunks": r[3]} for r in rows]
+
     # -- published datasets --------------------------------------------------------------------
     def datasets(self) -> list[dict[str, Any]]:
         out = []

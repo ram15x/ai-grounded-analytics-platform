@@ -79,3 +79,22 @@ def test_workspace_refuses_a_public_host():
     from verified_analyst import cli
 
     assert cli.main(["serve", "--workspace", "--host", "0.0.0.0"]) == 2
+
+
+def test_document_upload_and_listing_over_http(srv):
+    from pdf_helpers import make_pdf
+
+    _, st = call(srv, "/api/ws/upload", raw=CSV, headers={"X-Filename": "saas.csv"})
+    call(srv, "/api/ws/load", {"token": st["token"], "manifest": MAN})
+    h = {"X-Filename": "Terms.pdf", "X-Dataset": "saas_subs", "X-Sensitivity": "public"}
+    code, out = call(
+        srv, "/api/ws/doc", raw=make_pdf(["Seats may be added at any time."]), headers=h
+    )
+    assert code == 200 and out["sensitivity"] == "public" and out["chunks"] >= 1
+    code, docs = call(srv, "/api/ws/docs/saas_subs")
+    assert code == 200 and [d["sensitivity"] for d in docs] == ["public"]
+    bad = {**h, "X-Filename": "scan.pdf"}
+    code, err = call(srv, "/api/ws/doc", raw=make_pdf([""]), headers=bad)
+    assert code == 400 and "OCR" in err["error"]
+    assert call(srv, "/api/ws/doc", raw=b"x", headers={**h, "X-Dataset": "nope"})[0] == 400
+    assert call(srv, "/api/ws/docs/nope")[0] == 404

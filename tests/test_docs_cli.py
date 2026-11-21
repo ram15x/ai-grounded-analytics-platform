@@ -87,8 +87,12 @@ def test_ingest_search_and_eval_through_the_cli(docs_db, tmp_path, monkeypatch, 
 def test_ingest_refuses_other_file_types_and_empty_folders(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("VA_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
     assert main(["docs", "ingest", str(tmp_path)]) == 2
-    assert "no .md or .txt files" in capsys.readouterr().err
-    pdf = tmp_path / "a.pdf"
+    assert "no .md, .txt or .pdf files" in capsys.readouterr().err
+    other = tmp_path / "a.docx"
+    other.write_bytes(b"PK")
+    assert main(["docs", "ingest", str(other)]) == 2
+    assert "only .md, .txt and .pdf" in capsys.readouterr().err
+    pdf = tmp_path / "b.pdf"
     pdf.write_bytes(b"%PDF")
     assert main(["docs", "ingest", str(pdf)]) == 2
-    assert "only .md and .txt" in capsys.readouterr().err
+    assert "cannot read this PDF" in capsys.readouterr().err

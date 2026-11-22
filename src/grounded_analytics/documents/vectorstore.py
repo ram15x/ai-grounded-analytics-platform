@@ -32,7 +32,7 @@ def ensure_vector_schema(conn: psycopg.Connection, reader_role: str | None = Non
     except psycopg.errors.FeatureNotSupported as exc:
         raise DocumentError(
             "the pgvector extension is not available in this Postgres; use the pgvector image "
-            "(docs/DOCKER_PGVECTOR_SWITCH.md)"
+            "(docker-compose.yml uses pgvector/pgvector:pg16)"
         ) from exc
     if reader_role:
         _grant_reader(conn, reader_role)

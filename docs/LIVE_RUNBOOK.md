@@ -177,7 +177,7 @@ claim: the questions and documents have the same author.
 
 `grounded docs probe` grants the same default read-only role as `grounded docs ingest`; pass `--reader-role` for another.
 
-Once, with the pgvector image running (docs/DOCKER_PGVECTOR_SWITCH.md), ingest the synthetic corpus
+Once, with the pgvector image running (`docker compose up -d --wait`), ingest the synthetic corpus
 as public:
 
 ```powershell

@@ -209,6 +209,16 @@ select.fld option{color:#0E1A2B}
 /* toast */
 .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,30px);opacity:0;background:#fff;color:#0E1A2B;font-weight:650;padding:11px 18px;border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.5);transition:all .3s cubic-bezier(.2,.9,.3,1.2);pointer-events:none;z-index:50}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+
+.exban{margin:0 0 22px;padding:14px 18px;border-radius:14px;background:rgba(123,140,255,.12);border:1px solid rgba(123,140,255,.35);color:#D9E1FF;font-size:15px;max-width:80ch}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;align-items:stretch}
+.step h3{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sn{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#5B6CFF);color:#fff;font:700 14px var(--sans)}
+.lock{margin-left:auto;font:600 12px var(--sans);color:#7A5200;background:#FFF1D6;border:1px solid #F2D49A;border-radius:999px;padding:2px 10px}
+.drop{display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;text-align:center;padding:30px 16px;margin:6px 0 12px;border:2px dashed #B9C1D6;border-radius:14px;color:#5B6778;background:repeating-linear-gradient(135deg,#F5F7FB,#F5F7FB 10px,#EFF2F8 10px,#EFF2F8 20px)}
+.drop b{color:#0E1A2B}
+.pane input:disabled,.pane select:disabled,.pane .btn:disabled{opacity:.55;cursor:not-allowed}
+.pane .note b{color:#0E1A2B}
 .lead.away{display:none}
 .keys{margin-top:14px;color:var(--mute);font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
 .keys kbd{font:600 11.5px var(--sans);border:1px solid var(--glass-b);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--ink);background:var(--glass)}
@@ -224,7 +234,7 @@ select.fld option{color:#0E1A2B}
 <div class="page">
   <header class="bar">
     <p class="word"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 13l6 6L21 5"/></svg></span>Verified Analyst</p>
-    <nav role="tablist" aria-label="Sections"><button role="tab" id="t-ask" aria-selected="true">Ask</button><button role="tab" id="t-rep" aria-selected="false">Report</button><button role="tab" id="t-data" aria-selected="false" hidden>Your data</button><button role="tab" id="t-ev" aria-selected="false">What is checked</button></nav>
+    <nav role="tablist" aria-label="Sections"><button role="tab" id="t-ask" aria-selected="true">Workbench</button><button role="tab" id="t-data" aria-selected="false" hidden>Your data</button><button role="tab" id="t-ex" aria-selected="false">Examples</button><button role="tab" id="t-ev" aria-selected="false">How it is checked</button></nav>
     <span class="mode" id="mode">Recorded model replies; checks run now</span>
   </header>
   <section class="lead" id="lead">
@@ -358,6 +368,39 @@ function leader(i){
   requestAnimationFrame(()=>{ p.style.transition = 'stroke-dashoffset .28s ease-out'; p.style.strokeDashoffset = 0; });
 }
 
+
+/* ---------- the examples tab: recorded runs, labelled as such ---------- */
+function exView(){
+  askView();
+  if(S.note){ $('app').insertAdjacentHTML('beforeend', `<p class="note" style="margin-top:28px">${esc(S.note)}</p>`); }
+  $('app').insertAdjacentHTML('afterbegin', '<p class="exban"><b>Recorded examples.</b> These answers were produced earlier by a real model and stored. The checks below re-run now against the data, but nothing you type here reaches a model.</p>');
+}
+
+/* ---------- the workbench on the static copy: the real steps, switched off, with how to turn them on ---------- */
+const RUN = 'git clone https://github.com/ram15x/verified-analyst\ncd verified-analyst\npip install -e .          # Python 3.11 or newer\n\nva serve --workspace       # upload your own data (this computer only)\nva serve --byok            # the public tryout: a visitor pastes their own key';
+function setupView(){
+  const off = '<span class="lock">Needs the app running</span>';
+  $('app').innerHTML = `<p class="exban"><b>This page is a copy with recorded answers, so the steps below are switched off.</b> They work when you run the app yourself; the commands are at the bottom.</p>
+  <div class="steps">
+   <section class="pane step"><h3><span class="sn">1</span>Connect a model ${off}</h3>
+    <div class="row"><select class="fld" disabled aria-label="Provider"><option>Groq</option><option>OpenRouter</option><option>Gemini</option><option>Ollama, on your computer</option></select></div>
+    <div class="row"><input class="fld key" disabled placeholder="Paste your API key" aria-label="API key"><button class="btn" disabled>Check my key</button></div>
+    <p class="note">Your key goes with each question, is used once, and is never saved, logged or shown again. After you check it, this shows how many tokens your key has left and about how many questions that is. If a provider does not report that, it says so instead of guessing.</p></section>
+   <section class="pane step"><h3><span class="sn">2</span>Add your data ${off}</h3>
+    <div class="drop" aria-disabled="true"><b>Drop a CSV or Excel file</b><span>up to 25 MB</span></div>
+    <p class="note">The system reads the columns and proposes metrics. You approve each one before it can be asked about, and it checks them against totals you already know. Personal columns are never loaded. You can also attach text PDFs, Markdown or text files as documents; scanned PDFs are refused.</p></section>
+   <section class="pane step"><h3><span class="sn">3</span>Ask ${off}</h3>
+    <div class="row"><input class="fld key" disabled placeholder="Ask anything" aria-label="Question"><button class="btn main-btn" disabled>Ask</button></div>
+    <p class="note"><b>On your own data</b> there is no question list. Ask anything; the limit is your key's remaining tokens, which are shown before you ask.</p>
+    <p class="note"><b>In the public tryout</b> there are 12 questions to choose from: 3 easy, 3 medium, 3 hard, and 3 slots for your own. Each visitor asks one from each group, so nobody can drain the key.</p></section>
+  </div>
+  <h2>Run it</h2><p class="lede">Uploads only run on your own computer: there is no sign-in, so the app refuses to take uploads from anywhere else. See the README for the database setup.</p>
+  <pre class="cmd" id="runcmd">${esc(RUN)}</pre><button class="btn" id="copyrun">Copy commands</button> <span class="note" id="copiedrun" role="status"></span>
+  <h2>Or look at recorded examples</h2><p class="lede">Real answers from an earlier run, with every figure tied back to its source.</p><button class="btn main-btn" id="goex">Open the examples</button>`;
+  $('copyrun').onclick=async()=>{ try{ await navigator.clipboard.writeText(RUN); $('copiedrun').textContent='Copied.'; }catch(e){ $('copiedrun').textContent='Copy failed; select the text above.'; } };
+  $('goex').onclick=()=>{ choose(S.pick||0); window.scrollTo({top:0,behavior:'smooth'}); };
+}
+
 /* ---------- ask view ---------- */
 function ledger(){
   return `<h2>${S.items.length===1?'The recorded question':`The ${S.items.length} recorded questions`}</h2><p class="lede">Open any row. Withheld and unrecorded questions are listed too.</p><div class="tw"><table class="ledger"><tr><th>Question</th><th>Sent to</th><th>Result</th><th>Figures tied</th></tr>` +
@@ -367,6 +410,7 @@ function askView(){
   const x = S.items[S.pick]; let h = '';
   if(x){ h += process(x) + sheet(x) + support(x, S.sel); }
   else if(S.mode==='workspace') h += '<p class="lede">No question asked yet. Open Your data, load a table, and ask about it there.</p>';
+  else if(S.mode==='byok') h += '<p class="lede">No answer yet. Pick a question from the menu above, or ask one of your own.</p>';
   if(S.ledger && S.items.length) h += ledger();
   $('app').innerHTML = h; S.fresh = false;
   $('app').querySelectorAll('.fig,.margin li').forEach(n=>{
@@ -377,16 +421,7 @@ function askView(){
   $('app').querySelectorAll('[data-p]').forEach(n=>{ const go=()=>{ choose(+n.dataset.p); window.scrollTo({top:0,behavior:'smooth'}); }; n.onclick=go; n.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
   setTimeout(()=>leader(S.sel), S.fresh?0:60);
 }
-function choose(i, scroll){ S.pick=i; S.sel=0; S.fresh=true; $('q').value=S.items[i].question; $('hint').textContent=''; setTab('ask'); if(scroll){ const sh=$('sheet'); if(sh) sh.scrollIntoView({behavior:'smooth',block:'start'}); } }
-function reportView(){
-  const ok=S.items.filter(x=>x.outcome==='verified'), left=S.items.filter(x=>x.outcome!=='verified');
-  const cmd='va report draft --title "Weekly check"\nva report approve --who "<your name>" --digest <digest printed by draft>';
-  $('app').innerHTML = `<h2 style="margin-top:0">Report draft: Weekly check</h2><p class="lede"><span class="flagtxt">Pending approval.</span> ${ok.length} tied-out answers are in, ${left.length} are left out. Nothing here is published until a named person approves it.</p>` +
-   ok.map(x=>`<div class="pane"><h3>${esc(x.question)}</h3><p style="margin:0 0 6px;font:18px/1.55 var(--serif)">${esc(x.rendered)}</p><span class="note">${vs(x).length} figure(s) tied</span></div>`).join('') +
-   `<h2>Left out of the report</h2><ul class="note" style="font-size:15px">${left.map(x=>`<li>${esc(x.question)} (${esc(REASON[x.reason]?x.reason:(x.reason||'not verified'))})</li>`).join('')}</ul>
-   <h2>Approve</h2><p class="lede">Approval is a named step. It quotes the digest of the draft you read, so an edited draft cannot be approved by mistake. Only then is a Markdown report written. Run these on your machine:</p><div class="cmd" id="cmd">${esc(cmd)}</div><button class="btn" id="copy">Copy the commands</button> <span class="note" id="copied"></span>`;
-  $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(cmd);$('copied').textContent='Copied.';}catch(e){$('copied').textContent='Copy failed; select the text above.';}};
-}
+function choose(i, scroll){ S.pick=i; S.sel=0; S.fresh=true; $('q').value=S.items[i].question; $('hint').textContent=''; setTab(S.stat?'ex':'ask'); if(scroll){ const sh=$('sheet'); if(sh) sh.scrollIntoView({behavior:'smooth',block:'start'}); } }
 function trustView(){
   const ok=S.items.filter(x=>x.outcome==='verified'), n=ok.reduce((a,x)=>a+vs(x).length,0), k={};
   ok.forEach(x=>vs(x).forEach(v=>k[v.verdict]=(k[v.verdict]||0)+1));
@@ -603,7 +638,9 @@ async function wsAsk(){
 }
 
 /* ---------- shell ---------- */
-function setTab(t){ S.tab=t; ['ask','rep','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t)); ({ask:askView,rep:reportView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
+function setTab(t){ S.tab=t; ['ask','ex','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t));
+  $('form').hidden = S.ws || (S.stat && t==='ask'); document.querySelector('.keys').hidden = $('form').hidden;
+  ({ask:S.stat?setupView:askView,ex:exView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
   let i=S.items.findIndex(x=>x.question.toLowerCase()===t); if(i>=0) return i;
@@ -619,15 +656,16 @@ function init(data){
     try{ const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text})}); const d=await r.json();
       if(!r.ok){ $('hint').textContent=d.error||'The question failed.'; } else { S.items.unshift(d); choose(0, true); } }
     catch(err){ $('hint').textContent='Could not reach the server.'; } S.busy=false; $('go').disabled=false; };
-  $('t-ask').onclick=()=>setTab('ask'); $('t-rep').onclick=()=>setTab('rep'); $('t-ev').onclick=()=>setTab('ev'); $('t-data').onclick=()=>setTab('data');
-  if(S.mode==='workspace'){ setTab('data'); } else choose(0);
-  if(data.note && S.mode!=='workspace'){ const f=document.createElement('p'); f.className='note page'; f.style.cssText='padding-bottom:40px'; f.textContent=data.note; document.body.appendChild(f); }
+  $('t-ask').onclick=()=>setTab('ask'); $('t-ex').onclick=()=>setTab('ex'); $('t-ev').onclick=()=>setTab('ev'); $('t-data').onclick=()=>setTab('data');
+  S.note=data.note||'';
+  if(S.mode==='workspace'){ setTab('data'); } else if(S.stat||S.mode==='byok'){ setTab('ask'); } else choose(0);
 }
 const MODES = {static:'Recorded model replies; checks run now', replay:'Recorded model replies; checks run now', live:'Live model; checks run now', byok:'Your key, used once', workspace:'Your data, on this computer'};
-if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
-  S.can=c.can_ask; S.mode=c.mode; $('mode').textContent=MODES[c.mode]||MODES.static;
+if(EMBED){ S.stat=true; S.ws=false; init(EMBED); } else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
+  S.can=c.can_ask; S.mode=c.mode; S.ws=!!c.workspace; S.stat=!c.workspace&&(!c.mode||c.mode==='static'); $('mode').textContent=MODES[c.mode]||MODES.static; if(c.mode==='byok') S.ledger=false;
   if(c.mode==='byok') tryInit();
   if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; S.ledger=false; d={items:[],note:''}; $('title').textContent='Bring your own data.'; $('sub').textContent='Upload a table, say what its columns and numbers mean, and the system checks your definitions against figures you already know. Answers are then tied to your data, or withheld.'; }
+  if(S.stat){ $('sub').textContent='Connect a model with your own key, add your data, then ask anything. Every number in the answer is matched to your data or to a stored passage, or the answer is withheld.'; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});
 </script>
 
@@ -682,7 +720,7 @@ if(EMBED) init(EMBED); else Promise.all([fetch('/api/results').then(r=>r.json())
   if(app) new MutationObserver(decorate).observe(app, {childList:true, subtree:true}); decorate();
   // on the Report and What-is-checked tabs the content comes first, so the big question box steps aside
   const lead = document.getElementById('lead'), nav = document.querySelector('nav');
-  function syncLead(){ const sel = nav && nav.querySelector('[aria-selected=true]'); if(lead && sel) lead.classList.toggle('away', sel.id === 't-rep' || sel.id === 't-ev'); }
+  function syncLead(){ const sel = nav && nav.querySelector('[aria-selected=true]'); if(lead && sel) lead.classList.toggle('away', sel.id === 't-ev'); }
   if(nav) new MutationObserver(syncLead).observe(nav, {attributes:true, subtree:true, attributeFilter:['aria-selected']}); syncLead();
   // keyboard
   addEventListener('keydown', e => {

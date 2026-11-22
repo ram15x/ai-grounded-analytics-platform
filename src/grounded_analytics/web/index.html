@@ -722,7 +722,7 @@ async function wsAsk(){
 }
 
 /* ---------- shell ---------- */
-function setTab(t){ S.tab=t; ['ask','ex','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t));
+function setTab(t){ S.tab=t; if(S.mode==='byok'&&$('try').innerHTML) $('try').hidden=(t!=='ask'); ['ask','ex','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t));
   $('form').hidden = S.ws || (S.stat && t==='ask'); document.querySelector('.keys').hidden = $('form').hidden || S.mode==='byok';
   ({ask:S.stat?setupView:askView,ex:exView,ev:trustView,data:()=>S.ws?wsLoadList().then(dataView):setupView()})[t](); }
 function match(text){

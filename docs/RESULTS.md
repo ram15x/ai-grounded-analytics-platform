@@ -120,6 +120,29 @@ docs/WRITEUP.md). Open items are listed under "What I'd do next"; none is in pro
 | Auth, deployment | No sign-in. The recorded view is deployed to GitHub Pages (static, no model calls); uploads (`--workspace`, loopback only) and the key-based tryout (`--byok`) run locally. |
 | Evals and benchmark scores | Does not exist. The measurements above are small single-author screens with their n, not benchmarks. **No accuracy figure is claimed.** |
 
+## Page citations on a real PDF (2026-11-22)
+
+One real, public PDF, not written for this project: "Attention Is All You Need" (arXiv 1706.03762,
+15 pages, two-column paper with tables and figures). It was ingested with the same code path as
+`docs ingest`, into a scratch Postgres.
+
+- Text was found on all 15 pages; the page offsets matched the stored text exactly, so pages are shown.
+- 56 chunks; **56 of 56 carry a page range.** No model and no key were used.
+- Seven phrases whose page was read from the PDF itself were each cited to that page: abstract
+  figure (p. 1), "Scaled Dot-Product Attention" (p. 4), "Multi-Head Attention" (pp. 2 and 4),
+  "Positional Encoding" (p. 6), "Adam optimizer" (p. 7), "Attention Visualizations" (p. 13), the
+  conclusion (p. 10). **7 of 7 matched.**
+- This checks the page labels, not answer quality: no question was asked of this document. Table
+  contents come out of the PDF in whatever order it stores them, so a figure in a table can sit in
+  an odd place in the text. Scanned PDFs are refused (no OCR). Only this one document was tried; a
+  second document (an IRS publication) could not be fetched.
+
+## Not measured
+
+- **OpenRouter and Gemini rate-limit headroom.** The headroom probe was measured on Groq only
+  (about 8,000 tokens a minute, 200k a day). No OpenRouter or Gemini key was supplied, so their
+  limits are not measured here; for those the page says it cannot tell instead of guessing.
+
 ## About the mutation tests
 
 `tests/test_mutations.py` takes a fully verified answer, changes one number (a digit, the scale,

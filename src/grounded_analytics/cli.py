@@ -113,7 +113,7 @@ def render(report: Report | TemplateReport) -> str:
 
 
 def cmd_docs_ingest(args: argparse.Namespace) -> int:
-    from .documents.store import ingest, read_document  # noqa: PLC0415
+    from .documents.store import ingest, page_starts, read_document  # noqa: PLC0415
     from .documents.untrusted import scan  # noqa: PLC0415
     from .warehouse.load import READONLY_ROLE_DEFAULT  # noqa: PLC0415
 
@@ -127,6 +127,7 @@ def cmd_docs_ingest(args: argparse.Namespace) -> int:
         print("error: no .md, .txt or .pdf files found", file=sys.stderr)
         return 2
     docs = [(f, *read_document(f)) for f in files]  # every file is checked before connecting
+    pages = {f: page_starts(f.name, f.read_bytes()) for f in files}
     admin_url = admin_database_url()
     role = args.reader_role or READONLY_ROLE_DEFAULT
     with psycopg.connect(admin_url, **connect_kwargs(admin_url)) as conn:
@@ -140,6 +141,7 @@ def cmd_docs_ingest(args: argparse.Namespace) -> int:
                 args.max_chars,
                 reader_role=role,
                 sensitivity=args.sensitivity,
+                pages=pages[f],
             )
             state = "stored" if r.changed else "unchanged"
             print(f"{state:<9} {r.doc_key} ({r.chunks} chunks)")

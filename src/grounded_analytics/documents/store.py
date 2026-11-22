@@ -41,6 +41,8 @@ class Hit:
     char_end: int
     text: str
     score: float
+    page_first: int | None = None  # PDF pages the passage spans (1-based); None for other files
+    page_last: int | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,7 @@ def ingest(
     max_chars: int = DEFAULT_MAX_CHARS,
     reader_role: str | None = None,
     sensitivity: str = "internal",
+    pages: list[tuple[int, int]] | None = None,
 ) -> IngestResult:
     """Store one document and its chunks in one transaction. Same text and size: no change."""
     if sensitivity not in ("public", "internal"):
@@ -98,6 +101,7 @@ def ingest(
     text = normalize_text(raw_text)
     spans = chunk_text(text, max_chars)
     digest = sha256_hex(text)
+    span_pages = [chunk_pages(pages, sp.start, sp.end) for sp in spans]
     with conn.transaction():
         _ensure_schema(conn)
         row = conn.execute(
@@ -136,6 +140,12 @@ def ingest(
                 "UPDATE docs.documents SET sensitivity = %s WHERE doc_key = %s",
                 (sensitivity, doc_key),
             )
+        with conn.cursor() as cur:  # page numbers are bookkeeping: they never change a chunk
+            cur.executemany(
+                "UPDATE docs.chunks SET page_first = %s, page_last = %s "
+                "WHERE doc_key = %s AND ordinal = %s",
+                [(a, b, doc_key, i) for i, (a, b) in enumerate(span_pages)],
+            )
         if reader_role:
             _grant_reader(conn, reader_role)
     return IngestResult(doc_key, len(spans), not same_chunks or sens_changed)
@@ -149,11 +159,26 @@ def key_from_filename(name: str) -> str:
 MAX_PDF_PAGES = 300
 
 
-def pdf_text(raw: bytes, name: str = "file.pdf") -> str:
-    """The text layer of a PDF, page by page. This reads text that is already in the file; it does
-    NOT recognise text in a scanned image (no OCR is available), and says so when a file has none.
-    Column order and table layout in the extracted text are whatever the PDF stores, so a figure
-    from a table can sit in an odd place: it is still only ever cited from the stored text."""
+def chunk_pages(
+    pages: list[tuple[int, int]] | None, start: int, end: int
+) -> tuple[int | None, int | None]:
+    """(first, last) page of the characters start..end, from (page number, start offset) pairs."""
+    if not pages:
+        return None, None
+
+    def page_at(pos: int) -> int:
+        found = pages[0][0]
+        for number, offset in pages:
+            if offset > pos:
+                break
+            found = number
+        return found
+
+    return page_at(start), page_at(max(start, end - 1))
+
+
+def pdf_pages(raw: bytes, name: str = "file.pdf") -> list[tuple[int, str]]:
+    """(page number, text) for every page with text, 1-based, in file order."""
     import io  # noqa: PLC0415
 
     from pypdf import PdfReader  # noqa: PLC0415
@@ -165,10 +190,37 @@ def pdf_text(raw: bytes, name: str = "file.pdf") -> str:
             raise DocumentError(f"{name}: the PDF is password-protected")
         if len(reader.pages) > MAX_PDF_PAGES:
             raise DocumentError(f"{name}: more than {MAX_PDF_PAGES} pages")
-        pages = [(p.extract_text() or "").strip() for p in reader.pages]
+        pages = [(i, (p.extract_text() or "").strip()) for i, p in enumerate(reader.pages, 1)]
     except (PyPdfError, ValueError, OSError, KeyError, RecursionError) as exc:
         raise DocumentError(f"{name}: cannot read this PDF ({type(exc).__name__})") from exc
-    text = "\n\n".join(p for p in pages if p)
+    return [(i, t) for i, t in pages if t]
+
+
+def page_starts(name: str, raw: bytes) -> list[tuple[int, int]] | None:
+    """(page number, offset in the stored text) for a PDF, or None for any other file or when the
+    offsets cannot be matched exactly to the stored text (then no page is shown, never a guess)."""
+    if not name.lower().endswith(".pdf"):
+        return None
+    pages = pdf_pages(raw, name)
+    text = normalize_text(pdf_text(raw, name))
+    out, pos = [], 0
+    for number, t in pages:
+        piece = normalize_text(t) if t.strip() else t
+        if number == pages[0][0]:
+            piece = piece.lstrip("\ufeff")
+        if text[pos : pos + len(piece)] != piece:
+            return None
+        out.append((number, pos))
+        pos += len(piece) + 2  # the blank line between pages
+    return out
+
+
+def pdf_text(raw: bytes, name: str = "file.pdf") -> str:
+    """The text layer of a PDF, page by page. This reads text that is already in the file; it does
+    NOT recognise text in a scanned image (no OCR is available), and says so when a file has none.
+    Column order and table layout in the extracted text are whatever the PDF stores, so a figure
+    from a table can sit in an odd place: it is still only ever cited from the stored text."""
+    text = "\n\n".join(t for _, t in pdf_pages(raw, name))
     if len(text) < 20:
         raise DocumentError(
             f"{name}: no text found in this PDF. It may be a scan (an image of a page); reading "
@@ -253,7 +305,7 @@ def search(
     )
     stmt = (
         f"SELECT c.doc_key, d.title, c.ordinal, c.char_start, c.char_end, c.text, "
-        f"c.text_sha256, ts_rank_cd(c.{col}, q.query, 32) AS score "
+        f"c.text_sha256, ts_rank_cd(c.{col}, q.query, 32) AS score, c.page_first, c.page_last "
         f"FROM docs.chunks c JOIN docs.documents d USING (doc_key), "
         f"(SELECT {parse} AS query) AS q "
         f"WHERE c.{col} @@ q.query "
@@ -265,7 +317,18 @@ def search(
         args = (query[:500], doc_prefix, k) if doc_prefix else (query[:500], k)
         rows = conn.execute(stmt, args).fetchall()
     return [
-        Hit(make_passage_id(r[0], r[2], r[6]), r[0], r[1], r[2], r[3], r[4], r[5], float(r[7]))
+        Hit(
+            make_passage_id(r[0], r[2], r[6]),
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            r[4],
+            r[5],
+            float(r[7]),
+            r[8],
+            r[9],
+        )
         for r in rows
     ]
 

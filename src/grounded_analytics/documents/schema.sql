@@ -35,3 +35,7 @@ BEGIN
             CHECK (sensitivity IN ('public', 'internal'));
     END IF;
 END $$;
+
+-- PDF page numbers of each chunk (1-based, first and last). NULL for Markdown and text files.
+ALTER TABLE docs.chunks ADD COLUMN IF NOT EXISTS page_first integer;
+ALTER TABLE docs.chunks ADD COLUMN IF NOT EXISTS page_last integer;

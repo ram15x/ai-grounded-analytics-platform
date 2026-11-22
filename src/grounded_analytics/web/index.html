@@ -328,7 +328,11 @@ function locate(x, v){
 function noteOf(x, v){
   const loc = locate(x, v), tn = tone(v);
   if(tn==='x') return ['Not tied', v.detail || 'This figure did not match the data.'];
-  if(v.verdict==='VERIFIED_QUOTE') return ['Quoted from a stored passage', 'The wording appears in a passage the model was shown.'];
+  if(v.verdict==='VERIFIED_QUOTE'){
+    // a page is named only when exactly one shown passage holds this figure and it has a page
+    const ps = Object.values((x.evidence&&x.evidence.passages)||{}).filter(p=>p.text&&p.text.includes(v.text));
+    const pg = ps.length===1 && ps[0].page ? ` From ${ps[0].page} of the document.` : '';
+    return ['Quoted from a stored passage', 'The wording appears in a passage the model was shown.'+pg]; }
   if(v.verdict==='VERIFIED_DERIVED') return ['Derived from tied figures', v.detail || 'Computed from figures that are themselves tied.'];
   if(loc) return ['Tied to the query result', `${loc.column}${loc.label?' for '+loc.label:''} is ${loc.cell}. Shown as ${v.text}.`];
   return ['Tied to its source', v.detail || 'It matches the stored source.'];
@@ -374,7 +378,7 @@ function support(x, sel){
   }
   if(ev.passages){
     const needles = v && v.verdict==='VERIFIED_QUOTE' ? [v.text] : sorted.filter(a=>a.verdict==='VERIFIED_QUOTE').map(a=>a.text);
-    h += Object.entries(ev.passages).map(([l,p])=>`<span class="pid">${esc(l)}, ${esc(p.id)}</span><p class="pas">${hl(p.text,needles)}</p>`).join('');
+    h += Object.entries(ev.passages).map(([l,p])=>`<span class="pid">${esc(l)}, ${esc(p.id)}${p.page?', '+esc(p.page):''}</span><p class="pas">${hl(p.text,needles)}</p>`).join('');
   }
   if(x.restatement) h += `<p class="words"><b>The query, in words.</b> ${esc(x.restatement)}</p>`;
   if(acct.tokens_used) h += `<p class="words"><b>Model use.</b> ${acct.calls_ok||'?'} call(s), ${Number(acct.tokens_used).toLocaleString()} tokens${acct.prompt_tokens?` (${Number(acct.prompt_tokens).toLocaleString()} prompt, ${Number(acct.completion_tokens||0).toLocaleString()} completion)`:''}.</p>`;

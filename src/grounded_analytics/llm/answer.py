@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import ValidationError
@@ -45,6 +45,7 @@ class Retrieved:
 
     passages: list[PassageIn]
     sensitivity: str = "internal"
+    pages: dict[str, str] = field(default_factory=dict)  # passage id -> "p. 3" (PDFs only)
 
 
 Retriever = Callable[[str], Retrieved]
@@ -54,6 +55,12 @@ def docs_dataset(sensitivity: str) -> str:
     """The dataset tag the router resolves: docs.public is tagged public in router.yaml and
     docs.internal is not tagged, so hosted providers refuse it."""
     return "docs.public" if sensitivity == "public" else "docs.internal"
+
+
+def page_label(first: int | None, last: int | None) -> str:
+    if not first:
+        return ""
+    return f"p. {first}" if not last or last == first else f"pp. {first}-{last}"
 
 
 def make_retriever(readonly_url: str, k: int = 3, search_fn: Search | None = None) -> Retriever:
@@ -66,7 +73,9 @@ def make_retriever(readonly_url: str, k: int = 3, search_fn: Search | None = Non
         sens = document_sensitivities(readonly_url, [h.doc_key for h in hits])
         public = bool(hits) and all(sens.get(h.doc_key) == "public" for h in hits)
         return Retrieved(
-            [PassageIn(h.passage_id, h.text) for h in hits], "public" if public else "internal"
+            [PassageIn(h.passage_id, h.text) for h in hits],
+            "public" if public else "internal",
+            {h.passage_id: page_label(h.page_first, h.page_last) for h in hits if h.page_first},
         )
 
     return retrieve
@@ -188,6 +197,7 @@ def answer_question(
     if kwargs:
         done.evidence["passages"] = {
             label: {"id": pid, "text": kwargs["passages"].texts.get(pid, "")}
+            | ({"page": found.pages[pid]} if found.pages.get(pid) else {})
             for label, pid in result.passage_labels.items()
         }
     return done

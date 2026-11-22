@@ -172,6 +172,7 @@ class Workspace:
             DocumentError,
             ingest,
             key_from_filename,
+            page_starts,
             read_document_bytes,  # noqa: PLC0415
         )
         from ..documents.untrusted import scan  # noqa: PLC0415
@@ -186,7 +187,8 @@ class Workspace:
             key = (prefix + key_from_filename(filename))[:64].rstrip("-_")
             with psycopg.connect(self.admin_url, **connect_kwargs(self.admin_url)) as conn:
                 r = ingest(conn, key, title, Path(filename).name, text,
-                           reader_role=self.readonly_role, sensitivity=sensitivity)  # fmt: skip
+                           reader_role=self.readonly_role, sensitivity=sensitivity,
+                           pages=page_starts(Path(filename).name, raw))  # fmt: skip
         except DocumentError as exc:
             raise WorkspaceError(str(exc)) from exc
         return {

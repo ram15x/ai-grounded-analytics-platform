@@ -98,7 +98,7 @@ On Windows PowerShell, set variables with `$env:NAME = "value"`.
 | `grounded verify answer.json` | Check a hand-written answer against the warehouse | Postgres |
 
 The sample warehouse is the UCI *Online Retail* dataset: `grounded load --download`, then
-`grounded docs ingest corpus/synthetic` for the sample documents.
+`grounded docs ingest corpus/synthetic --sensitivity public` for the sample documents (public, so a hosted model may read them).
 
 ## Configuration
 

@@ -551,7 +551,7 @@ async function tryAsk(tier,question){
 }
 async function tryInit(){
   try{ T.cfg=await (await fetch('/api/tryout')).json(); }catch(e){ return; }
-  $('form').hidden=true; $('try').hidden=false; tryRender();
+  $('form').hidden=true; $('try').hidden=(S.tab&&S.tab!=='ask'); tryRender();
 }
 
 /* ---------- your data (local only) ---------- */

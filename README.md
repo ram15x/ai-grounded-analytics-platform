@@ -1,5 +1,7 @@
 # Verified Analyst
 
+Live recorded view: https://ram15x.github.io/verified-analyst/ (recorded runs only; see docs/HOSTING.md)
+
 An AI analyst for business teams. Ask a question in plain English about company data and documents. The planned answer shows the SQL used, the source passages, and a verdict for every number. Numbers are checked by deterministic code before display; unsupported claims are flagged, never guessed. Scheduled reports go out only after an approval step.
 
 **Current status: the deterministic core exists; three hosted providers, document retrieval, a router and a passage label binder have been run on small, single-author sets. There is no agent loop, no UI and no deployment. Every figure below is read from a report in `data/live_runs/` (git-ignored; the run folder is named next to each figure), carries its n, and is not an accuracy claim: one author wrote the questions, the semantic layer and the synthetic documents.**

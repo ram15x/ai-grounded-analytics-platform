@@ -1,7 +1,16 @@
 # Hosting
 
-Status: written, not deployed. Nothing here has run on a host yet. I can't create accounts
-for you, so the last step is yours.
+Status: the recorded view is live at https://ram15x.github.io/verified-analyst/ (GitHub Pages,
+free, no card, rebuilt by `.github/workflows/pages.yml` on every push to `main`). I loaded it in
+Chrome and saw the page and the bundled fonts render. Live questions (Option B) are not deployed.
+
+## Option 0 (done): static page on GitHub Pages
+
+`va serve --build-static DIR` writes one HTML page with the recorded runs embedded, plus the two
+fonts and their licenses. The page re-runs its checks in the browser against the recorded model
+replies; it cannot ask a model anything. No server, no key, nothing stored. Limit: it only
+shows what was recorded. I did not test it on phones or in other browsers.
+
 
 ## What I measured and what I did not
 
@@ -12,7 +21,7 @@ for you, so the last step is yours.
 | `docker build` of the Dockerfile | **Not run.** The sandbox has the docker CLI but no daemon. The steps are the same ones I ran by hand, but the image itself is unbuilt. |
 | Live questions (`--byok`) on a host | Not run. Needs Postgres, the seeded warehouse, and memory I have not measured. |
 
-## Option A (recommended for today): recorded view on Render's free tier
+## Option A (not used): recorded view on Render's free tier
 
 What visitors get: the recorded runs, the verification view, the trust page. No key, no database,
 no cost, nothing to leak. Live questions are off and the page says so.

@@ -41,6 +41,17 @@ Proved on a second, differently shaped synthetic dataset (subscriptions): 6 of 6
 reconciled and a scripted run was verified. **Not measured:** how well any real model plans questions
 on uploaded data, and whether any local model is usable on a 4 GB GPU.
 
+**Measured on 2026-11-22, on the author's Windows machine, real Groq key, `openai/gpt-oss-20b`:**
+- Uploaded the subscriptions CSV through the browser; 1,200 rows loaded, the email column left out,
+  the known figure 1,200 reconciled ("matches").
+- "How many subscriptions are there?" came back verified: "There are 1,200 subscriptions", with the
+  SQL shown, 4 model calls, 4,196 tokens. One question, not a benchmark.
+- "What is the total MRR?" was withheld (out of scope), correctly: no MRR number had been approved.
+  The page first printed `[object Object]` for the reason; fixed.
+- Key headroom: Groq's model-list call carries no rate-limit headers (observed), so the check now
+  makes one capped chat call (93 tokens measured) and reads them: 8,000 tokens per minute, remaining
+  count shown. OpenRouter and Gemini headroom are untested. A daily cap is not in those headers.
+
 ## Decisions worth reading
 Pre-registered evals with locked held-out sets (ADR-0009 to 0013), a sensitivity rule so only public
 data reaches hosted models, cassettes so tests never call a network, and an offline gate that fails
@@ -48,5 +59,7 @@ the build if a verified figure has no trace to its stored cell or passage.
 
 ## Limits
 Verification shows a figure matches its source, not that the source answers the question. The free
-Groq plan caps tokens per day (200,000, measured once), which limits live runs. Nothing is deployed;
-the web view is local and replays recordings. Single user, no sign-in.
+Groq plan caps tokens per day (200,000, measured once), which limits live runs. Only the recorded
+view is deployed (GitHub Pages, static, no model calls); uploads and the key-based tryout run
+locally. Single user, no sign-in. Not run: the locked held-out eval, real-world PDFs, the Docker
+image build.

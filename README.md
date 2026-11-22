@@ -37,6 +37,10 @@ Router and injection probes (`va route probe`, Groq `openai/gpt-oss-20b`, 12 dev
 
 ## Status
 
+**Project closed on 2026-11-22.** Last checked on a real machine with a real Groq key: upload,
+reconcile, a verified answer, a correct refusal, and key headroom all worked (details in
+docs/WRITEUP.md). Open items are listed under "What I'd do next"; none is in progress.
+
 | Area | State |
 |---|---|
 | Research, architecture, ADRs | Done, see [docs/RESEARCH.md](docs/RESEARCH.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
@@ -68,11 +72,13 @@ answers the wrong question). Likewise the pandas oracle and the fixture are synt
 
 ## What I'd do next
 
-- **Phase 3:** orchestration (planner, executor and verifier as separate steps with approval), an approval step before any scheduled report goes out, and n8n scheduling.
-- **Phase 4:** evals with a held-out set written before tuning, and CI gates on the deterministic parts (verifier, SQL guard, semantic layer) and on replayed model calls; observability.
-- **Phase 5:** a UI that shows the SQL, the passages and a verdict per number, deployment, a demo video and a write-up.
-
-Before those, the open items above: composer-written labels against the binder, the empty replies on Groq, and a second author for the questions.
+Not started, in the order I would take them:
+- Run the locked held-out eval once per model (needs Groq quota; dev runs T1-11, T1-13 to T1-15 first).
+- Test real-world PDFs (multi-column, tables) and add page numbers to document citations.
+- Check key headroom on OpenRouter and Gemini (only Groq is measured).
+- Build and run the Docker image (the sandbox had no Docker daemon).
+- Sign-in and per-user separation, which uploads need before they could be hosted.
+- Record the demo video (script: docs/DEMO_SCRIPT.md).
 
 ## Build phases
 

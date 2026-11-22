@@ -1,7 +1,7 @@
 import urllib.request
 
-from verified_analyst.web import app
-from verified_analyst.web.app import load_payload, static_page
+from grounded_analytics.web import app
+from grounded_analytics.web.app import load_payload, static_page
 
 
 def test_payload_shape_and_static_page():
@@ -12,7 +12,7 @@ def test_payload_shape_and_static_page():
             s, e = v["span"]
             assert x["rendered"][s:e] == v["text"]  # highlight spans line up with the text
     html = static_page(p)
-    assert "/*DATA*/" not in html and "Verified Analyst" in html
+    assert "/*DATA*/" not in html and "AI Grounded Analytics Platform" in html
 
 
 def test_no_recording_is_not_shown_as_abstain():
@@ -25,7 +25,7 @@ def _server(ask_fn=None):
     import threading
     from http.server import ThreadingHTTPServer
 
-    from verified_analyst.web import app
+    from grounded_analytics.web import app
 
     app._Handler.payload = app.load_payload()
     app._Handler.ask_fn = staticmethod(ask_fn) if ask_fn else None
@@ -101,7 +101,7 @@ def test_page_has_no_canned_sample_questions_for_uploaded_data():
 def test_build_static_writes_a_page_that_works_under_a_subpath(tmp_path):
     import argparse
 
-    from verified_analyst import cli
+    from grounded_analytics import cli
 
     out = tmp_path / "site"
     rc = cli.cmd_serve(argparse.Namespace(build_static=str(out)))

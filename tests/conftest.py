@@ -1,7 +1,7 @@
-"""Shared fixtures. Database tests run only when VA_TEST_DATABASE_URL points at a
+"""Shared fixtures. Database tests run only when GA_TEST_DATABASE_URL points at a
 Postgres server where the test user may create databases and roles, e.g.
 
-    VA_TEST_DATABASE_URL="host=localhost port=5432 user=postgres dbname=postgres password=..."
+    GA_TEST_DATABASE_URL="host=localhost port=5432 user=postgres dbname=postgres password=..."
 
 The URL comes from the environment; nothing here stores a credential.
 """
@@ -18,8 +18,8 @@ import psycopg
 import pytest
 from psycopg.conninfo import make_conninfo
 
-from verified_analyst.warehouse.load import load_file, read_raw
-from verified_analyst.warehouse.normalize import Normalized
+from grounded_analytics.warehouse.load import load_file, read_raw
+from grounded_analytics.warehouse.normalize import Normalized
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mini_retail.csv"
 
@@ -35,10 +35,10 @@ class Warehouse:
 
 def _db_skip_reason() -> str | None:
     """None when database tests can run; otherwise the reason they are skipped."""
-    base = os.environ.get("VA_TEST_DATABASE_URL")
+    base = os.environ.get("GA_TEST_DATABASE_URL")
     if not base:
         return (
-            "database tests skipped: set VA_TEST_DATABASE_URL to a Postgres server where the "
+            "database tests skipped: set GA_TEST_DATABASE_URL to a Postgres server where the "
             "user may create databases and roles (see tests/conftest.py)"
         )
     try:
@@ -46,7 +46,7 @@ def _db_skip_reason() -> str | None:
             pass
     except psycopg.Error as exc:
         first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-        return f"database tests skipped: VA_TEST_DATABASE_URL is set but not reachable ({first})"
+        return f"database tests skipped: GA_TEST_DATABASE_URL is set but not reachable ({first})"
     return None
 
 
@@ -57,10 +57,10 @@ def pytest_collection_modifyitems(config, items):
     reason = _db_skip_reason()
     if reason is None:
         return
-    if os.environ.get("VA_REQUIRE_DB") == "1":
+    if os.environ.get("GA_REQUIRE_DB") == "1":
         raise pytest.UsageError(
             reason.replace(
-                "database tests skipped", "VA_REQUIRE_DB=1 but the test database is unusable"
+                "database tests skipped", "GA_REQUIRE_DB=1 but the test database is unusable"
             )
             + f" [{len(db_items)} database tests would have been skipped]"
         )
@@ -97,7 +97,7 @@ def raw_fixture() -> pd.DataFrame:
 
 def _make_warehouse(base: str, csv_path: Path) -> tuple[Warehouse, callable]:
     suffix = secrets.token_hex(4)
-    dbname, role = f"va_test_{suffix}", f"va_ro_{suffix}"
+    dbname, role = f"ga_test_{suffix}", f"ga_ro_{suffix}"
     password = secrets.token_urlsafe(16)
     with psycopg.connect(base, autocommit=True) as admin:
         admin.execute(f'CREATE DATABASE "{dbname}"')
@@ -118,9 +118,9 @@ def _make_warehouse(base: str, csv_path: Path) -> tuple[Warehouse, callable]:
 
 @pytest.fixture(scope="session")
 def warehouse():
-    base = os.environ.get("VA_TEST_DATABASE_URL")
+    base = os.environ.get("GA_TEST_DATABASE_URL")
     if not base:
-        pytest.skip("VA_TEST_DATABASE_URL not set")
+        pytest.skip("GA_TEST_DATABASE_URL not set")
     wh, cleanup = _make_warehouse(base, FIXTURE)
     yield wh
     cleanup()
@@ -129,9 +129,9 @@ def warehouse():
 @pytest.fixture(scope="session")
 def warehouse_factory(tmp_path_factory):
     """Build extra warehouses from hand-written raw frames (for hand-checked tests)."""
-    base = os.environ.get("VA_TEST_DATABASE_URL")
+    base = os.environ.get("GA_TEST_DATABASE_URL")
     if not base:
-        pytest.skip("VA_TEST_DATABASE_URL not set")
+        pytest.skip("GA_TEST_DATABASE_URL not set")
     cleanups = []
 
     def make(frame: pd.DataFrame) -> Warehouse:
@@ -158,14 +158,14 @@ def docs_db():
     """A scratch database with the `docs` schema filled from corpus/synthetic and a read-only role.
 
     Tests that change documents use their own `doc_key` and remove it again."""
-    from verified_analyst.documents.store import ingest, read_document
-    from verified_analyst.warehouse.load import setup_readonly_role
+    from grounded_analytics.documents.store import ingest, read_document
+    from grounded_analytics.warehouse.load import setup_readonly_role
 
-    base = os.environ.get("VA_TEST_DATABASE_URL")
+    base = os.environ.get("GA_TEST_DATABASE_URL")
     if not base:
-        pytest.skip("VA_TEST_DATABASE_URL not set")
+        pytest.skip("GA_TEST_DATABASE_URL not set")
     suffix = secrets.token_hex(4)
-    dbname, role = f"va_docs_{suffix}", f"va_docs_ro_{suffix}"
+    dbname, role = f"ga_docs_{suffix}", f"ga_docs_ro_{suffix}"
     password = secrets.token_urlsafe(16)
     with psycopg.connect(base, autocommit=True) as admin:
         admin.execute(f'CREATE DATABASE "{dbname}"')
@@ -189,8 +189,8 @@ def vector_db(docs_db):
     """docs_db with the pgvector tables and fake embeddings for every chunk (model id fake:256).
 
     Skipped, with the reason, on a Postgres that has no pgvector (for example plain postgres:16)."""
-    from verified_analyst.documents.embed import FakeEmbedder
-    from verified_analyst.documents.vectorstore import (
+    from grounded_analytics.documents.embed import FakeEmbedder
+    from grounded_analytics.documents.vectorstore import (
         ensure_vector_schema,
         pending_chunks,
         store_embeddings,
@@ -211,12 +211,12 @@ def vector_db(docs_db):
 
 @pytest.fixture
 def default_reader_role(docs_db):
-    """The default read-only role name (`va_readonly`), created for the test when the server has
+    """The default read-only role name (`ga_readonly`), created for the test when the server has
     none and removed afterwards. A role that already exists (a developer's real one) is left alone
     and only the grants this test made in the scratch database are removed."""
-    from verified_analyst.warehouse.load import READONLY_ROLE_DEFAULT as role
+    from grounded_analytics.warehouse.load import READONLY_ROLE_DEFAULT as role
 
-    base = os.environ["VA_TEST_DATABASE_URL"]
+    base = os.environ["GA_TEST_DATABASE_URL"]
     with psycopg.connect(base, autocommit=True) as c:
         existed = c.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone()
         if not existed:
@@ -234,4 +234,4 @@ def default_reader_role(docs_db):
 def _isolate_data_dir(tmp_path_factory, monkeypatch):
     """The daily token tally reads data/live_runs. Point it at an empty folder so that a
     developer's own reports never change a test result (tests that need reports pass roots)."""
-    monkeypatch.setenv("VA_DATA_DIR", str(tmp_path_factory.mktemp("data")))
+    monkeypatch.setenv("GA_DATA_DIR", str(tmp_path_factory.mktemp("data")))

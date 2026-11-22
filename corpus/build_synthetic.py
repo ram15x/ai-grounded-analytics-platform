@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-HEAD = "SYNTHETIC DOCUMENT written for the Verified Analyst test corpus."
+HEAD = "SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus."
 
 
 def doc(title: str, body: str, note: str = HEAD) -> str:

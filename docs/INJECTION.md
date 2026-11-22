@@ -30,8 +30,8 @@ reduces it, and what is not covered. No real model has been run against any of t
    says text was withheld and why.
 4. **Rules** (`PASSAGE_RULES`, version `passages.v1`). The text to put in the model prompt: passages
    are quoted data, instructions inside them are not for the model, cite only text that is shown.
-5. **Output hygiene.** `va docs search` prints titles through `printable` (terminal escapes and
-   invisible characters shown as U+FFFD) and marks flagged passages; `va docs ingest` warns about
+5. **Output hygiene.** `grounded docs search` prints titles through `printable` (terminal escapes and
+   invisible characters shown as U+FFFD) and marks flagged passages; `grounded docs ingest` warns about
    flagged documents. Stored text is never altered.
 
 ## Known limits
@@ -68,5 +68,5 @@ each of the five hostile documents through the whole path: none of its answers v
 
 What 2e does **not** change: the scanner is still a list of patterns, prose is still unchecked, a
 real quote still verifies as a quote, and the binder is a heuristic. Whether a real model obeys the
-rules is measured only by `va route probe` (injection section: replies that contain a string the
+rules is measured only by `grounded route probe` (injection section: replies that contain a string the
 hostile document asked for, as raw counts), which the owner runs. Until that is run, it is unmeasured.

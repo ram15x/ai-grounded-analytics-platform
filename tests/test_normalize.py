@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from verified_analyst.warehouse.normalize import RAW_COLUMNS, classify_line, normalize
+from grounded_analytics.warehouse.normalize import RAW_COLUMNS, classify_line, normalize
 
 
 @pytest.mark.parametrize(

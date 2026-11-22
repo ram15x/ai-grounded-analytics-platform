@@ -1,4 +1,4 @@
-"""Warehouse tests against a real Postgres (skipped without VA_TEST_DATABASE_URL)."""
+"""Warehouse tests against a real Postgres (skipped without GA_TEST_DATABASE_URL)."""
 
 import psycopg
 import pytest

@@ -1,4 +1,4 @@
-"""`va route probe` with mocked HTTP only, plus the guards that keep the locked router questions
+"""`grounded route probe` with mocked HTTP only, plus guards that keep the locked router questions
 away from prompt tuning. No real provider is contacted and nothing here measures a model."""
 
 from __future__ import annotations
@@ -10,12 +10,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+from grounded_analytics.cli import catalogue
+from grounded_analytics.llm import live, route_probe
+from grounded_analytics.llm.answer import Retrieved, make_retriever
+from grounded_analytics.llm.route_probe import (
+    RouteProbeOptions,
+    load_dev_questions,
+    run_route_probe,
+)
+from grounded_analytics.semantic import load_semantic_layer
 from llm_helpers import KEYS, ok_openai, settings, status
-from verified_analyst.cli import catalogue
-from verified_analyst.llm import live, route_probe
-from verified_analyst.llm.answer import Retrieved, make_retriever
-from verified_analyst.llm.route_probe import RouteProbeOptions, load_dev_questions, run_route_probe
-from verified_analyst.semantic import load_semantic_layer
 
 ROOT = Path(__file__).resolve().parents[1]
 RQ = ROOT / "eval" / "router_questions"
@@ -180,7 +184,7 @@ def test_a_non_public_document_stops_the_probe_before_it_is_sent(env, tmp_path):
 
 def test_the_probe_refuses_when_documents_are_not_tagged_public(tmp_path):
     cfg = settings(datasets={"analytics.sales_lines": "public"})
-    from verified_analyst.llm.types import SensitivityRefusal
+    from grounded_analytics.llm.types import SensitivityRefusal
 
     with pytest.raises(SensitivityRefusal):
         run_route_probe(
@@ -239,7 +243,7 @@ def test_no_product_code_or_prompt_reads_names_or_embeds_the_locked_router_file(
     for p in (ROOT / "src").rglob("*.py"):
         text = p.read_text("utf-8").replace("\\", "/")
         assert "router_questions/heldout" not in text, p
-    from verified_analyst.llm.prompts import PROMPT_TEMPLATES
+    from grounded_analytics.llm.prompts import PROMPT_TEMPLATES
 
     blob = " ".join(PROMPT_TEMPLATES.values()).lower()
     assert not [q["question"] for q in HELD["questions"] if q["question"].lower() in blob]
@@ -251,7 +255,7 @@ def test_the_probe_reads_only_the_dev_file():
     qs, inj = load_dev_questions()
     held = {q["question"] for q in HELD["questions"]}
     assert not held & ({q["question"] for q in qs} | {q["question"] for q in inj})
-    src = (ROOT / "src" / "verified_analyst" / "llm" / "route_probe.py").read_text("utf-8")
+    src = (ROOT / "src" / "grounded_analytics" / "llm" / "route_probe.py").read_text("utf-8")
     assert "heldout" not in src.lower() and "Locked" not in src
 
 
@@ -307,7 +311,7 @@ def test_nothing_is_recorded_unless_asked(env, tmp_path):
 
 @pytest.mark.db
 def test_record_writes_public_cassettes_with_a_clean_key_scan(env, tmp_path):
-    from verified_analyst.llm.cassette import read_entries
+    from grounded_analytics.llm.cassette import read_entries
 
     out = probe(env, Model(), tmp_path, max_requests=60, record=True)
     c = out["cassette"]
@@ -324,7 +328,7 @@ def test_record_writes_public_cassettes_with_a_clean_key_scan(env, tmp_path):
 
 
 def test_the_route_prompt_shows_each_reply_shape_and_one_example_per_route():
-    from verified_analyst.llm.prompts import ROUTE_SYSTEM
+    from grounded_analytics.llm.prompts import ROUTE_SYSTEM
 
     for shape in ('{"route": "data"}', '{"route": "documents"}', '{"route": "both"}'):
         assert ROUTE_SYSTEM.count(shape) == 2  # the shape list and the worked example
@@ -333,7 +337,7 @@ def test_the_route_prompt_shows_each_reply_shape_and_one_example_per_route():
 
 
 def test_route_examples_are_not_dev_or_held_out_questions_anywhere():
-    from verified_analyst.llm.prompts import PROMPT_TEMPLATES
+    from grounded_analytics.llm.prompts import PROMPT_TEMPLATES
 
     ex = re.findall(r"Example question: (.*)", PROMPT_TEMPLATES["route.v2"])
     assert len(ex) == 4
@@ -501,7 +505,7 @@ def test_injection_only_runs_just_the_five_injection_questions(env, tmp_path):
 
 
 def test_route_only_and_injection_only_cannot_be_combined(tmp_path):
-    from verified_analyst.config import ConfigError
+    from grounded_analytics.config import ConfigError
 
     with pytest.raises(ConfigError):
         run_route_probe(
@@ -570,7 +574,7 @@ def test_compare_runs_the_same_five_questions_once_per_setting(env, tmp_path):
 
 
 def test_compare_refuses_route_only(tmp_path):
-    from verified_analyst.config import ConfigError
+    from grounded_analytics.config import ConfigError
 
     with pytest.raises(ConfigError):
         route_probe.run_reasoning_compare(
@@ -679,7 +683,7 @@ def test_compare_does_not_start_the_second_run_when_the_first_was_given_up(env, 
 def test_the_report_records_tokens_spent_so_the_daily_tally_can_add_it_up(env, tmp_path):
     from datetime import UTC, datetime
 
-    from verified_analyst.llm import usage
+    from grounded_analytics.llm import usage
 
     out = probe(env, Model(), tmp_path, injection_only=True, max_requests=60)
     rep = out["report"]

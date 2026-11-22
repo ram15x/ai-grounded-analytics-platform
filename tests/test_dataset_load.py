@@ -6,23 +6,23 @@ import psycopg
 import pytest
 from psycopg.conninfo import make_conninfo
 
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.datasets import load as L
+from grounded_analytics.datasets import manifest as M
+from grounded_analytics.datasets.profile import profile_frame
+from grounded_analytics.guard import allowed_for, execute_guarded
 from test_dataset_manifest import DF, PROFILE, manifest  # noqa: I001
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.datasets import load as L
-from verified_analyst.datasets import manifest as M
-from verified_analyst.datasets.profile import profile_frame
-from verified_analyst.guard import allowed_for, execute_guarded
 
 pytestmark = pytest.mark.db
 
 
 @pytest.fixture(scope="module")
 def scratch():
-    base = os.environ.get("VA_TEST_DATABASE_URL")
+    base = os.environ.get("GA_TEST_DATABASE_URL")
     if not base:
-        pytest.skip("VA_TEST_DATABASE_URL not set")
+        pytest.skip("GA_TEST_DATABASE_URL not set")
     suffix = secrets.token_hex(4)
-    dbname, role, pw = f"va_ds_{suffix}", f"va_dsro_{suffix}", secrets.token_urlsafe(12)
+    dbname, role, pw = f"ga_ds_{suffix}", f"ga_dsro_{suffix}", secrets.token_urlsafe(12)
     with psycopg.connect(base, autocommit=True) as a:
         a.execute(f'CREATE DATABASE "{dbname}"')
         a.execute(f"CREATE ROLE \"{role}\" LOGIN PASSWORD '{pw}'")

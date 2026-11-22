@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from verified_analyst.documents.binding import CURRENT, check_binding
+from grounded_analytics.documents.binding import CURRENT, check_binding
 
 TEXT = (
     "The courier charge is 4.50 GBP per parcel. The scratch charge is 12 GBP. Returns in 28 days."
@@ -57,7 +57,7 @@ def test_calendar_words_are_not_entities():
 def test_explain_gives_label_sentence_window_and_missing_words_cut_to_200():
     import json
 
-    from verified_analyst.documents.binding import explain
+    from grounded_analytics.documents.binding import explain
 
     i, j = at("12")
     d = json.loads(explain("label_not_in_passage_window", "courier charge " * 30,

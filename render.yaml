@@ -3,9 +3,9 @@
 # Live questions (--byok) need Postgres and are NOT part of this file; see docs/HOSTING.md.
 services:
   - type: web
-    name: verified-analyst
+    name: ai-grounded-analytics-platform
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: sh -c 'va serve --host 0.0.0.0 --port ${PORT:-8000}'
+    dockerCommand: sh -c 'grounded serve --host 0.0.0.0 --port ${PORT:-8000}'
     healthCheckPath: /

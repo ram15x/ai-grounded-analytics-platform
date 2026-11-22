@@ -1,4 +1,4 @@
-"""`va docs probe` with fake and mocked models against real Postgres (pgvector for most tests)."""
+"""`grounded docs probe` with fake and mocked models on real Postgres (pgvector for most tests)."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from verified_analyst.cli import main
-from verified_analyst.documents.embed import FakeEmbedder
-from verified_analyst.documents.metrics import load_questions
-from verified_analyst.documents.probe import Paced, render_markdown, run_probe
-from verified_analyst.documents.settings import (
+from grounded_analytics.cli import main
+from grounded_analytics.documents.embed import FakeEmbedder
+from grounded_analytics.documents.metrics import load_questions
+from grounded_analytics.documents.probe import Paced, render_markdown, run_probe
+from grounded_analytics.documents.settings import (
     EmbedderSettings,
     RerankerSettings,
     RetrievalSettings,
 )
-from verified_analyst.documents.store import DocumentError, ingest
-from verified_analyst.llm.transport import HttpResponse
+from grounded_analytics.documents.store import DocumentError, ingest
+from grounded_analytics.llm.transport import HttpResponse
 
 ROOT = Path(__file__).parent.parent
 QUESTIONS = load_questions(ROOT / "eval" / "doc_questions" / "dev.yaml")[:12]
@@ -259,13 +259,13 @@ def test_pacing_waits_between_requests_only():
 
 
 def test_the_probe_path_never_names_the_locked_question_file():
-    for rel in ("src/verified_analyst/documents/probe.py", "src/verified_analyst/cli.py"):
+    for rel in ("src/grounded_analytics/documents/probe.py", "src/grounded_analytics/cli.py"):
         assert "heldout.yaml" not in (ROOT / rel).read_text("utf-8"), rel
 
 
 def test_cli_unknown_embedder_exits_2(monkeypatch, capsys):
-    monkeypatch.setenv("VA_DATABASE_URL", "postgresql://x/y")
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "postgresql://x/y")
+    monkeypatch.setenv("GA_DATABASE_URL", "postgresql://x/y")
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", "postgresql://x/y")
     assert main(["docs", "probe", "--embedder", "nope"]) == 2
     assert "unknown embedder" in capsys.readouterr().err
 
@@ -332,7 +332,7 @@ def test_probe_grants_the_default_read_only_role_when_none_is_given(vector_db, d
         admin_url=vector_db.admin_url, readonly_url=vector_db.readonly_url,
         questions=QUESTIONS, env={},
     )  # fmt: skip
-    assert default_reader_role == "va_readonly" and res.exit_code == 0
+    assert default_reader_role == "ga_readonly" and res.exit_code == 0
     with psycopg.connect(vector_db.admin_url) as c:
         assert c.execute(
             "SELECT has_schema_privilege(%s, 'docs', 'USAGE')", (default_reader_role,)

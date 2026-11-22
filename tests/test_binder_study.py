@@ -5,19 +5,19 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.documents import binder_locked as bl
-from verified_analyst.documents import binder_study as bs
-from verified_analyst.documents.binding import (
+from grounded_analytics.documents import binder_locked as bl
+from grounded_analytics.documents import binder_study as bs
+from grounded_analytics.documents.binding import (
     CURRENT,
     DEFAULT,
     NAMED,
     BinderConfig,
     check_binding,
 )
-from verified_analyst.documents.store import DocumentError
+from grounded_analytics.documents.store import DocumentError
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "verified_analyst"
+SRC = ROOT / "src" / "grounded_analytics"
 ADR = ROOT / "docs" / "adr" / "0011-binder-variants.md"
 
 TEXTS = [

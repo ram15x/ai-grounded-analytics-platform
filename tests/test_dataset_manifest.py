@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from verified_analyst.datasets import manifest as M
-from verified_analyst.datasets.profile import profile_frame
+from grounded_analytics.datasets import manifest as M
+from grounded_analytics.datasets.profile import profile_frame
 
 DF = pd.DataFrame(
     {
@@ -149,7 +149,7 @@ def test_exclusions_apply_to_every_metric():
 
 
 def test_a_dataset_layer_may_read_only_its_own_table():
-    from verified_analyst.guard import ALLOWED_RELATIONS, GuardError, allowed_for, validate_sql
+    from grounded_analytics.guard import ALLOWED_RELATIONS, GuardError, allowed_for, validate_sql
 
     layer = M.build_layer(manifest(), PROFILE)
     assert allowed_for(layer) == frozenset({"ds_shop.data"})

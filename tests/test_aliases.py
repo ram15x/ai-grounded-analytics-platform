@@ -20,9 +20,9 @@ from alias_cases import (
     prose_claims,
     template_claims,
 )
-from verified_analyst.claims import TemplateAnswer
-from verified_analyst.template import verify_template
-from verified_analyst.verifier import Verifier
+from grounded_analytics.claims import TemplateAnswer
+from grounded_analytics.template import verify_template
+from grounded_analytics.verifier import Verifier
 
 QS = alias_queries()
 

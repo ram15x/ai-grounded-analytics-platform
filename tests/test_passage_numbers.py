@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from verified_analyst.claims import TemplateAnswer
-from verified_analyst.documents.numbers import PassageNumbers
-from verified_analyst.documents.untrusted import PassageIn
-from verified_analyst.semantic import load_semantic_layer
-from verified_analyst.template import verify_template
+from grounded_analytics.claims import TemplateAnswer
+from grounded_analytics.documents.numbers import PassageNumbers
+from grounded_analytics.documents.untrusted import PassageIn
+from grounded_analytics.semantic import load_semantic_layer
+from grounded_analytics.template import verify_template
 
 PID = "terms#0." + "a" * 10
 TEXT = (

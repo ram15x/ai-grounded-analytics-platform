@@ -1,6 +1,6 @@
 # Customer service targets
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Every customer email receives a first reply within 24 hours on working days. Complaints are
 acknowledged within 1 working day and resolved within 3 working days. If a complaint cannot be

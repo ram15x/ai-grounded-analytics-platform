@@ -62,7 +62,7 @@ network, so it can be built and tested in full here.
 7. **Corpus.** Two sources. (a) A synthetic corpus written for the retail dataset, committed:
    policies, supplier notes, product memos that state checkable numbers, with deliberately
    conflicting, stale and hostile documents for tests. (b) The owner's own documents, ingested
-   locally with `va docs ingest`; those are never committed by this project and never sent to a
+   locally with `grounded docs ingest`; those are never committed by this project and never sent to a
    hosted model without an explicit flag.
 8. **No keys, no network in tests.** Embedding and reranker calls (2b, 2c) go through the router
    with mocked HTTP and cassettes, as in Phase 1. A cassette is not committed before review.
@@ -89,9 +89,9 @@ network, so it can be built and tested in full here.
 
 ## Slice 2a as built
 
-- `src/verified_analyst/documents/`: `chunker.py` (pure), `store.py` (ingest, search, stored
-  passages), `metrics.py` (pure), `schema.sql`. Commands: `va docs ingest | search | eval`.
-- Passage ids are `doc-key#ordinal.sha10`. `va verify` resolves them from the store, recomputes the
+- `src/grounded_analytics/documents/`: `chunker.py` (pure), `store.py` (ingest, search, stored
+  passages), `metrics.py` (pure), `schema.sql`. Commands: `grounded docs ingest | search | eval`.
+- Passage ids are `doc-key#ordinal.sha10`. `grounded verify` resolves them from the store, recomputes the
   chunk hash, checks the chunk against its document, and **ignores any passage text written in the
   answer file** (it says so on stderr). A forged passage, an edited document, an id for text that
   has since changed, and a chunk altered behind the store are all `UNSUPPORTED`; each has a test.
@@ -189,7 +189,7 @@ held-out file has not been scored.
   Jina-style rerank API and a local cross-encoder. No retries; errors map to short kinds; keys are
   redacted. Request shapes come from provider docs and are untried (docs/PHASE_2B_ASSUMPTIONS.md).
 - `documents/settings.py`, `config/retrieval.yaml`: the candidates. Nothing is chosen yet.
-- `va docs probe`: runs keyword, vector, hybrid and hybrid+rerank on the dev questions and writes a
+- `grounded docs probe`: runs keyword, vector, hybrid and hybrid+rerank on the dev questions and writes a
   report (docs/LIVE_RUNBOOK.md section 6). Hosted models see only public documents.
 - Tests use fake models and mocked HTTP only; the fake models test mechanics, not quality.
 
@@ -202,7 +202,7 @@ do on real documents. The held-out set is still locked and is not an independent
 With real Gemini vectors the owner saw vector search alone ahead of the default hybrid on the dev
 questions (recall@1 0.88 against 0.71, MRR 0.93 against 0.82; one run, one embedder). The default
 fuses keyword and vector rankings with equal weight, RRF constant 60 and 50 candidates each.
-`va docs probe --fusion-study` scores a fixed 27-setting grid (constant 10/30/60, depth 10/20/50,
+`grounded docs probe --fusion-study` scores a fixed 27-setting grid (constant 10/30/60, depth 10/20/50,
 keyword weight 1/0.5/0.25) plus both single methods on the same questions and reports each change
 against the default with a paired bootstrap interval. It selects nothing and the default has not
 been changed. A setting is worth considering only if the same direction shows up with a second
@@ -215,14 +215,14 @@ questions (AUC). Search never abstains by itself; no threshold is set.
 ### Held-out gate and the local reranker (slice 2c)
 
 ADR-0009 fixes three candidates before any held-out scoring: A vector-only, B hybrid (RRF constant
-10, 20 candidates, keyword weight 0.25) and the baseline default. `va docs heldout` scores only
+10, 20 candidates, keyword weight 0.25) and the baseline default. `grounded docs heldout` scores only
 those, once per embedder, from an ADR that is committed and unchanged; it prints per-question
 differences and applies no decision rule. The shipped default is unchanged. The held-out set is
 still locked to everything else and is still not an independent benchmark (same author, 12
 questions). The guard tests now allow exactly one module, `heldout_run.py`, to name the file.
 
 2c adds a local cross-encoder reranker through fastembed (feature, model names and sizes
-UNVERIFIED), measured by `va docs probe --reranker <name>` as reranked against unreranked on dev
+UNVERIFIED), measured by `grounded docs probe --reranker <name>` as reranked against unreranked on dev
 with bootstrap intervals. A hosted reranker keeps the same interface. 2d (injection handling) is below; 2e
 (the router agent) is next.
 
@@ -244,8 +244,8 @@ in the default pipeline; the interface stays; recheck on harder public data.
 
 `documents/untrusted.py`: a pattern scanner, delimited and withheld rendering for model prompts
 (`render_passages`, `PASSAGE_RULES` version `passages.v1`), and a verifier rule that a passage claim
-overlapping flagged text is `UNSUPPORTED` (`passage_span_flagged`). `va docs search` marks flagged
-passages and prints titles safely; `va docs ingest` warns. Tests: the five hostile corpus documents
+overlapping flagged text is `UNSUPPORTED` (`passage_span_flagged`). `grounded docs search` marks flagged
+passages and prints titles safely; `grounded docs ingest` warns. Tests: the five hostile corpus documents
 are flagged and no other corpus document is; an obedient attacker's answers are rejected while
 true facts in the same chunks still verify; the prompt block never contains the injected text.
 Limits are in docs/INJECTION.md: the scanner is heuristic, a quote that really is in a document
@@ -282,7 +282,7 @@ non-initial word in that sentence that is not a label word must occur in the cit
 (`entity_not_in_passage`). Stemming is a simple suffix strip. This catches a number moved to a
 neighbouring subject or an entity the passage never names. It does not understand meaning: a
 label that really is near a number but means something else passes, and a legitimate paraphrase
-can be refused. It also applies to every passage claim, including those from `va verify`.
+can be refused. It also applies to every passage claim, including those from `grounded verify`.
 
 **Sensitivity.** Each retrieval returns the sensitivity of its documents (public only if every
 document is public). The compose request carries the dataset tag `docs.public` (tagged public in
@@ -305,7 +305,7 @@ mixed batch counts as internal), retrieval with the fake embedder, and each of t
 documents with an obedient attacker composer. `tests/test_binding.py` and
 `tests/test_passage_numbers.py` cover the binder and the placeholders.
 
-**Probe.** `va route probe` is in docs/LIVE_RUNBOOK.md section 7. Questions:
+**Probe.** `grounded route probe` is in docs/LIVE_RUNBOOK.md section 7. Questions:
 `eval/router_questions/dev.yaml` (12 router questions: 3 data, 3 documents, 3 both, 3 abstain;
 plus 5 injection questions, one per hostile document) and `heldout.yaml` (12, locked, same mix).
 Nothing in `src` names the locked file; a guard test checks that, that no question is shared with
@@ -323,7 +323,7 @@ history. The run counts were not a measurement of the router's quality.
 
 ### Binder study (R1 variants, ADR-0011)
 
-`va docs binder-study` measures the label binder on generated cases from the 80 synthetic documents
+`grounded docs binder-study` measures the label binder on generated cases from the 80 synthetic documents
 (no model, no network): correct cases (a label from the number's own sentence, four styles) and
 swapped cases (the same label on another number, same passage or another document). Documents are
 split in two by a hash of the document key; this command prints the dev half only.
@@ -336,7 +336,7 @@ met by changing R1 alone and is not expected on the locked half either. Wider wi
 rejects but raise false accepts.
 
 Pre-registered in docs/adr/0011-binder-variants.md (amendment 1, before any locked run): `current`,
-`C1`, `C2`, and the sentence family `S1`, `S2`, `SL`. The locked half is scored once by `va docs
+`C1`, `C2`, and the sentence family `S1`, `S2`, `SL`. The locked half is scored once by `grounded docs
 binder-locked --candidates current,C1,C2,S1,S2,SL`, which refuses unless the ADR is committed and unchanged. A candidate
 is put forward only if its locked false accepts are no higher than current's and its false rejects
 are lower; otherwise R1 stays. The shipped default has not changed. The corpus is synthetic and the

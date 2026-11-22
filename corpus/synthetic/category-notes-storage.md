@@ -1,6 +1,6 @@
 # Category notes: storage tins and boxes
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: storage tins and boxes are priced at 1.7 times landed cost.
 

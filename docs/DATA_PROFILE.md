@@ -6,7 +6,7 @@ Description, Quantity, InvoiceDate, UnitPrice, CustomerID, Country.
 
 ## Status of the numbers in this file
 
-Measured on the real file on 2026-11-20: `va load`, `va profile` and `va profile-db`, run twice
+Measured on the real file on 2026-11-20: `grounded load`, `grounded profile` and `grounded profile-db`, run twice
 independently (build chat and CTO chat) with byte-identical output. File: `Online Retail.xlsx`,
 sha256 `43465a06f2ccf7c8b5bd2892bc7defb52f97487934fe93b16ae4c3936424676d`, 541,909 rows. The file
 itself is not in the repository (git-ignored). Tests still run on a 368-row synthetic fixture
@@ -87,6 +87,6 @@ equals the sum computed from the raw file (see `reconcile` in `warehouse/load.py
 | Orders / active customers | 19,960 / 4,338 | 19,960 / 4,338 | none |
 
 A repeated line can be a genuine repeat scan, and removal would be a silent guess, so they stay.
-`va profile-db` reproduces this table at any time.
+`grounded profile-db` reproduces this table at any time.
 
-Reproduce: `va load --source "Online Retail.xlsx"`, `va profile "Online Retail.xlsx"`, `va profile-db`.
+Reproduce: `grounded load --source "Online Retail.xlsx"`, `grounded profile "Online Retail.xlsx"`, `grounded profile-db`.

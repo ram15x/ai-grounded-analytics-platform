@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir -e .
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 # Recorded-runs view by default (no key, no database). For new questions pass
-# --replay (needs VA_READONLY_DATABASE_URL) or --provider/--model with the key in the environment.
-CMD ["va", "serve", "--host", "0.0.0.0", "--port", "8000"]
+# --replay (needs GA_READONLY_DATABASE_URL) or --provider/--model with the key in the environment.
+CMD ["grounded", "serve", "--host", "0.0.0.0", "--port", "8000"]

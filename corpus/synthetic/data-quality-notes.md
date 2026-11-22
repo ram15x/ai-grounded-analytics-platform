@@ -1,6 +1,6 @@
 # Notes on the sales extract
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 The raw extract contains lines with no customer identifier; these are counted in sales but cannot be
 attached to a customer. Some lines have a unit price of zero, which are write-offs or samples, and

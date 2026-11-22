@@ -5,11 +5,11 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from verified_analyst.documents.embed import FakeEmbedder
-from verified_analyst.documents.fusion import hybrid
-from verified_analyst.documents.metrics import Retrieved, evaluate, load_questions
-from verified_analyst.documents.store import DocumentError, all_chunks, ingest, search
-from verified_analyst.documents.vectorstore import (
+from grounded_analytics.documents.embed import FakeEmbedder
+from grounded_analytics.documents.fusion import hybrid
+from grounded_analytics.documents.metrics import Retrieved, evaluate, load_questions
+from grounded_analytics.documents.store import DocumentError, all_chunks, ingest, search
+from grounded_analytics.documents.vectorstore import (
     QueryVectors,
     embedding_model_id,
     ensure_vector_schema,

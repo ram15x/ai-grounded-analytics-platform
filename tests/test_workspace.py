@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from grounded_analytics.datasets.workspace import Workspace, WorkspaceError
 from test_dataset_load import scratch  # noqa: F401, I001
-from verified_analyst.datasets.workspace import Workspace, WorkspaceError
 
 pytestmark = pytest.mark.db
 

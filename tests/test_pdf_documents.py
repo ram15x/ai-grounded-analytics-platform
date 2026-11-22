@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from grounded_analytics.datasets.workspace import Workspace, WorkspaceError
+from grounded_analytics.documents.store import DocumentError, pdf_text, read_document_bytes, search
 from pdf_helpers import make_pdf
 from test_dataset_load import scratch  # noqa: F401, I001
-from verified_analyst.datasets.workspace import Workspace, WorkspaceError
-from verified_analyst.documents.store import DocumentError, pdf_text, read_document_bytes, search
 
 EX = Path(__file__).resolve().parent.parent / "examples" / "datasets"
 

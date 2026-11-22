@@ -4,8 +4,8 @@ import pytest
 import sqlglot
 from sqlglot import exp
 
-from verified_analyst.compiler import CompileError, compile_query
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.compiler import CompileError, compile_query
+from grounded_analytics.semantic import load_semantic_layer
 
 LAYER = load_semantic_layer()
 

@@ -5,7 +5,7 @@ import copy
 import pytest
 import yaml
 
-from verified_analyst.semantic import (
+from grounded_analytics.semantic import (
     SemanticError,
     SemanticLayer,
     default_path,

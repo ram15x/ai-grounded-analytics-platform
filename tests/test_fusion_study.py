@@ -2,9 +2,9 @@
 
 import pytest
 
-from verified_analyst.documents import abstention
-from verified_analyst.documents.fusion import fuse_hits, hybrid, rrf
-from verified_analyst.documents.fusion_study import (
+from grounded_analytics.documents import abstention
+from grounded_analytics.documents.fusion import fuse_hits, hybrid, rrf
+from grounded_analytics.documents.fusion_study import (
     DEFAULT,
     Setting,
     fused,
@@ -13,8 +13,8 @@ from verified_analyst.documents.fusion_study import (
     render_markdown,
     run_study,
 )
-from verified_analyst.documents.metrics import Evidence, Question, Retrieved
-from verified_analyst.documents.store import Hit
+from grounded_analytics.documents.metrics import Evidence, Question, Retrieved
+from grounded_analytics.documents.store import Hit
 
 
 def hit(doc, ordinal=0, score=1.0, text=None):

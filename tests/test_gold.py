@@ -106,9 +106,9 @@ def test_question_file_shape():
 
 
 def test_metric_queries_compile_and_restate():
-    from verified_analyst.compiler import compile_query
-    from verified_analyst.restate import restate
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.compiler import compile_query
+    from grounded_analytics.restate import restate
+    from grounded_analytics.semantic import load_semantic_layer
 
     layer = load_semantic_layer()
     for q in QS:
@@ -145,7 +145,7 @@ def test_run_script_writes_values_with_hash(tmp_path):
 def test_compare_on_synthetic_fixture_finds_no_difference_after_the_t1_05_decision(
     warehouse, tmp_path
 ):
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.semantic import load_semantic_layer
 
     spec = importlib.util.spec_from_file_location("compare_gold", ROOT / "eval" / "compare_gold.py")
     mod = importlib.util.module_from_spec(spec)

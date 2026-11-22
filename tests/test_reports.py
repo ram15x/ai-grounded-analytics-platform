@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from verified_analyst import reports
-from verified_analyst.web.app import load_payload
+from grounded_analytics import reports
+from grounded_analytics.web.app import load_payload
 
 RUNS = load_payload()["items"]
 

@@ -1,6 +1,6 @@
 # Supplier note: textiles
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 For the textiles range the supplier's standard lead time is 30 days, rising to 45 days in the peak season.
 

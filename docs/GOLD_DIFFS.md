@@ -58,7 +58,7 @@ all-rows reading is still available as `units_sold` in `eval/gold/t1.py`.
 
 ### Exact duplicates stay counted
 
-5,268 exact duplicate rows are kept in every metric. Sensitivity (from `va profile-db`):
+5,268 exact duplicate rows are kept in every metric. Sensitivity (from `grounded profile-db`):
 
 | Metric | With | Without | Change |
 |---|---|---|---|
@@ -71,7 +71,7 @@ This did not affect any gold comparison, because gold also keeps them (rule writ
 
 ## Reproduce
 
-    va load --source "Online Retail.xlsx"
+    grounded load --source "Online Retail.xlsx"
     python eval/gold/run.py --raw "Online Retail.xlsx"
     python eval/compare_gold.py
 

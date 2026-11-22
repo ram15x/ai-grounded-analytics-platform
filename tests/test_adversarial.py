@@ -1,14 +1,14 @@
 """30 adversarial answers must never come back 'verified' (false-accept count must be 0).
 
 They were written BEFORE the sentence-context check existed; against the verifier as it stood at
-that point all 30 were falsely accepted (30/30). The extension (src/verified_analyst/context.py)
+that point all 30 were falsely accepted (30/30). The extension (src/grounded_analytics/context.py)
 brought that to 0. Controls guard the other direction: legitimate answers must still verify.
 """
 
 import pytest
 
 from adversarial_cases import KNOWN, LAYER, cases, cell, gbp, queries
-from verified_analyst.verifier import Verifier
+from grounded_analytics.verifier import Verifier
 
 CASES = cases()
 

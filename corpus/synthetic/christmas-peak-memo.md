@@ -1,6 +1,6 @@
 # Christmas peak memo
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 The last day for UK orders to arrive before 25 December is 18 December for standard delivery. The
 last day for EIRE, France and Germany is 10 December. During the peak weeks the warehouse works

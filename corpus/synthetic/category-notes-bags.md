@@ -1,6 +1,6 @@
 # Category notes: bags
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: bags are priced at 2.0 times landed cost.
 

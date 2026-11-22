@@ -8,15 +8,15 @@ import pytest
 import sqlglot
 from sqlglot import exp
 
-from verified_analyst.compiler import compile_query
-from verified_analyst.guard import (
+from grounded_analytics.compiler import compile_query
+from grounded_analytics.guard import (
     GuardError,
     QueryTimeout,
     execute_guarded,
     validate_sql,
     wrap_limit,
 )
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.semantic import load_semantic_layer
 
 # (sql, expected reason code)
 REJECTED = [

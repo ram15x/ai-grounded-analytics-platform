@@ -1,7 +1,7 @@
-"""Skeleton check only: the package imports and declares its version."""
+"""The package imports and declares its version."""
 
-import verified_analyst
+import grounded_analytics
 
 
 def test_package_imports_with_version() -> None:
-    assert verified_analyst.__version__ == "0.0.0"
+    assert grounded_analytics.__version__ == "1.0.0"

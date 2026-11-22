@@ -1,6 +1,6 @@
 # Draft: revenue definitions (not approved)
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 DRAFT. This text was never approved and does not define any report.
 

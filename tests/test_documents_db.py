@@ -5,8 +5,8 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from verified_analyst.documents.metrics import Retrieved, load_questions, unreachable_anchors
-from verified_analyst.documents.store import (
+from grounded_analytics.documents.metrics import Retrieved, load_questions, unreachable_anchors
+from grounded_analytics.documents.store import (
     DocumentError,
     all_chunks,
     document_span,
@@ -16,7 +16,7 @@ from verified_analyst.documents.store import (
     search,
     sha256_hex,
 )
-from verified_analyst.guard import GuardError, validate_sql
+from grounded_analytics.guard import GuardError, validate_sql
 
 pytestmark = pytest.mark.db
 ROOT = Path(__file__).parent.parent

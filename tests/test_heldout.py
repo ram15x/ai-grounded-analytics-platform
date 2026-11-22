@@ -168,9 +168,9 @@ def test_question_file_shape():
 
 
 def test_expressible_questions_compile_and_unexpressible_ones_say_why():
-    from verified_analyst.compiler import compile_query
-    from verified_analyst.restate import restate
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.compiler import compile_query
+    from grounded_analytics.restate import restate
+    from grounded_analytics.semantic import load_semantic_layer
 
     layer = load_semantic_layer()
     expressible = [q for q in QS if q["expressible_as_metric_query"]]
@@ -200,11 +200,11 @@ def test_no_question_text_or_id_is_shared_with_the_dev_set():
 
 
 def test_no_product_code_reads_or_embeds_the_held_out_file():
-    # `va docs heldout` is the one deliberate exception (heldout_run.py plus its command word in
+    # `grounded docs heldout` is the one deliberate exception (heldout_run.py plus its command in
     # cli.py); it reads the DOCUMENT question file only. The text-to-SQL held-out file is still
     # named nowhere in src.
     # e2e_locked.py (ADR-0014) is the second deliberate exception: the text-to-SQL locked file is
-    # read only by `va eval e2e --split locked --confirm-locked`, once per model (ledger).
+    # read only by `grounded eval e2e --split locked --confirm-locked`, once per model (ledger).
     allowed = {"heldout_run.py", "cli.py", "e2e_locked.py"}
     hits = [
         p
@@ -216,14 +216,14 @@ def test_no_product_code_reads_or_embeds_the_held_out_file():
         if p.name == "e2e_locked.py":
             continue
         assert "questions/heldout" not in p.read_text("utf-8").replace("\\", "/"), p
-    from verified_analyst.llm.prompts import PROMPT_TEMPLATES
+    from grounded_analytics.llm.prompts import PROMPT_TEMPLATES
 
     blob = " ".join(PROMPT_TEMPLATES.values()).lower()
     assert not [q["question"] for q in QS if q["question"].lower() in blob]
 
 
 def test_the_probe_reads_only_the_dev_file():
-    from verified_analyst.llm.live import default_questions_path, load_probe_questions
+    from grounded_analytics.llm.live import default_questions_path, load_probe_questions
 
     assert default_questions_path().name == "dev.yaml"
     held = {q["question"] for q in QS}

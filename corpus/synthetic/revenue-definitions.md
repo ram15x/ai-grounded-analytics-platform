@@ -1,6 +1,6 @@
 # How revenue is defined in reports
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Net revenue is gross sales less cancellations and discounts. Gross revenue counts every sale line at
 quantity multiplied by unit price, before cancellations. Invoices whose number starts with the letter

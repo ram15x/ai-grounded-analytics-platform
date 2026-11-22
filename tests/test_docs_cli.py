@@ -1,4 +1,4 @@
-"""`va docs` commands and the held-out rule for retrieval questions."""
+"""`grounded docs` commands and the held-out rule for retrieval questions."""
 
 import json
 import re
@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst import cli
-from verified_analyst.cli import build_parser, main
+from grounded_analytics import cli
+from grounded_analytics.cli import build_parser, main
 
 ROOT = Path(__file__).parent.parent
-SRC = ROOT / "src" / "verified_analyst"
+SRC = ROOT / "src" / "grounded_analytics"
 
 
 def test_docs_eval_has_no_way_to_name_a_question_file():
@@ -22,8 +22,8 @@ def test_docs_eval_has_no_way_to_name_a_question_file():
 
 
 def test_only_the_gated_command_names_the_heldout_retrieval_file():
-    """`va docs heldout` is the one place: its module holds the file name, cli.py only the command
-    word, and no module reached by `va docs probe`, `eval` or `search` mentions it."""
+    """`grounded docs heldout` is the one place: its module holds the file name, cli.py the command
+    word, and no module reached by `grounded docs probe`, `eval` or `search` mentions it."""
     for path in SRC.rglob("*.py"):
         text = path.read_text(encoding="utf-8").lower().replace("held-out", "")
         if path.name in ("heldout_run.py", "e2e_locked.py"):  # e2e_locked: ADR-0014, one-shot
@@ -53,8 +53,8 @@ def test_the_documents_package_reads_no_question_file_at_all():
 
 @pytest.mark.db
 def test_ingest_search_and_eval_through_the_cli(docs_db, tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("VA_DATABASE_URL", docs_db.admin_url)
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", docs_db.readonly_url)
+    monkeypatch.setenv("GA_DATABASE_URL", docs_db.admin_url)
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", docs_db.readonly_url)
     note = tmp_path / "Night Shift Rota.md"
     note.write_text("# Night shift rota\n\nThe night shift starts at 22:00.\n", encoding="utf-8")
     assert main(["docs", "ingest", str(note), "--reader-role", docs_db.role]) == 0
@@ -70,7 +70,7 @@ def test_ingest_search_and_eval_through_the_cli(docs_db, tmp_path, monkeypatch, 
 
     assert main(["docs", "eval"]) == 0
     report = json.loads(capsys.readouterr().out)
-    from verified_analyst.documents.metrics import load_questions
+    from grounded_analytics.documents.metrics import load_questions
 
     answerable = [q for q in load_questions(cli.DEV_DOC_QUESTIONS) if q.evidence]
     assert (
@@ -85,7 +85,7 @@ def test_ingest_search_and_eval_through_the_cli(docs_db, tmp_path, monkeypatch, 
 
 
 def test_ingest_refuses_other_file_types_and_empty_folders(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("VA_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
+    monkeypatch.setenv("GA_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
     assert main(["docs", "ingest", str(tmp_path)]) == 2
     assert "no .md, .txt or .pdf files" in capsys.readouterr().err
     other = tmp_path / "a.docx"

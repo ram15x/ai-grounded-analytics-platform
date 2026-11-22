@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from verified_analyst.extract import extract_numbers
+from grounded_analytics.extract import extract_numbers
 
 
 def ok(text, value, unit="number", **kw):

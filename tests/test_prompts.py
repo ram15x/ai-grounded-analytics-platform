@@ -12,17 +12,17 @@ from typing import get_args
 import yaml
 from pydantic import ValidationError
 
-from verified_analyst.claims import Op, TemplateClaim
-from verified_analyst.llm.pipeline import schema_problems
-from verified_analyst.llm.prompts import (
+from grounded_analytics.claims import Op, TemplateClaim
+from grounded_analytics.llm.pipeline import schema_problems
+from grounded_analytics.llm.prompts import (
     COMPOSE_SYSTEM,
     PROMPT_TEMPLATES,
     REPAIR_SYSTEM,
     compose_request,
     prompt_hashes,
 )
-from verified_analyst.llm.schemas import ComposeOutput
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.llm.schemas import ComposeOutput
+from grounded_analytics.semantic import load_semantic_layer
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -156,7 +156,7 @@ def test_non_pydantic_errors_give_one_short_line():
 
 
 def test_plan_v0_is_frozen_and_kept_for_old_cassettes():
-    from verified_analyst.llm.cassette import sha256_text
+    from grounded_analytics.llm.cassette import sha256_text
 
     assert sha256_text(PROMPT_TEMPLATES["plan.v0"]) == (
         "f627489111a83c410774d1987f11c94fe1bac6575e714e80da070544d1707f28"
@@ -164,8 +164,8 @@ def test_plan_v0_is_frozen_and_kept_for_old_cassettes():
 
 
 def test_the_pipeline_sends_plan_v1_and_the_report_names_only_active_prompts():
-    from verified_analyst.llm.prompts import active_prompt_hashes, plan_request
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.llm.prompts import active_prompt_hashes, plan_request
+    from grounded_analytics.semantic import load_semantic_layer
 
     r = plan_request(load_semantic_layer(), "q")
     assert r.prompt_id == "plan.v1" and r.prompt_hash == prompt_hashes()["plan.v1"]
@@ -177,8 +177,8 @@ def test_the_pipeline_sends_plan_v1_and_the_report_names_only_active_prompts():
 def test_the_v1_catalogue_is_the_semantic_layers_own_words_nothing_added():
     import json
 
-    from verified_analyst.llm.prompts import catalogue_text
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.llm.prompts import catalogue_text
+    from grounded_analytics.semantic import load_semantic_layer
 
     layer = load_semantic_layer()
     cat = json.loads(catalogue_text(layer))
@@ -199,8 +199,8 @@ def test_the_v1_catalogue_is_the_semantic_layers_own_words_nothing_added():
 def test_the_v1_catalogue_carries_what_the_merchandise_units_question_needs():
     import json
 
-    from verified_analyst.llm.prompts import catalogue_text
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.llm.prompts import catalogue_text
+    from grounded_analytics.semantic import load_semantic_layer
 
     cat = json.loads(catalogue_text(load_semantic_layer()))
     units = cat["metrics"]["units_sold"]
@@ -210,8 +210,8 @@ def test_the_v1_catalogue_carries_what_the_merchandise_units_question_needs():
 def test_v0_catalogue_is_still_available_unchanged_in_shape():
     import json
 
-    from verified_analyst.llm.prompts import catalogue_text_v0
-    from verified_analyst.semantic import load_semantic_layer
+    from grounded_analytics.llm.prompts import catalogue_text_v0
+    from grounded_analytics.semantic import load_semantic_layer
 
     cat = json.loads(catalogue_text_v0(load_semantic_layer()))
     assert set(cat) == {"metrics", "dimensions"}
@@ -223,6 +223,8 @@ def test_prompt_building_reads_no_question_file():
     of questions (dev or held-out)."""
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / "src/verified_analyst/llm/prompts.py").read_text()
+    src = (
+        Path(__file__).resolve().parents[1] / "src/grounded_analytics/llm/prompts.py"
+    ).read_text()
     for needle in ("open(", "read_text", "yaml", "eval/", "questions", "held"):
         assert needle not in src, needle

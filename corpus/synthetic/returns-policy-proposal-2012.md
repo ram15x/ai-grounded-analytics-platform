@@ -1,6 +1,6 @@
 # Returns policy proposal for 2012 (not adopted)
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 PROPOSAL ONLY. The board did not adopt this proposal.
 

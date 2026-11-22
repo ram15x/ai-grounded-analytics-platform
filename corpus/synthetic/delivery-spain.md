@@ -1,6 +1,6 @@
 # Delivery to Spain
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Parcels to Spain cost £11.80 each for a weight of up to 5 kg. Each extra kilogram above that is charged at £1.40. Delivery takes 6 to 9 working days from dispatch.
 

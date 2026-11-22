@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from verified_analyst.web.app import load_payload
+from grounded_analytics.web.app import load_payload
 
 GOOD = {"VERIFIED", "VERIFIED_DERIVED", "VERIFIED_QUOTE"}
 ITEMS = load_payload()["items"]

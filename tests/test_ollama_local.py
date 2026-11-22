@@ -6,10 +6,10 @@ import dataclasses
 
 import pytest
 
+from grounded_analytics.llm.providers import GroqProvider, OllamaProvider
+from grounded_analytics.llm.settings import ProviderSettings
+from grounded_analytics.llm.types import SensitivityRefusal
 from llm_helpers import MockTransport, ok_openai, req
-from verified_analyst.llm.providers import GroqProvider, OllamaProvider
-from verified_analyst.llm.settings import ProviderSettings
-from verified_analyst.llm.types import SensitivityRefusal
 
 
 def internal(r):

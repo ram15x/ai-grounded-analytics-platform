@@ -1,6 +1,6 @@
 # Delivery to the Netherlands
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Parcels to the Netherlands cost £9.90 each for a weight of up to 5 kg. Each extra kilogram above that is charged at £1.10. Delivery takes 4 to 6 working days from dispatch.
 

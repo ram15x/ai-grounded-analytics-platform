@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from grounded_analytics.config import ConfigError
+from grounded_analytics.llm import usage
+from grounded_analytics.llm.accounting import CallRecord, RunContext
+from grounded_analytics.llm.settings import load_router_settings
 from llm_helpers import settings
-from verified_analyst.config import ConfigError
-from verified_analyst.llm import usage
-from verified_analyst.llm.accounting import CallRecord, RunContext
-from verified_analyst.llm.settings import load_router_settings
 
 NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
 M = "openai/gpt-oss-20b"
@@ -152,8 +152,8 @@ def test_a_model_with_no_known_cap_prints_the_tally_and_is_never_refused(tmp_pat
 
 
 def test_plan_generation_counts_only_batches_not_already_recorded(tmp_path):
-    from verified_analyst.documents import binder_model as bm
-    from verified_analyst.llm.cassette import FILE_NAME
+    from grounded_analytics.documents import binder_model as bm
+    from grounded_analytics.llm.cassette import FILE_NAME
 
     cfg = load_router_settings()
     total = -(-len(bm.select_sentences()) // bm.BATCH)
@@ -174,7 +174,7 @@ def test_plan_generation_counts_only_batches_not_already_recorded(tmp_path):
 
 
 def test_the_three_live_commands_take_force():
-    from verified_analyst import cli
+    from grounded_analytics import cli
 
     src = Path(cli.__file__).read_text("utf-8")
     assert src.count('"--force"') >= 3 and src.count("usage.start(") == 3

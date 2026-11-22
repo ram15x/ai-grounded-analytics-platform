@@ -1,11 +1,11 @@
-# Embedder and reranker candidates for `va docs probe`. Nothing here has been called: every entry
+# Embedder and reranker candidates for `grounded docs probe`. Nothing here has been called: every entry
 # is a candidate to be MEASURED, and every value is UNVERIFIED unless a comment says where it was
 # read. No accuracy claim is made for any of them.
 #
 # Keys come from the environment only: GEMINI_API_KEY, OPENROUTER_API_KEY, JINA_API_KEY.
 # A model name that starts with REPLACE makes the client refuse to call.
 #
-# Hosted entries only ever see documents marked `public` at ingest (`va docs ingest --sensitivity
+# Hosted entries only ever see documents marked `public` at ingest (`grounded docs ingest --sensitivity
 # public`); the probe refuses to send anything else. Local entries see everything.
 #
 # Names and request shapes below were read from the providers' own pages on 2026-11-20 and not
@@ -118,4 +118,4 @@ rerankers:
     depth: 20
 
 probe:
-  max_requests: 60   # default cap for one `va docs probe` run; hard ceiling 150
+  max_requests: 60   # default cap for one `grounded docs probe` run; hard ceiling 150

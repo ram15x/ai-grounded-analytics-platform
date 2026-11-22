@@ -1,4 +1,4 @@
-from verified_analyst.cli import build_parser
+from grounded_analytics.cli import build_parser
 
 
 def test_report_run_parses_and_needs_a_title():

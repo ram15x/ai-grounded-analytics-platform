@@ -1,6 +1,6 @@
 # Delivery policy
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Standard delivery within the United Kingdom is free for orders of £50.00 or more. Orders below that
 value pay a flat courier charge of £4.95. Standard delivery takes 2 to 4 working days.

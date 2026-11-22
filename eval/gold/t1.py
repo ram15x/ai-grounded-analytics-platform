@@ -1,7 +1,7 @@
 """Gold answers for tier T1 (single metric, no dimension), straight from the RAW rows.
 
 INDEPENDENCE RULE: this file imports only the standard library and pandas. It must not import
-anything from verified_analyst (semantic layer, compiler, normaliser) or the pandas oracle, and
+anything from grounded_analytics (semantic layer, compiler, normaliser) or the pandas oracle, and
 it does not read semantic/metrics.yaml. Each question's rules are restated here in code and in
 plain English in eval/questions/dev.yaml. tests/test_gold.py enforces the imports.
 

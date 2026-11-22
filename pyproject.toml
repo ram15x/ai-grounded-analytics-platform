@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "verified-analyst"
-version = "0.0.0"
-description = "AI analyst that verifies every number it states. Phase 1a: design and skeleton only."
+name = "ai-grounded-analytics-platform"
+version = "1.0.0"
+description = "AI Grounded Analytics Platform: answers business questions from your data and documents, and ties every number to its source or withholds the answer."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -26,10 +26,10 @@ local = ["fastembed>=0.3"]
 dev = ["pytest>=8", "ruff==0.17.6", "pre-commit>=3"]
 
 [project.scripts]
-va = "verified_analyst.cli:main"
+grounded = "grounded_analytics.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/verified_analyst"]
+packages = ["src/grounded_analytics"]
 
 [tool.ruff]
 line-length = 100
@@ -48,4 +48,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-markers = ["db: needs a Postgres server (set VA_TEST_DATABASE_URL); skipped otherwise"]
+markers = ["db: needs a Postgres server (set GA_TEST_DATABASE_URL); skipped otherwise"]

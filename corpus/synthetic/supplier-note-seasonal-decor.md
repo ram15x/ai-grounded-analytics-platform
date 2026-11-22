@@ -1,6 +1,6 @@
 # Supplier note: seasonal decorations
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 For the seasonal decorations range the supplier's standard lead time is 45 days, rising to 70 days in the peak season.
 

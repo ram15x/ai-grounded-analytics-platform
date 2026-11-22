@@ -77,7 +77,7 @@ Rules live in config; model IDs are never in code (ADR-0003).
 ### Implementation status (Phase 1c-1)
 
 Built and tested with mocked HTTP and a FakeProvider only; **no real provider has been called**.
-Adapters for Groq, Gemini and OpenRouter (`src/verified_analyst/llm/providers.py`), the router
+Adapters for Groq, Gemini and OpenRouter (`src/grounded_analytics/llm/providers.py`), the router
 (per-provider token buckets at `bucket.fraction` of the documented limit, retry with backoff and
 jitter, `retry-after`, circuit breaker after 3 consecutive 429s, fall-through, per-run token cap that
 ends in abstain/`budget`), and the sensitivity rule (hosted providers never see non-`public`
@@ -85,11 +85,11 @@ datasets; unknown datasets are internal; checked in the router before every call
 hosted adapter). Limits and model IDs are in `config/router.yaml`, all marked UNVERIFIED. Every
 assumption about provider behaviour is listed in docs/PHASE_1C1_ASSUMPTIONS.md. Not built: the
 `route` node and the local-model tier, routing of METRIC_MISMATCH back to the planner, the free-form
-SQL fallback, `va eval`.
+SQL fallback, `grounded eval`.
 
 ### Phase 1c-2 tooling (built, not yet run)
 
-`va live models` and `va live probe` (`llm/live.py`, runbook in docs/LIVE_RUNBOOK.md) are the only
+`grounded live models` and `grounded live probe` (`llm/live.py`, runbook in docs/LIVE_RUNBOOK.md) are the only
 code meant to reach a real provider, and only when the owner runs them with keys in the
 environment. The probe is pinned to one provider and one model, refuses datasets not tagged public,
 sends at most 25 HTTP requests (retries included), stops on the first 401/403, and records
@@ -106,7 +106,7 @@ STILL UNKNOWN until real output is pasted back.
   with each question's rules written out in plain English in the question file. Gold code imports
   nothing from `semantic.py`, `compiler.py`, `warehouse/normalize.py` or the pandas oracle. Rules
   are restated per question, not shared.
-- Disagreement is a finding: `eval/compare_gold.py` compares gold with `va profile-db` and the
+- Disagreement is a finding: `eval/compare_gold.py` compares gold with `grounded profile-db` and the
   semantic layer. Each difference is classified as gold bug, semantic-layer bug, or intended rule
   difference, and written to docs/GOLD_DIFFS.md for the owner. A metric definition is never changed
   just to make numbers agree.
@@ -141,7 +141,7 @@ STILL UNKNOWN until real output is pasted back.
 - Replay mode (default in CI): a key miss raises an error; there is no network fallback, so CI
   needs no keys. Record mode needs keys from the environment and is run by hand.
 - Stale detection: any change to a prompt, the layer, the schema or the data changes the key, so a
-  stale cassette fails as a miss. `va cassettes check` lists missing and unused entries and cassette
+  stale cassette fails as a miss. `grounded cassettes check` lists missing and unused entries and cassette
   age; a periodic manual re-record against live providers reveals drift and retired model IDs.
   Replay proves the pipeline is deterministic given the outputs; it says nothing about current
   model quality. Temperature 0 does not guarantee identical hosted output [UNVERIFIED per
@@ -149,7 +149,7 @@ STILL UNKNOWN until real output is pasted back.
 
 ### Implementation status (Phase 1c-1)
 
-Record/replay, key hashing, the secret scan and `va cassettes check` are implemented
+Record/replay, key hashing, the secret scan and `grounded cassettes check` are implemented
 (`llm/cassette.py`). No cassette is committed, because the only calls made so far were to a
 FakeProvider. `check` reports stale entries (recorded hashes differ from the current prompt, layer,
 schema or warehouse), cassette age, and, given a `usage.json` written by a replay run, unused and
@@ -158,12 +158,12 @@ environment.
 
 ## e. Eval report
 
-`va eval --set dev|heldout --replay|--live` writes `reports/<run-id>.json` and `.md`. Header: git
+`grounded eval --set dev|heldout --replay|--live` writes `reports/<run-id>.json` and `.md`. Header: git
 commit, dataset hash, semantic-layer hash, cassette-set hash, model IDs, date, n, and the line
 "Gold questions are author-written."
 
 Implemented so far (1c-1): per-call and per-run token and latency accounting in this report's
-format (`llm/accounting.py`; tokens, p50/p95 with n, by provider, cost 0). There is no `va eval`
+format (`llm/accounting.py`; tokens, p50/p95 with n, by provider, cost 0). There is no `grounded eval`
 and no accuracy figure.
 
 Per question: outcome, attempts, verdicts, gold match (tolerance = displayed precision), the
@@ -180,7 +180,7 @@ restatement, tokens, latency. Aggregates by tier, by path (compiled vs free-form
 - Also: share verified / partially verified / abstained, repair success rate, coverage metric,
   cost (0 on free tiers; tokens and a would-be paid estimate), latency p50/p95.
 - Rule: no accuracy figure goes into the README or any other doc until a reproducible command
-  (`va eval ... --live`, or `--replay` against committed cassettes) has produced it at a stated
+  (`grounded eval ... --live`, or `--replay` against committed cassettes) has produced it at a stated
   commit, with n, tier and interval beside it. Held-out figures come from a separate report with
   the held-out run count.
 
@@ -197,12 +197,12 @@ restatement, tokens, latency. Aggregates by tier, by path (compiled vs free-form
 4. Small or free models fail structured output. Test: schema-valid rate per model on 20 questions,
    with and without constrained JSON mode, to decide the chain.
 5. Gold contamination or rule drift: gold shares its author's assumptions with the layer. Test:
-   gold-vs-`va profile-db` comparison on all T1 questions before any agent work (1c-0), with every
+   gold-vs-`grounded profile-db` comparison on all T1 questions before any agent work (1c-0), with every
    difference triaged. Gold is author-written; an independent reviewer is needed for the sample.
 
 ## g. Phase 1c-0 (deterministic only, no LLM, no provider code, no keys)
 
-1. CI-hard database tests: `VA_REQUIRE_DB=1` makes an unreachable test database a failure. Done.
+1. CI-hard database tests: `GA_REQUIRE_DB=1` makes an unreachable test database a failure. Done.
 2. Gold set, first 15 T1 questions (`eval/questions/dev.yaml`, `eval/gold/`), pandas over the raw
    `Online Retail.xlsx`. Harness built; values need the raw file.
 3. `eval/compare_gold.py` and docs/GOLD_DIFFS.md.

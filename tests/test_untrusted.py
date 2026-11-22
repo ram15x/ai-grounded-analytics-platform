@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.documents import untrusted
-from verified_analyst.documents.store import DocumentError
-from verified_analyst.documents.untrusted import (
+from grounded_analytics.documents import untrusted
+from grounded_analytics.documents.store import DocumentError
+from grounded_analytics.documents.untrusted import (
     PASSAGE_RULES,
     PassageIn,
     blocked_overlap,

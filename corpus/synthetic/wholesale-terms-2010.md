@@ -1,6 +1,6 @@
 # Trade terms (superseded)
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Replaced by the current wholesale and trade terms.
 

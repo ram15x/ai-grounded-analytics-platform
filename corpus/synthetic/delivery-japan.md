@@ -1,6 +1,6 @@
 # Delivery to Japan
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 The courier rate for Japan is £26.50 per parcel up to 2 kg, plus £5.40 for every additional kilogram. Expect 12 to 18 working days between dispatch and arrival.
 

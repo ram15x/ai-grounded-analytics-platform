@@ -31,7 +31,7 @@ providers:
     tpm: 8000
     # UNVERIFIED: that `low` reduces reasoning tokens (and so the empty `length` replies) for
     # openai/gpt-oss models. Sent only to Groq models whose id contains "gpt-oss"; override per
-    # run with --reasoning-effort (assumptions rows 36 and 48). `va route probe --compare-reasoning
+    # run with --reasoning-effort (assumptions rows 36 and 48). `grounded route probe --compare-reasoning
     # low,medium` measures it on the injection questions.
     reasoning_effort: low
     # The model reports reasoning tokens in its usage block (probe reports, 2026-11-20 and
@@ -111,8 +111,8 @@ bucket:
 budget:
   per_run_tokens: 30000   # UNVERIFIED assumption (PHASE_1C.md section b)
 
-# `va live probe`: hard limits for one probe run. max_requests counts every HTTP request sent,
-# retries included. The default is 25; `va live probe --max-requests N` can raise it to 60, the
+# `grounded live probe`: hard limits for one probe run. max_requests counts every HTTP request sent,
+# retries included. The default is 25; `grounded live probe --max-requests N` can raise it to 60, the
 # hard ceiling. token_cap is across the whole run. UNVERIFIED sizing.
 probe:
   max_requests: 25

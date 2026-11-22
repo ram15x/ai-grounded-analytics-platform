@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from verified_analyst.cli import build_parser
+from grounded_analytics.cli import build_parser
 
 
 def parse(*a):

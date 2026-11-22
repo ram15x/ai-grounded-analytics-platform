@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from grounded_analytics.documents import binder_model as bm
+from grounded_analytics.documents import binder_study as bs
+from grounded_analytics.documents.binding import CURRENT, DEFAULT
+from grounded_analytics.documents.store import DocumentError
 from llm_helpers import KEYS, ok_openai, settings, status
-from verified_analyst.documents import binder_model as bm
-from verified_analyst.documents import binder_study as bs
-from verified_analyst.documents.binding import CURRENT, DEFAULT
-from verified_analyst.documents.store import DocumentError
 
 ROOT = Path(__file__).resolve().parents[1]
 ADR = ROOT / "docs" / "adr" / "0013-model-written-labels.md"
@@ -221,7 +221,7 @@ def _transport(sent, script=()):
 
 
 def _gen_kw(tmp_path, d, transport):
-    from verified_analyst.llm.cassette import CassetteContext
+    from grounded_analytics.llm.cassette import CassetteContext
 
     return {"provider": "groq", "model": "m-groq", "out_dir": tmp_path / "work", "env": KEYS,
             "labels": tmp_path / "labels.yaml", "ledger": tmp_path / "ledger.jsonl",

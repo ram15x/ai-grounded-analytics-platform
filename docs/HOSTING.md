@@ -1,12 +1,12 @@
 # Hosting
 
-Status: the recorded view is live at https://ram15x.github.io/verified-analyst/ (GitHub Pages,
+Status: the recorded view is live at https://ram15x.github.io/ai-grounded-analytics-platform/ (GitHub Pages,
 free, no card, rebuilt by `.github/workflows/pages.yml` on every push to `main`). I loaded it in
 Chrome and saw the page and the bundled fonts render. Live questions (Option B) are not deployed.
 
 ## Option 0 (done): static page on GitHub Pages
 
-`va serve --build-static DIR` writes one HTML page with the recorded runs embedded, plus the two
+`grounded serve --build-static DIR` writes one HTML page with the recorded runs embedded, plus the two
 fonts and their licenses. The page re-runs its checks in the browser against the recorded model
 replies; it cannot ask a model anything. No server, no key, nothing stored. Limit: it only
 shows what was recorded. I did not test it on phones or in other browsers.
@@ -16,7 +16,7 @@ shows what was recorded. I did not test it on phones or in other browsers.
 
 | Item | Result |
 |---|---|
-| `pip install -e .` in a clean venv, then `va serve` (recorded view) | Works. Serves `/` with 200, about 85 MB resident memory. |
+| `pip install -e .` in a clean venv, then `grounded serve` (recorded view) | Works. Serves `/` with 200, about 85 MB resident memory. |
 | Non-editable `pip install .` | **Fails**: the app looks for `demo/` next to the installed package. The Dockerfile uses `-e`, so it avoids this. Don't change it to a plain install. |
 | `docker build` of the Dockerfile | **Not run.** The sandbox has the docker CLI but no daemon. The steps are the same ones I ran by hand, but the image itself is unbuilt. |
 | Live questions (`--byok`) on a host | Not run. Needs Postgres, the seeded warehouse, and memory I have not measured. |
@@ -40,14 +40,14 @@ or use another host.
 
 Steps (yours; card and password entry stay with you):
 1. `git pull`, then check `render.yaml` at the repo root.
-2. In Render: New, Blueprint, pick the `verified-analyst` GitHub repo, apply.
+2. In Render: New, Blueprint, pick the `ai-grounded-analytics-platform` GitHub repo, apply.
 3. Wait for the build, open the URL, confirm the recorded run opens.
 
 If the build fails, send me the log. I could not test the image build here.
 
 ## Option B: live tryout (visitors bring their own key)
 
-Needs a Postgres holding the sales warehouse, a read-only role, and `va serve --byok`.
+Needs a Postgres holding the sales warehouse, a read-only role, and `grounded serve --byok`.
 - Render's free Postgres expires after 30 days (14-day grace), one per account. You would
   re-seed it each month.
 - The free web instance is small. I have not measured how much memory the document search plus

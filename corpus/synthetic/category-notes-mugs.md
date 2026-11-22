@@ -1,6 +1,6 @@
 # Category notes: mugs
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: mugs are priced at 1.9 times landed cost.
 

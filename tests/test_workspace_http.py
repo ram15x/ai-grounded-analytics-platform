@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from grounded_analytics.datasets.workspace import Workspace
+from grounded_analytics.web import app
 from test_dataset_load import scratch  # noqa: F401, I001
-from verified_analyst.datasets.workspace import Workspace
-from verified_analyst.web import app
 
 pytestmark = pytest.mark.db
 
@@ -76,7 +76,7 @@ def test_bad_requests_get_a_plain_error(srv):
 
 
 def test_workspace_refuses_a_public_host():
-    from verified_analyst import cli
+    from grounded_analytics import cli
 
     assert cli.main(["serve", "--workspace", "--host", "0.0.0.0"]) == 2
 

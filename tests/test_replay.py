@@ -1,7 +1,7 @@
 import pytest
 
-from verified_analyst.llm.replay import ReplayProvider, request_key
-from verified_analyst.llm.types import LLMRequest, ProviderError
+from grounded_analytics.llm.replay import ReplayProvider, request_key
+from grounded_analytics.llm.types import LLMRequest, ProviderError
 
 
 def _req(task="plan", msgs=(("user", "hi"),)):

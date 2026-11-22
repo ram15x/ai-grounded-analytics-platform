@@ -9,13 +9,13 @@ import re
 
 import pytest
 
+from grounded_analytics.cli import catalogue
+from grounded_analytics.documents.untrusted import PassageIn
+from grounded_analytics.llm.answer import Retrieved, answer_question, make_retriever
+from grounded_analytics.llm.fake import FakeProvider
+from grounded_analytics.llm.router import Router
+from grounded_analytics.semantic import load_semantic_layer
 from llm_helpers import settings
-from verified_analyst.cli import catalogue
-from verified_analyst.documents.untrusted import PassageIn
-from verified_analyst.llm.answer import Retrieved, answer_question, make_retriever
-from verified_analyst.llm.fake import FakeProvider
-from verified_analyst.llm.router import Router
-from verified_analyst.semantic import load_semantic_layer
 
 pytestmark = pytest.mark.db
 
@@ -302,7 +302,7 @@ def test_an_obedient_attacker_composer_does_not_verify(rig, docs_db, key):
 
 
 def _only(url, key, query):
-    from verified_analyst.documents.store import search
+    from grounded_analytics.documents.store import search
 
     def run(q, k):
         return [h for h in search(url, query, 50) if h.doc_key == key][:k]
@@ -311,8 +311,8 @@ def _only(url, key, query):
 
 
 def test_retrieval_with_the_fake_embedder_feeds_the_same_path(rig, vector_db):
-    from verified_analyst.documents.embed import FakeEmbedder
-    from verified_analyst.documents.vectorstore import QueryVectors, make_vector_search
+    from grounded_analytics.documents.embed import FakeEmbedder
+    from grounded_analytics.documents.vectorstore import QueryVectors, make_vector_search
 
     emb = FakeEmbedder()
     vec = make_vector_search(vector_db.readonly_url, emb.model_id, QueryVectors(emb))

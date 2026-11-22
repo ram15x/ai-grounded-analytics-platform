@@ -4,7 +4,7 @@ eval/gold/run_heldout.py)
 
     python eval/compare_heldout.py --values heldout_values.json
 
-Needs VA_READONLY_DATABASE_URL (a warehouse loaded with `va load`). This is a metric-definition
+Needs GA_READONLY_DATABASE_URL (warehouse from `grounded load`). This is a metric-definition
 check, not a prompt-tuning step: it prints only counts and, for a disagreement, the two numbers. It
 never writes values into the repository (use --out to write a report elsewhere). It does not call
 any model.
@@ -20,10 +20,10 @@ from pathlib import Path
 
 import yaml
 
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.config import readonly_database_url
-from verified_analyst.guard import execute_guarded
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.config import readonly_database_url
+from grounded_analytics.guard import execute_guarded
+from grounded_analytics.semantic import load_semantic_layer
 
 ROOT = Path(__file__).parent
 

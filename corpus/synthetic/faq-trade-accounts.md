@@ -1,6 +1,6 @@
 # Frequently asked questions: trade accounts
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Q: What do I need to open a trade account?
 A: Company details and a first order that meets the minimum in the trade terms.

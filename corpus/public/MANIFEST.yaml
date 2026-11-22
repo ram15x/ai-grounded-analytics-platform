@@ -4,7 +4,7 @@
 # an entry lacks any field below.
 #
 # Entry shape:
-#   - doc_key: lowercase key used by `va docs ingest` (file name without extension)
+#   - doc_key: lowercase key used by `grounded docs ingest` (file name without extension)
 #     file: file name in this folder (.md or .txt)
 #     title: page or document title
 #     source_url: https address the text was taken from

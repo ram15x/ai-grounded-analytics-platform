@@ -1,6 +1,6 @@
 # Delivery to the United States
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 The courier rate for the United States is £22.00 per parcel up to 2 kg, plus £4.80 for every additional kilogram. Expect 9 to 14 working days between dispatch and arrival.
 

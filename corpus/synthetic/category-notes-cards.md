@@ -1,6 +1,6 @@
 # Category notes: greeting cards
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: greeting cards are priced at 3.1 times landed cost.
 

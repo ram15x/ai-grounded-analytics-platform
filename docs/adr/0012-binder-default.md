@@ -8,7 +8,7 @@ made before the locked half was scored). The decision rule of ADR-0011 is applie
 
 ## Result of the one locked run
 
-`va docs binder-locked --candidates current,C1,C2,S1,S2,SL`, report
+`grounded docs binder-locked --candidates current,C1,C2,S1,S2,SL`, report
 `data\live_runs\20261121_115112_binder_locked`, run by the owner once. Locked half: 664 correct
 cases and 1289 swapped cases, generated from the synthetic documents whose key hashes to "locked".
 False rejects are of the 664 correct cases, false accepts of the 1289 swapped cases.

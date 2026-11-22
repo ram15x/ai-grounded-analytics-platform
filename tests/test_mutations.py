@@ -9,10 +9,10 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 
-from verified_analyst.claims import Claim
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.semantic import load_semantic_layer
-from verified_analyst.verifier import GOOD, ExecutedQuery, Verifier
+from grounded_analytics.claims import Claim
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.semantic import load_semantic_layer
+from grounded_analytics.verifier import GOOD, ExecutedQuery, Verifier
 
 LAYER = load_semantic_layer()
 D = Decimal

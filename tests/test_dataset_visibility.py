@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from verified_analyst.llm.settings import apply_dataset_visibility, load_router_settings
+from grounded_analytics.llm.settings import apply_dataset_visibility, load_router_settings
 
 REL = "ds_saas_subs.data"
 
@@ -42,5 +42,5 @@ def test_public_manifest_registers_the_relation(tmp_path):
 
 def test_env_path_is_honoured(tmp_path, monkeypatch):
     p = _layer(tmp_path, json.dumps({"relation": REL, "visibility": "public"}))
-    monkeypatch.setenv("VA_SEMANTIC_PATH", str(p))
+    monkeypatch.setenv("GA_SEMANTIC_PATH", str(p))
     assert load_router_settings().sensitivity_of((REL,)) == "public"

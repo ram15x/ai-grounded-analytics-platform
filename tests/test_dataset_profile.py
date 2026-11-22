@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from verified_analyst.datasets import profile as P
+from grounded_analytics.datasets import profile as P
 
 
 def col(values, name="c"):

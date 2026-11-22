@@ -7,9 +7,9 @@ import pandas as pd
 import psycopg
 import pytest
 
+from grounded_analytics.compiler import compile_query
+from grounded_analytics.semantic import load_semantic_layer
 from pandas_oracle import oracle
-from verified_analyst.compiler import compile_query
-from verified_analyst.semantic import load_semantic_layer
 
 pytestmark = pytest.mark.db
 LAYER = load_semantic_layer()

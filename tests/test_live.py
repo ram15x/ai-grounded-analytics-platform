@@ -1,4 +1,4 @@
-"""`va live models` and `va live probe` with mocked HTTP only. No real provider is contacted."""
+"""`grounded live models` and `grounded live probe`, mocked HTTP only; no real provider called."""
 
 from __future__ import annotations
 
@@ -9,12 +9,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from llm_helpers import CONN_ERROR, KEYS, TIMEOUT, ok_openai, settings, status
-from verified_analyst.cli import catalogue, main
-from verified_analyst.config import ConfigError
-from verified_analyst.llm import live
-from verified_analyst.llm.cassette import read_entries
-from verified_analyst.llm.live import (
+from grounded_analytics.cli import catalogue, main
+from grounded_analytics.config import ConfigError
+from grounded_analytics.llm import live
+from grounded_analytics.llm.cassette import read_entries
+from grounded_analytics.llm.live import (
     AuthStop,
     CountingTransport,
     ModelGone,
@@ -32,9 +31,10 @@ from verified_analyst.llm.live import (
     safe_error_body,
     wilson,
 )
-from verified_analyst.llm.transport import HttpResponse
-from verified_analyst.llm.types import CassetteLeak, SensitivityRefusal
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.llm.transport import HttpResponse
+from grounded_analytics.llm.types import CassetteLeak, SensitivityRefusal
+from grounded_analytics.semantic import load_semantic_layer
+from llm_helpers import CONN_ERROR, KEYS, TIMEOUT, ok_openai, settings, status
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV = yaml.safe_load((ROOT / "eval" / "questions" / "dev.yaml").read_text())["questions"]
@@ -84,7 +84,7 @@ def test_wilson_interval_known_values():
     assert "(n=10;" in live.render_rate(live.rate("x", 5, 10))
 
 
-# ------------------------------------------------------------ va live models
+# ------------------------------------------------------------ grounded live models
 
 
 def cfg():
@@ -498,7 +498,7 @@ def test_probe_rejects_bad_targets(tmp_path, kw):
 
 
 def test_the_shipped_config_defaults_the_probe_to_25_requests():
-    from verified_analyst.llm.settings import load_router_settings
+    from grounded_analytics.llm.settings import load_router_settings
 
     s = load_router_settings()
     assert s.probe.max_requests == 25 and s.probe.token_cap > 0
@@ -507,7 +507,7 @@ def test_the_shipped_config_defaults_the_probe_to_25_requests():
 def test_the_config_file_cannot_raise_the_probe_cap_above_60():
     from pydantic import ValidationError
 
-    from verified_analyst.llm.settings import ProbeSettings
+    from grounded_analytics.llm.settings import ProbeSettings
 
     assert ProbeSettings(max_requests=60).max_requests == 60
     with pytest.raises(ValidationError):
@@ -665,7 +665,7 @@ def test_a_clean_probe_reports_no_error_bodies(env, tmp_path):
 @pytest.mark.db
 def test_va_cassettes_check_passes_on_a_probe_recording(env, tmp_path, capsys, monkeypatch):
     probe(env, Model(), tmp_path)
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", env[1])
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", env[1])
     assert main(["cassettes", "check", str(tmp_path / "run" / "cassettes")]) == 0
     assert capsys.readouterr().out.strip().endswith("OK")
 
@@ -827,7 +827,7 @@ def test_quota_check_is_observable_only_with_remaining_headers(env, tmp_path):
 @pytest.mark.db
 def test_probe_cli_prints_the_report_and_never_a_key(env, tmp_path, monkeypatch, capsys):
     layer, url, _ = env
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", url)
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", url)
     for k, v in KEYS.items():
         monkeypatch.setenv(k, v)
     m = Model()
@@ -843,7 +843,7 @@ def test_probe_cli_prints_the_report_and_never_a_key(env, tmp_path, monkeypatch,
 
 @pytest.mark.db
 def test_probe_cli_exits_3_on_auth_error(env, tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", env[1])
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", env[1])
     for k, v in KEYS.items():
         monkeypatch.setenv(k, v)
     monkeypatch.setattr(live, "urllib_transport", Model(statuses=[status(403)]))
@@ -853,9 +853,9 @@ def test_probe_cli_exits_3_on_auth_error(env, tmp_path, monkeypatch, capsys):
 
 
 def test_probe_cli_refuses_without_a_key(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "postgresql://x")
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", "postgresql://x")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.setattr("verified_analyst.cli.catalogue", lambda *a: {})
+    monkeypatch.setattr("grounded_analytics.cli.catalogue", lambda *a: {})
     code = main(["live", "probe", "--provider", "groq", "--model", "x", "--out-dir", str(tmp_path)])
     assert code == 2 and "GROQ_API_KEY" in capsys.readouterr().err
 
@@ -961,7 +961,7 @@ def test_a_run_with_no_abstain_has_no_abstain_section(env, tmp_path):
 
 def test_the_catalogue_text_holds_names_units_descriptions_synonyms_and_dimensions():
     """The report says the plan.v1 prompt has descriptions and synonyms. Guard that statement."""
-    from verified_analyst.llm.prompts import catalogue_text
+    from grounded_analytics.llm.prompts import catalogue_text
 
     cat = json.loads(catalogue_text(load_semantic_layer()))
     assert set(cat) == {"metrics", "dimensions"}
@@ -1012,7 +1012,7 @@ def test_the_quota_checks_invalid_model_step_does_not_stop_the_probe(env, tmp_pa
 
 @pytest.mark.db
 def test_probe_cli_exits_4_when_the_provider_is_unavailable(env, tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", env[1])
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", env[1])
     for k, v in KEYS.items():
         monkeypatch.setenv(k, v)
     monkeypatch.setattr(live, "urllib_transport", Model(statuses=[status(503)] * 20))

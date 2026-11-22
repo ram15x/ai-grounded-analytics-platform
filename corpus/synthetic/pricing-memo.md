@@ -1,6 +1,6 @@
 # Pricing memo
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Prices are set at a mark-up of 2.2 times the landed cost for standard giftware and 1.8 times for
 kitchenware. A price below the cost multiple needs sign-off from the commercial manager.

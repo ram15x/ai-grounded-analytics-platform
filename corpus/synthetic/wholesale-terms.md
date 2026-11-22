@@ -1,6 +1,6 @@
 # Wholesale and trade terms
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Many customers are resellers who buy in bulk. A trade account is opened after a first order of at
 least £250.00. Trade customers receive a discount of 15% on any single order above £500.00 and 20%

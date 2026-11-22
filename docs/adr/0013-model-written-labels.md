@@ -19,7 +19,7 @@ registers a test in which a real model writes the labels.
    sentences of the other synthetic documents round robin in a fixed hash order, at most 3 per
    document, up to 80 sentences (target; 40 is the minimum for a valid run). One number per
    sentence. The corpus is the synthetic, public corpus only.
-2. Labels. One run of `va docs binder-model-labels` against one Groq model: 8 requests of 10
+2. Labels. One run of `grounded docs binder-model-labels` against one Groq model: 8 requests of 10
    sentences (prompt `label.v0`, JSON mode, `reasoning_effort` as configured), recorded in
    cassettes. The model sees the sentence with the number marked and writes a 2 to 6 word label.
    A label with no content word is dropped and counted. A refused or failed request is not retried
@@ -30,7 +30,7 @@ registers a test in which a real model writes the labels.
    (different sentence) and on a number of another document, dropped when at least half of the
    label's words occur in the other number's own sentence (`binder_study._fair`).
 4. Split. Documents split dev or locked by `binder_study.half_of` (hash of the document key). The
-   dev half may be scored any time. The locked half is scored only by `va docs binder-model-locked`,
+   dev half may be scored any time. The locked half is scored only by `grounded docs binder-model-locked`,
    which refuses unless this ADR is committed and unchanged, the labels file is committed and
    unchanged, and the ledger has no earlier locked run. Nobody reads or tunes on the locked claims.
 5. Candidates and report: `current`, `S2` and `SL` (below), nothing else. False rejects (correct

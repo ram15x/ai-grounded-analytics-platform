@@ -1,6 +1,6 @@
 # Category notes: gift wrap
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: gift wrap are priced at 2.8 times landed cost.
 

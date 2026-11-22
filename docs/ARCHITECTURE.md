@@ -1,4 +1,4 @@
-# Verified Analyst: Architecture
+# AI Grounded Analytics Platform: Architecture
 
 Status: design only. Nothing in this document is implemented yet. See README for the status table.
 

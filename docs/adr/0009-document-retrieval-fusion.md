@@ -4,7 +4,7 @@ Status: Accepted as a pre-registration. The shipped default is **not** changed b
 
 ## Context
 
-`va docs probe` runs keyword, vector, hybrid and reranked search on the 65 dev document questions.
+`grounded docs probe` runs keyword, vector, hybrid and reranked search on the 65 dev document questions.
 With two real embedders (local `BAAI/bge-small-en-v1.5` and Gemini `gemini-embedding-2`, both on
 the dev questions) the owner found that:
 
@@ -18,7 +18,7 @@ of searching, not of a test.
 
 ## Pre-registered candidates
 
-Fixed here, before any held-out scoring. `va docs heldout` scores exactly these three and reads
+Fixed here, before any held-out scoring. `grounded docs heldout` scores exactly these three and reads
 them back from the block below; the code also holds them and refuses to run if they differ.
 
 <!-- candidates:begin -->
@@ -75,9 +75,9 @@ hybrid) agrees with these to two decimals.
 
 ## Procedure
 
-1. Commit this file (with the pasted numbers). `va docs heldout` refuses to run if the file is
+1. Commit this file (with the pasted numbers). `grounded docs heldout` refuses to run if the file is
    missing, not committed, or changed since it was committed.
-2. Run `va docs heldout --candidates A,B,baseline --embedder <name>` once per embedder. It scores
+2. Run `grounded docs heldout --candidates A,B,baseline --embedder <name>` once per embedder. It scores
    only these three candidates on the 12 held-out document questions and prints per-question
    differences. It records each embedder in `data/heldout_ledger.jsonl` and refuses a second run
    for the same embedder. (Deleting that file by hand defeats this; it is a guard against

@@ -56,18 +56,18 @@ claim is made for any model on these questions; none has been run on them.
 ## Document held-out questions
 
 `eval/doc_questions/heldout.yaml` (12 questions) is separate from the text-to-SQL file above. Only
-`va docs heldout` reads it, through `documents/heldout_run.py`, for the three candidates fixed in
+`grounded docs heldout` reads it, through `documents/heldout_run.py`, for the three candidates fixed in
 `docs/adr/0009-document-retrieval-fusion.md`, once per embedder. Everything else (probe, eval,
 search, tuning) uses `dev.yaml`. Tests check that no other module names the file.
 
-**Status: SPENT** (ADR-0010). The 12 questions informed the fusion decision and may not be used to choose between settings again. `va docs heldout` refuses to run. A new set is needed.
+**Status: SPENT** (ADR-0010). The 12 questions informed the fusion decision and may not be used to choose between settings again. `grounded docs heldout` refuses to run. A new set is needed.
 
 ## Router held-out questions (slice 2e)
 
 `eval/router_questions/heldout.yaml` holds 12 router questions (3 data, 3 documents, 3 both, 3
 abstain), **locked**. Nothing in `src` names or reads it, no prompt embeds any of its questions,
 and no question or id is shared with another question file; `tests/test_route_probe.py` checks all
-of that. `va route probe` reads only `eval/router_questions/dev.yaml`. Do not use the locked file
+of that. `grounded route probe` reads only `eval/router_questions/dev.yaml`. Do not use the locked file
 to choose between router prompts. When the router prompt is frozen, write a short pre-registered
 procedure (what is scored, once, per model) in an ADR, as ADR-0009 did, before adding any command
 that reads it. No such command exists yet.
@@ -75,7 +75,7 @@ that reads it. No such command exists yet.
 ## Binder locked half
 
 The locked half of the binder study (documents whose key hashes to "locked") is built only by
-`documents/binder_locked.py`, run once with `va docs binder-locked --candidates current,C1,C2,S1,S2,SL`
+`documents/binder_locked.py`, run once with `grounded docs binder-locked --candidates current,C1,C2,S1,S2,SL`
 after docs/adr/0011-binder-variants.md is committed. A ledger (`data/binder_locked_ledger.jsonl`)
 refuses a second run. Nothing else may read it or choose a variant with it. The 12 locked router
 questions (`eval/router_questions/heldout.yaml`) are separate and still have no gated command.

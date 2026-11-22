@@ -1,6 +1,6 @@
 # Supplier note: giftware range
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 The main giftware supplier quotes a lead time of 21 days from purchase order to goods received. In
 the peak season, from October to December, the lead time rises to 35 days. Orders for the peak

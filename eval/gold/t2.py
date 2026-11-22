@@ -6,7 +6,7 @@ prompt, or an example in a prompt. The gold VALUES are not stored in the reposit
 computed on demand from the raw file by eval/gold/run_heldout.py.
 
 INDEPENDENCE RULE: this file imports only the standard library and pandas. It does not import
-anything from verified_analyst, it does not read semantic/metrics.yaml, and it does not import
+anything from grounded_analytics, it does not read semantic/metrics.yaml, and it does not import
 t1: the row rules are written out again here on purpose, so a mistake in one gold file is not
 silently copied into the other (tests/test_gold.py checks that both agree on the overall totals).
 

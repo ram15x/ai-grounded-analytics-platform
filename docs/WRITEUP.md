@@ -1,8 +1,8 @@
-# Verified Analyst: write-up
+# AI Grounded Analytics Platform: write-up
 
 ## The problem
 A language model asked a business question will state numbers fluently, and some will be wrong.
-Business users cannot tell which. Verified Analyst puts a deterministic check between the model and
+Business users cannot tell which. AI Grounded Analytics Platform puts a deterministic check between the model and
 the reader: no figure is shown unless it matches the warehouse or a stored passage.
 
 ## How a figure gets to the screen
@@ -28,7 +28,7 @@ the reader: no figure is shown unless it matches the warehouse or a stored passa
   ADR-0013, blocked on free-plan quota).
 
 ## Bring your own data (built, lightly tested)
-The system is no longer tied to one dataset. `va serve --workspace` (local only) takes a CSV, TSV or
+The system is no longer tied to one dataset. `grounded serve --workspace` (local only) takes a CSV, TSV or
 Excel file, profiles it, and asks the person what it is and what each number means, using a closed
 set of metric definitions (count, sum, average, min, max, distinct count, one filter). A definition
 is published only if it reproduces a figure the person already knows, recomputed by a separate path.

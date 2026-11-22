@@ -7,16 +7,16 @@ import math
 
 import pytest
 
-from verified_analyst.documents.embed import EmbeddingError
-from verified_analyst.documents.embed_http import (
+from grounded_analytics.documents.embed import EmbeddingError
+from grounded_analytics.documents.embed_http import (
     GeminiEmbedder,
     OllamaEmbedder,
     OpenAICompatEmbedder,
     build_embedder,
 )
-from verified_analyst.documents.rerank import ApiReranker, CrossEncoderReranker, FakeReranker
-from verified_analyst.documents.settings import EmbedderSettings, RerankerSettings
-from verified_analyst.llm.transport import HttpResponse, TransportError, TransportTimeout
+from grounded_analytics.documents.rerank import ApiReranker, CrossEncoderReranker, FakeReranker
+from grounded_analytics.documents.settings import EmbedderSettings, RerankerSettings
+from grounded_analytics.llm.transport import HttpResponse, TransportError, TransportTimeout
 
 KEY = "sk-test-SECRET-12345"
 
@@ -297,7 +297,7 @@ def test_cross_encoder_without_fastembed_is_a_config_error(monkeypatch):
 
 
 def test_hosted_and_local_rerankers_share_one_interface():
-    from verified_analyst.documents.rerank import build_reranker
+    from grounded_analytics.documents.rerank import build_reranker
 
     hosted = build_reranker("h", rr(), {"K": KEY}, Rec(body={}))
     local = build_reranker("l", RerankerSettings(kind="cross_encoder", hosted=False, model="m"), {})
@@ -349,7 +349,7 @@ class FakeLibrary:
 
 
 def test_local_embedder_loads_once_prints_one_notice_and_batches():
-    from verified_analyst.documents.embed_http import LocalEmbedder
+    from grounded_analytics.documents.embed_http import LocalEmbedder
 
     lib, notes = FakeLibrary(), []
     e = LocalEmbedder("l", local_settings(cache_dir="/tmp/m"), {}, library=lib, notice=notes.append)
@@ -367,7 +367,7 @@ def test_local_embedder_loads_once_prints_one_notice_and_batches():
 def test_local_embedder_missing_package_is_a_config_error(monkeypatch):
     import sys
 
-    from verified_analyst.documents.embed_http import LocalEmbedder
+    from grounded_analytics.documents.embed_http import LocalEmbedder
 
     monkeypatch.setitem(sys.modules, "fastembed", None)  # makes `import fastembed` fail
     with pytest.raises(EmbeddingError) as ei:
@@ -376,7 +376,7 @@ def test_local_embedder_missing_package_is_a_config_error(monkeypatch):
 
 
 def test_local_embedder_load_and_run_failures_are_mapped():
-    from verified_analyst.documents.embed_http import LocalEmbedder
+    from grounded_analytics.documents.embed_http import LocalEmbedder
 
     def boom(model, cache_dir):
         raise OSError("no route to host " + "x" * 500)

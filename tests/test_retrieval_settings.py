@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from verified_analyst.documents.settings import (
+from grounded_analytics.documents.settings import (
     EmbedderSettings,
     RerankerSettings,
     load_retrieval_settings,
 )
-from verified_analyst.llm.transport import TransportError, loopback_transport
+from grounded_analytics.llm.transport import TransportError, loopback_transport
 
 
 def test_shipped_config_loads_and_hosted_flags_are_consistent():
@@ -39,7 +39,7 @@ def test_validation_rules():
 
 
 def test_missing_file_is_a_config_error(tmp_path):
-    from verified_analyst.config import ConfigError
+    from grounded_analytics.config import ConfigError
 
     with pytest.raises(ConfigError):
         load_retrieval_settings(tmp_path / "nope.yaml")

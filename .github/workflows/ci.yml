@@ -29,8 +29,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      VA_REQUIRE_DB: "1"
-      VA_TEST_DATABASE_URL: host=localhost port=5432 user=postgres dbname=postgres password=postgres
+      GA_REQUIRE_DB: "1"
+      GA_TEST_DATABASE_URL: host=localhost port=5432 user=postgres dbname=postgres password=postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -1,6 +1,6 @@
 # Delivery policy (superseded 2011-03-01)
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 This policy was replaced and is kept for the record only.
 

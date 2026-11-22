@@ -1,6 +1,6 @@
 # Supplier note: packaging
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Goods in the packaging range arrive 10 days after the purchase order is placed. Between October and December the wait grows to 20 days.
 

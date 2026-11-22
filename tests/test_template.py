@@ -5,10 +5,10 @@ from decimal import Decimal as D
 import pytest
 from pydantic import ValidationError
 
-import verified_analyst.verifier as verifier_mod
+import grounded_analytics.verifier as verifier_mod
 from adversarial_cases import KNOWN, LAYER, cases, cell, queries
-from verified_analyst.claims import TemplateAnswer
-from verified_analyst.template import format_value, verify_template
+from grounded_analytics.claims import TemplateAnswer
+from grounded_analytics.template import format_value, verify_template
 
 QS = queries()
 
@@ -231,8 +231,8 @@ def test_ordinals_dates_and_known_codes_are_allowed():
 
 
 def test_identifier_present_in_results_is_allowed():
-    from verified_analyst.compiler import MetricQuery
-    from verified_analyst.verifier import ExecutedQuery
+    from grounded_analytics.compiler import MetricQuery
+    from grounded_analytics.verifier import ExecutedQuery
 
     q = ExecutedQuery("qp", "SELECT 1", ["stock_code", "net_revenue"], [("85123A", D("10"))],
                       metric_query=None, declared_metric_query=MetricQuery(metrics=["net_revenue"]))  # fmt: skip

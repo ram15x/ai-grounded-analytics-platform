@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from verified_analyst.llm.settings import RouterSettings
-from verified_analyst.llm.transport import HttpResponse, TransportError, TransportTimeout
-from verified_analyst.llm.types import LLMRequest
+from grounded_analytics.llm.settings import RouterSettings
+from grounded_analytics.llm.transport import HttpResponse, TransportError, TransportTimeout
+from grounded_analytics.llm.types import LLMRequest
 
 KEYS = {
     "GROQ_API_KEY": "gsk_test_key_groq_0123456789abcdef",

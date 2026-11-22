@@ -1,4 +1,4 @@
-from verified_analyst.e2e import score, summarise, wilson
+from grounded_analytics.e2e import score, summarise, wilson
 
 
 def run(outcome="verified", values=("9769872.0540",), reason=""):
@@ -39,7 +39,7 @@ def test_summary_and_interval():
 
 
 def test_table_gold_needs_every_numeric_cell_and_ignores_labels():
-    from verified_analyst.e2e import score_table
+    from grounded_analytics.e2e import score_table
 
     gold = [["Germany", "100.50"], ["France", "90.00"]]
     ok = run(values=("100.50", "90.00", "7"))  # an extra figure is allowed

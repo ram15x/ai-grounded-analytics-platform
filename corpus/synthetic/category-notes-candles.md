@@ -1,6 +1,6 @@
 # Category notes: candles
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Pricing: candles are priced at 2.4 times landed cost.
 

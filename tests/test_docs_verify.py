@@ -1,12 +1,12 @@
-"""`va verify` reads passage text from the document store only (needs Postgres)."""
+"""`grounded verify` reads passage text from the document store only (needs Postgres)."""
 
 import json
 
 import psycopg
 import pytest
 
-from verified_analyst.cli import main, run_verify
-from verified_analyst.documents.store import ingest, make_passage_id
+from grounded_analytics.cli import main, run_verify
+from grounded_analytics.documents.store import ingest, make_passage_id
 
 pytestmark = pytest.mark.db
 TEXT = (
@@ -111,7 +111,7 @@ def test_a_citation_of_an_old_or_invented_id_is_unsupported(warehouse, stored, t
 
 def test_the_cli_exit_code_follows_the_stored_verdict(warehouse, stored, tmp_path, monkeypatch):
     _, text, pid = stored
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", warehouse.readonly_url)
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", warehouse.readonly_url)
     good = _answer(
         tmp_path, pid, _span(text, "£4.95"), "The courier charge is £4.95.", "4.95", "£4.95"
     )

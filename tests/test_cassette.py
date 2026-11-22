@@ -1,4 +1,4 @@
-"""Cassette record/replay, key hashing, secret scan, and `va cassettes check`. No network."""
+"""Cassette record/replay, key hashing, secret scan, and `grounded cassettes check`. No network."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from llm_helpers import KEYS, MockTransport, ok_openai, req, settings
-from verified_analyst.cli import main
-from verified_analyst.llm.cassette import (
+from grounded_analytics.cli import main
+from grounded_analytics.llm.cassette import (
     Cassette,
     CassetteContext,
     check_cassettes,
@@ -21,16 +20,17 @@ from verified_analyst.llm.cassette import (
     scan_for_secrets,
     schema_hash,
 )
-from verified_analyst.llm.fake import FakeProvider
-from verified_analyst.llm.prompts import prompt_hashes
-from verified_analyst.llm.providers import GroqProvider
-from verified_analyst.llm.router import Router
-from verified_analyst.llm.types import (
+from grounded_analytics.llm.fake import FakeProvider
+from grounded_analytics.llm.prompts import prompt_hashes
+from grounded_analytics.llm.providers import GroqProvider
+from grounded_analytics.llm.router import Router
+from grounded_analytics.llm.types import (
     CassetteLeak,
     CassetteMiss,
     LLMResponse,
     ProviderError,
 )
+from llm_helpers import KEYS, MockTransport, ok_openai, req, settings
 
 CTX = CassetteContext("layer1", "schema1", "wh1")
 PUB = ("analytics.sales_lines",)
@@ -290,10 +290,10 @@ def test_check_unused_and_missing_need_a_usage_file(tmp_path):
 
 
 def test_cli_cassettes_check_exit_codes(tmp_path, capsys, monkeypatch):
-    monkeypatch.delenv("VA_READONLY_DATABASE_URL", raising=False)
+    monkeypatch.delenv("GA_READONLY_DATABASE_URL", raising=False)
     d = tmp_path / "suite"
-    from verified_analyst.llm.cassette import layer_hash as lh
-    from verified_analyst.llm.cassette import schema_hash as sh
+    from grounded_analytics.llm.cassette import layer_hash as lh
+    from grounded_analytics.llm.cassette import schema_hash as sh
 
     real = CassetteContext(lh(), sh(), "wh")
     cas = Cassette(d, "record", real, env={})
@@ -320,13 +320,13 @@ def test_cli_cassettes_check_exit_codes(tmp_path, capsys, monkeypatch):
 
 
 def test_cli_cassettes_check_on_an_empty_directory(tmp_path, capsys, monkeypatch):
-    monkeypatch.delenv("VA_READONLY_DATABASE_URL", raising=False)
+    monkeypatch.delenv("GA_READONLY_DATABASE_URL", raising=False)
     assert main(["cassettes", "check", str(Path(tmp_path) / "nothing")]) == 0
     assert "entries: 0" in capsys.readouterr().out
 
 
 def test_a_request_without_reasoning_effort_keeps_its_old_key_material():
-    from verified_analyst.llm.cassette import normalise_request
+    from grounded_analytics.llm.cassette import normalise_request
 
     r = req(datasets=PUB)
     assert "reasoning_effort" not in normalise_request(r)

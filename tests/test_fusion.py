@@ -2,7 +2,7 @@
 
 import pytest
 
-from verified_analyst.documents.embed import (
+from grounded_analytics.documents.embed import (
     EmbeddingError,
     FakeEmbedder,
     batched,
@@ -10,8 +10,8 @@ from verified_analyst.documents.embed import (
     l2_normalize,
     vector_literal,
 )
-from verified_analyst.documents.fusion import fuse_hits, hybrid, reranked, rrf
-from verified_analyst.documents.store import Hit
+from grounded_analytics.documents.fusion import fuse_hits, hybrid, reranked, rrf
+from grounded_analytics.documents.store import Hit
 
 
 def hit(pid, score=1.0):

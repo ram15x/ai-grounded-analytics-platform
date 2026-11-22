@@ -5,10 +5,10 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from verified_analyst.claims import AnswerDoc, Claim, QuerySpec
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.semantic import load_semantic_layer
-from verified_analyst.verifier import ExecutedQuery, Verifier, verify_answer
+from grounded_analytics.claims import AnswerDoc, Claim, QuerySpec
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.semantic import load_semantic_layer
+from grounded_analytics.verifier import ExecutedQuery, Verifier, verify_answer
 
 LAYER = load_semantic_layer()
 D = Decimal

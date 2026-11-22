@@ -1,6 +1,6 @@
 # Stock and reorder policy
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Each fast-moving line has a reorder point of 40 units and a reorder quantity of 120 units. Slow lines
 have a reorder point of 10 units and a reorder quantity of 24 units. Stock is counted in full twice a

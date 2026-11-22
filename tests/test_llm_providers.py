@@ -8,26 +8,16 @@ import re
 
 import pytest
 
-from llm_helpers import (
-    CONN_ERROR,
-    KEYS,
-    TIMEOUT,
-    MockTransport,
-    ok_gemini,
-    ok_openai,
-    req,
-    status,
-)
-from verified_analyst.config import ConfigError
-from verified_analyst.llm.providers import (
+from grounded_analytics.config import ConfigError
+from grounded_analytics.llm.providers import (
     ADAPTERS,
     GeminiProvider,
     GroqProvider,
     OpenRouterProvider,
     parse_retry_after,
 )
-from verified_analyst.llm.transport import HttpResponse, TransportError, urllib_transport
-from verified_analyst.llm.types import (
+from grounded_analytics.llm.transport import HttpResponse, TransportError, urllib_transport
+from grounded_analytics.llm.types import (
     AUTH,
     BAD_REQUEST,
     BLOCKED,
@@ -39,8 +29,18 @@ from verified_analyst.llm.types import (
     ProviderError,
     SensitivityRefusal,
 )
-from verified_analyst.llm.types import (
+from grounded_analytics.llm.types import (
     TIMEOUT as K_TIMEOUT,
+)
+from llm_helpers import (
+    CONN_ERROR,
+    KEYS,
+    TIMEOUT,
+    MockTransport,
+    ok_gemini,
+    ok_openai,
+    req,
+    status,
 )
 
 CASES = [
@@ -305,8 +305,8 @@ def _capture(monkeypatch):
 
 
 def test_post_and_get_send_an_explicit_user_agent_not_the_python_default(monkeypatch):
-    from verified_analyst import __version__
-    from verified_analyst.llm.transport import urllib_get
+    from grounded_analytics import __version__
+    from grounded_analytics.llm.transport import urllib_get
 
     seen = _capture(monkeypatch)
     urllib_transport("https://example.test/x", {"Authorization": "Bearer k"}, b"{}", 5)
@@ -314,7 +314,7 @@ def test_post_and_get_send_an_explicit_user_agent_not_the_python_default(monkeyp
     assert [r.get_method() for r in seen] == ["POST", "GET"]
     for r in seen:
         ua = r.get_header("User-agent")
-        assert ua == f"verified-analyst/{__version__}"
+        assert ua == f"ai-grounded-analytics-platform/{__version__}"
         assert "python" not in ua.lower()
 
 
@@ -325,13 +325,13 @@ def test_an_explicit_user_agent_from_the_caller_is_kept(monkeypatch):
 
 
 def test_user_agent_contains_no_key_or_host_data(monkeypatch):
-    from verified_analyst.llm.transport import user_agent
+    from grounded_analytics.llm.transport import user_agent
 
     for k, v in KEYS.items():
         monkeypatch.setenv(k, v)
     ua = user_agent()
     assert all(v not in ua for v in KEYS.values())
-    assert re.fullmatch(r"verified-analyst/[0-9][0-9A-Za-z.+-]*", ua)
+    assert re.fullmatch(r"ai-grounded-analytics-platform/[0-9][0-9A-Za-z.+-]*", ua)
 
 
 def test_adapter_requests_reach_the_transport_with_keys_only_in_auth_headers(monkeypatch):
@@ -341,7 +341,7 @@ def test_adapter_requests_reach_the_transport_with_keys_only_in_auth_headers(mon
     monkeypatch.setattr(_FakeResp, "read", lambda self: body)
     p.complete(public(), "m", 5)
     req_ = seen[0]
-    assert req_.get_header("User-agent").startswith("verified-analyst/")
+    assert req_.get_header("User-agent").startswith("ai-grounded-analytics-platform/")
     assert KEYS["GROQ_API_KEY"] not in req_.get_header("User-agent")
     assert KEYS["GROQ_API_KEY"] in req_.get_header("Authorization")
 

@@ -11,8 +11,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from verified_analyst import tryout as T
-from verified_analyst.web import app
+from grounded_analytics import tryout as T
+from grounded_analytics.web import app
 
 KEY = "gsk_SECRETSECRETSECRET1234"
 
@@ -138,8 +138,8 @@ def test_bad_config_is_refused(tmp_path):
 
 
 def test_byok_ask_scrubs_the_key_from_errors_and_stores_nothing(monkeypatch, tmp_path):
-    from verified_analyst import cli
-    from verified_analyst.llm.types import LLMError
+    from grounded_analytics import cli
+    from grounded_analytics.llm.types import LLMError
 
     class Layer:
         class source:  # noqa: N801
@@ -148,7 +148,7 @@ def test_byok_ask_scrubs_the_key_from_errors_and_stores_nothing(monkeypatch, tmp
     monkeypatch.setattr(cli, "load_semantic_layer", lambda: Layer)
     monkeypatch.setattr(cli, "readonly_database_url", lambda: "x")
     monkeypatch.setattr(cli, "catalogue", lambda *a: {})
-    monkeypatch.setattr("verified_analyst.llm.answer.make_retriever", lambda *a, **k: None)
+    monkeypatch.setattr("grounded_analytics.llm.answer.make_retriever", lambda *a, **k: None)
 
     def boom(*a, **k):
         raise LLMError(f"provider said no for {KEY}")
@@ -168,7 +168,7 @@ def test_the_page_never_writes_the_key_to_browser_storage_or_a_url():
 
 
 def test_cache_forgets_replies_from_a_run_that_did_not_verify(tmp_path):
-    from verified_analyst.llm.cassette import Cassette, CassetteContext
+    from grounded_analytics.llm.cassette import Cassette, CassetteContext
 
     c = Cassette(tmp_path, "resume", CassetteContext("l", "s", "w"), env={})
     c.entries["old"] = {"key": "old"}
@@ -181,7 +181,7 @@ def test_cache_forgets_replies_from_a_run_that_did_not_verify(tmp_path):
 
 
 def test_own_questions_are_never_cached(monkeypatch, tmp_path):
-    from verified_analyst import cli
+    from grounded_analytics import cli
 
     class Layer:
         class source:  # noqa: N801
@@ -190,7 +190,7 @@ def test_own_questions_are_never_cached(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "load_semantic_layer", lambda: Layer)
     monkeypatch.setattr(cli, "readonly_database_url", lambda: "x")
     monkeypatch.setattr(cli, "catalogue", lambda *a: {})
-    monkeypatch.setattr("verified_analyst.llm.answer.make_retriever", lambda *a, **k: None)
+    monkeypatch.setattr("grounded_analytics.llm.answer.make_retriever", lambda *a, **k: None)
 
     class Res:
         outcome = "verified"
@@ -210,14 +210,14 @@ def test_own_questions_are_never_cached(monkeypatch, tmp_path):
 
 
 def test_models_endpoint_returns_headroom_headers_and_scrubs_the_key(monkeypatch):
-    from verified_analyst import cli
+    from grounded_analytics import cli
 
     def fake_list(settings, name, env, *a, **k):
         echo = env[settings.providers[name].env_key]
         return {"provider": name, "models": [{"id": "m"}], "note": f"echo {echo}",
                 "rate_headers": {"x-ratelimit-remaining-tokens": "7000"}}  # fmt: skip
 
-    monkeypatch.setattr("verified_analyst.llm.live.list_provider_models", fake_list)
+    monkeypatch.setattr("grounded_analytics.llm.live.list_provider_models", fake_list)
     out = cli._byok_models("groq", KEY)
     assert out["rate_headers"]["x-ratelimit-remaining-tokens"] == "7000"
     assert KEY not in json.dumps(out)

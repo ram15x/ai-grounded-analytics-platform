@@ -1,6 +1,6 @@
 # Number extractor: scope and known limits
 
-`verified_analyst.extract.extract_numbers(text)` finds every numeric claim in an answer
+`grounded_analytics.extract.extract_numbers(text)` finds every numeric claim in an answer
 (ARCHITECTURE section 4.1, step B). Each item has one of three statuses:
 
 - **ok**: parsed into an exact `Decimal` value, unit, currency, scale, displayed precision

@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.documents.chunker import chunk_text
-from verified_analyst.documents.metrics import (
+from grounded_analytics.documents.chunker import chunk_text
+from grounded_analytics.documents.metrics import (
     Retrieved,
     lexical_overlap,
     load_questions,
     norm,
     unreachable_anchors,
 )
-from verified_analyst.documents.store import normalize_text
+from grounded_analytics.documents.store import normalize_text
 
 ROOT = Path(__file__).parent.parent
 CORPUS = ROOT / "corpus" / "synthetic"

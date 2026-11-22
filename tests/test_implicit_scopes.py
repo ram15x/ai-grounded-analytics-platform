@@ -17,10 +17,10 @@ import pytest
 import yaml
 
 from adversarial_cases import COUNTRIES, KNOWN, LAYER, _claim, cases, cell, queries
-from verified_analyst.claims import TemplateAnswer
-from verified_analyst.semantic import SemanticLayer, default_path
-from verified_analyst.template import verify_template
-from verified_analyst.verifier import Verifier
+from grounded_analytics.claims import TemplateAnswer
+from grounded_analytics.semantic import SemanticLayer, default_path
+from grounded_analytics.template import verify_template
+from grounded_analytics.verifier import Verifier
 
 QS = queries()
 KNOWN_K = {**KNOWN, "product_kind": {"merchandise", "non_merchandise"}}  # as the pipeline loads
@@ -62,7 +62,7 @@ def test_only_units_sold_declares_an_implicit_scope():
 
 def test_the_plan_catalogue_does_not_carry_implicit_scopes():
     """The planner prompt (plan.v1) is unchanged by this feature."""
-    from verified_analyst.llm.prompts import catalogue_text
+    from grounded_analytics.llm.prompts import catalogue_text
 
     assert "implicit_scopes" not in catalogue_text(LAYER)
 

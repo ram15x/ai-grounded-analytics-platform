@@ -4,7 +4,7 @@ The number check (does the cell hold this value?) is necessary, not sufficient. 
 cite a REAL cell and describe it wrongly: another country, another month, another metric of the
 same unit. The claim's `label` is composer-written, so it cannot be trusted to bind the number.
 
-`src/verified_analyst/context.py` therefore reads the PROSE around each `cell` claim:
+`src/grounded_analytics/context.py` therefore reads the PROSE around each `cell` claim:
 
 1. **Row.** If the cell is one row of a multi-row result, the sentence must name that row's
    dimension value, and the value nearest the number (in words) must be the cited row.
@@ -143,4 +143,4 @@ are of that kind, none inside the same passage, and the cause is generic label w
 false-reject figure is a floor: the correct cases take their label from the number's own sentence, so
 the sentence rule passes them almost by construction, and false rejects on labels written by a model
 are unmeasured. The rule fails closed but is not a proof that a label describes its number. See
-docs/adr/0011, docs/adr/0012 and `va docs binder-study`.
+docs/adr/0011, docs/adr/0012 and `grounded docs binder-study`.

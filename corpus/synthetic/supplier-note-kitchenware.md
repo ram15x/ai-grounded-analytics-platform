@@ -1,6 +1,6 @@
 # Supplier note: kitchenware
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Goods in the kitchenware range arrive 28 days after the purchase order is placed. Between October and December the wait grows to 42 days.
 

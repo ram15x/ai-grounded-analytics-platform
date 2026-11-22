@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
+from grounded_analytics.datasets import load as L
+from grounded_analytics.datasets import manifest as M
+from grounded_analytics.datasets.profile import profile_file
+from grounded_analytics.guard import allowed_for
+from grounded_analytics.llm.fake import FakeProvider
+from grounded_analytics.llm.pipeline import run_question
+from grounded_analytics.llm.router import Router
 from llm_helpers import settings
 from test_dataset_load import scratch  # noqa: F401
-from verified_analyst.datasets import load as L
-from verified_analyst.datasets import manifest as M
-from verified_analyst.datasets.profile import profile_file
-from verified_analyst.guard import allowed_for
-from verified_analyst.llm.fake import FakeProvider
-from verified_analyst.llm.pipeline import run_question
-from verified_analyst.llm.router import Router
 
 pytestmark = pytest.mark.db
 
@@ -34,7 +34,7 @@ def saas(scratch):  # noqa: F811
 
 def _run(saas, script):
     admin, ro, role, prof, m = saas
-    from verified_analyst.datasets.profile import read_table
+    from grounded_analytics.datasets.profile import read_table
 
     df = read_table(EX / "saas_subscriptions.csv")
     L.load_dataset(df, prof, m, admin, role)

@@ -8,21 +8,21 @@ import json
 
 import pytest
 
-from llm_helpers import KEYS, MockTransport, ok_openai, settings
-from verified_analyst.cli import catalogue
-from verified_analyst.llm.cassette import (
+from grounded_analytics.cli import catalogue
+from grounded_analytics.llm.cassette import (
     Cassette,
     CassetteContext,
     layer_hash,
     schema_hash,
     warehouse_content_hash,
 )
-from verified_analyst.llm.fake import FakeProvider
-from verified_analyst.llm.pipeline import run_question
-from verified_analyst.llm.providers import GroqProvider
-from verified_analyst.llm.router import Router
-from verified_analyst.llm.transport import HttpResponse
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.llm.fake import FakeProvider
+from grounded_analytics.llm.pipeline import run_question
+from grounded_analytics.llm.providers import GroqProvider
+from grounded_analytics.llm.router import Router
+from grounded_analytics.llm.transport import HttpResponse
+from grounded_analytics.semantic import load_semantic_layer
+from llm_helpers import KEYS, MockTransport, ok_openai, settings
 
 pytestmark = pytest.mark.db
 
@@ -190,7 +190,7 @@ def test_no_verified_number_in_any_attempt_abstains(env):
 
 
 def test_provider_failure_abstains_with_reason(env):
-    from verified_analyst.llm.types import ProviderError
+    from grounded_analytics.llm.types import ProviderError
 
     out, _, _ = go({"plan": [ProviderError("auth", "nope")] * 3}, env)
     assert (out.outcome, out.reason) == ("abstain", "provider_error")

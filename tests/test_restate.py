@@ -1,8 +1,8 @@
 import pytest
 
-from verified_analyst.compiler import CompileError, MetricQuery
-from verified_analyst.restate import restate
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.compiler import CompileError, MetricQuery
+from grounded_analytics.restate import restate
+from grounded_analytics.semantic import load_semantic_layer
 
 L = load_semantic_layer()
 

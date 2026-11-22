@@ -34,6 +34,6 @@ question asked; free-plan quota may leave `no_reply` rows, which are reported as
 
 ## Guard tests relaxed on purpose
 `tests/test_heldout.py` and `tests/test_docs_cli.py` forbid any product module from naming the locked
-question file. They now allow exactly one more module, `src/verified_analyst/e2e_locked.py`, which
-holds only the path. The locked file is read by one command, `va eval e2e --split locked
---confirm-locked`, which refuses a second run per model. This mirrors `va docs heldout`.
+question file. They now allow exactly one more module, `src/grounded_analytics/e2e_locked.py`, which
+holds only the path. The locked file is read by one command, `grounded eval e2e --split locked
+--confirm-locked`, which refuses a second run per model. This mirrors `grounded docs heldout`.

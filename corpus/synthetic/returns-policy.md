@@ -1,6 +1,6 @@
 # Returns policy (current)
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus. It describes a fictional company.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus. It describes a fictional company.
 
 Customers may return unused merchandise within 28 days of delivery. The 28 days are counted from the
 delivery date shown on the courier record, not from the order date.

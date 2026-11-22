@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal as D
 
-from verified_analyst.claims import Claim
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.semantic import load_semantic_layer
-from verified_analyst.verifier import ExecutedQuery
+from grounded_analytics.claims import Claim
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.semantic import load_semantic_layer
+from grounded_analytics.verifier import ExecutedQuery
 
 LAYER = load_semantic_layer()
 COUNTRIES = ["France", "Germany", "EIRE", "United Kingdom", "Spain"]

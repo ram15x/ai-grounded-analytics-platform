@@ -6,7 +6,7 @@ Status: proposed, pre-registration. Written before the locked half of the binder
 
 The passage label binder (`documents/binding.py`, rule R1: every label word the passage uses must
 sit within 6 words of the number) refused correct labels on real model wording. The binder study
-(`documents/binder_study.py`, `va docs binder-study`) measures variants on generated cases from the
+(`documents/binder_study.py`, `grounded docs binder-study`) measures variants on generated cases from the
 80 synthetic documents: correct cases (a label from the number's own sentence, four styles) and
 swapped cases (the same label on a different number, in the same passage or another document).
 Documents are split by a hash of the document key; the dev half is used to choose candidates, the

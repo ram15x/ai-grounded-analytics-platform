@@ -9,6 +9,19 @@ from pathlib import Path
 
 import pytest
 
+from grounded_analytics.config import ConfigError
+from grounded_analytics.llm.accounting import merge_summaries, render_markdown
+from grounded_analytics.llm.fake import FakeProvider
+from grounded_analytics.llm.providers import GeminiProvider, GroqProvider, OpenRouterProvider
+from grounded_analytics.llm.router import Router, TokenBucket, estimate_tokens
+from grounded_analytics.llm.settings import load_router_settings
+from grounded_analytics.llm.transport import HttpResponse
+from grounded_analytics.llm.types import (
+    AllProvidersFailed,
+    BudgetExceeded,
+    ProviderError,
+    SensitivityRefusal,
+)
 from llm_helpers import (
     CONN_ERROR,
     KEYS,
@@ -19,19 +32,6 @@ from llm_helpers import (
     req,
     settings,
     status,
-)
-from verified_analyst.config import ConfigError
-from verified_analyst.llm.accounting import merge_summaries, render_markdown
-from verified_analyst.llm.fake import FakeProvider
-from verified_analyst.llm.providers import GeminiProvider, GroqProvider, OpenRouterProvider
-from verified_analyst.llm.router import Router, TokenBucket, estimate_tokens
-from verified_analyst.llm.settings import load_router_settings
-from verified_analyst.llm.transport import HttpResponse
-from verified_analyst.llm.types import (
-    AllProvidersFailed,
-    BudgetExceeded,
-    ProviderError,
-    SensitivityRefusal,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -320,7 +320,7 @@ def test_missing_usage_is_estimated_and_flagged_in_the_ledger():
     import json
 
     body = json.dumps({"choices": [{"message": {"content": "abcdefgh" * 10}}]}).encode()
-    from verified_analyst.llm.transport import HttpResponse
+    from grounded_analytics.llm.transport import HttpResponse
 
     router, run, _, _ = rig(groq=[HttpResponse(200, body)])
     r = router.call(req(text="x" * 400), run)
@@ -359,7 +359,7 @@ def test_merge_summaries_pools_runs():
 
 
 def test_percentiles():
-    from verified_analyst.llm.accounting import percentile
+    from grounded_analytics.llm.accounting import percentile
 
     assert percentile([], 50) is None
     assert percentile([5], 95) == 5
@@ -588,7 +588,7 @@ def test_configured_reasoning_effort_is_sent_to_groq_gpt_oss_models_and_only_the
 def test_reasoning_effort_on_another_provider_is_a_config_error():
     from pydantic import ValidationError
 
-    from verified_analyst.llm.settings import RouterSettings
+    from grounded_analytics.llm.settings import RouterSettings
 
     cfg = settings().model_dump()
     cfg["providers"]["gemini"]["reasoning_effort"] = "low"

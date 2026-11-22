@@ -1,6 +1,6 @@
 # Supplier note: lighting
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Goods in the lighting range arrive 35 days after the purchase order is placed. Between October and December the wait grows to 56 days.
 

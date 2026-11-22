@@ -8,7 +8,7 @@ committed by these commands, and no cassette is committed until you have reviewe
 ## 0. Once: get the code and check it
 
 ```powershell
-cd C:\Users\ramna\OneDrive\Desktop\Projects\verified-analyst
+cd C:\Users\ramna\OneDrive\Desktop\Projects\ai-grounded-analytics-platform
 Get-ChildItem ..\p4 -Filter *.patch | Sort-Object Name | ForEach-Object { git am $_.FullName }
 git log --oneline | Measure-Object -Line
 python -m pytest -q
@@ -27,14 +27,14 @@ Remove-Variable k
 ```
 
 The probe also needs the database holding the real data, with the same variables you used for
-`va profile-db`: `VA_READONLY_DATABASE_URL` (and `VA_DATABASE_URL` if you reload). It sends only the
+`grounded profile-db`: `GA_READONLY_DATABASE_URL` (and `GA_DATABASE_URL` if you reload). It sends only the
 10 T1 dev questions, the metric catalogue and single-row aggregate results from the public UCI
 dataset; nothing at customer level.
 
 ## 2. List the models each key can use (1 to 3 requests per provider)
 
 ```powershell
-va live models
+grounded live models
 ```
 
 Paste back the full output. It prints model IDs, the rate-limit headers seen, and whether the IDs
@@ -45,7 +45,7 @@ provider from this output before probing.
 ## 3. Probe one model at a time (25 requests by default, at most 60)
 
 ```powershell
-va live probe --provider groq --model openai/gpt-oss-20b --quota-check
+grounded live probe --provider groq --model openai/gpt-oss-20b --quota-check
 ```
 
 `--quota-check` spends 3 of the request cap on one good request, one deliberately invalid one and one
@@ -67,7 +67,7 @@ with `--reasoning-effort medium`. That `low` reduces reasoning tokens is UNVERIF
 once (two runs of the 5 injection questions, `low` then `medium`, each with its own request cap):
 
 ```powershell
-va route probe --provider groq --model <GPT-OSS ID> --injection-only --compare-reasoning low,medium --record
+grounded route probe --provider groq --model <GPT-OSS ID> --injection-only --compare-reasoning low,medium --record
 ```
 
 It writes `compare.md` and `compare.json` plus one sub-folder per setting. Between the two runs it
@@ -76,14 +76,14 @@ so that the second starts with a fresh minute bucket, and reports the wait. If t
 given up (a Retry-After above 60 s, or a per-day limit) the second is not started. Compose and repair ask
 for at least 2048 completion tokens on models that report reasoning tokens; an empty reply with
 finish `length` is retried once with the allowance doubled (cap 4096).
-`--max-tokens N` sets the allowance for every call, `--token-cap N` lowers the cap (`va live
-probe` also has `--no-record`; `va route probe` records only with `--record`).
+`--max-tokens N` sets the allowance for every call, `--token-cap N` lowers the cap (`grounded live
+probe` also has `--no-record`; `grounded route probe` records only with `--record`).
 
 Repeat with IDs taken from step 2 (replace the angle-bracket parts):
 
 ```powershell
-va live probe --provider gemini --model <GEMINI ID FROM STEP 2> --quota-check
-va live probe --provider openrouter --model <OPENROUTER ID FROM STEP 2> --quota-check
+grounded live probe --provider gemini --model <GEMINI ID FROM STEP 2> --quota-check
+grounded live probe --provider openrouter --model <OPENROUTER ID FROM STEP 2> --quota-check
 ```
 
 Each run prints its report and the path of its output folder, then the cassette key scan and check
@@ -93,7 +93,7 @@ result. Do not run the same model twice back to back unless asked: it spends quo
 
 ```powershell
 Get-ChildItem data\live_runs | Sort-Object Name
-va cassettes check data\live_runs\<FOLDER NAME FROM THE LIST>\cassettes
+grounded cassettes check data\live_runs\<FOLDER NAME FROM THE LIST>\cassettes
 ```
 
 Expected last line: `OK`. Open `data\live_runs\<folder>\cassettes\calls.jsonl` and read it yourself:
@@ -104,10 +104,10 @@ public UCI aggregates.
 
 For each command above: the full console output (it is redacted of keys by construction, but glance
 through it before pasting). Specifically:
-1. `va live models` (all of it).
-2. Each `va live probe` report (the whole `# Live probe` block, including the Rates, Tokens,
+1. `grounded live models` (all of it).
+2. Each `grounded live probe` report (the whole `# Live probe` block, including the Rates, Tokens,
    Rate-limit headers and "Does a failed request use quota?" sections, and the last two lines).
-3. The output of `va cassettes check` for each run folder.
+3. The output of `grounded cassettes check` for each run folder.
 4. Anything that looks odd in `calls.jsonl`, described in words (do not paste the file).
 
 Then close the session's keys:
@@ -148,7 +148,7 @@ If no names are found the redacted, truncated body is printed as for any other e
 `plan.v1` is what the pipeline sends now: the same instructions as `plan.v0` plus one sentence
 about descriptions and synonyms, and a catalogue that carries every metric's and dimension's
 description and synonyms word for word from `semantic/metrics.yaml`. `plan.v0` is kept only so
-old cassettes still pass `va cassettes check`. A report names the prompts actually used. The
+old cassettes still pass `grounded cassettes check`. A report names the prompts actually used. The
 catalogue is built from the semantic layer only; it never reads a question file.
 
 ## Abstains in the report
@@ -175,36 +175,36 @@ never read the held-out file. A hosted embedder or reranker sees only documents 
 the command refuses before any request if any ingested document is not. Nothing is an accuracy
 claim: the questions and documents have the same author.
 
-`va docs probe` grants the same default read-only role as `va docs ingest`; pass `--reader-role` for another.
+`grounded docs probe` grants the same default read-only role as `grounded docs ingest`; pass `--reader-role` for another.
 
 Once, with the pgvector image running (docs/DOCKER_PGVECTOR_SWITCH.md), ingest the synthetic corpus
 as public:
 
 ```powershell
-va docs ingest corpus\synthetic --sensitivity public
+grounded docs ingest corpus\synthetic --sensitivity public
 ```
 
 Then run one probe at a time. Keys go in this window only, as in section 1; nothing is saved.
 
 ```powershell
 # No network at all: checks the pipeline with the fake embedder and the fake reranker
-va docs probe --embedder fake_256 --reranker fake_overlap
+grounded docs probe --embedder fake_256 --reranker fake_overlap
 
 # Gemini embeddings (hosted; needs GEMINI_API_KEY)
-va docs probe --embedder gemini_embedding_2_768 --max-requests 30
-va docs probe --embedder gemini_embedding_001_768 --max-requests 30
+grounded docs probe --embedder gemini_embedding_2_768 --max-requests 30
+grounded docs probe --embedder gemini_embedding_001_768 --max-requests 30
 
 # OpenRouter embeddings (hosted; needs OPENROUTER_API_KEY)
-va docs probe --embedder openrouter_text_embedding_3_small --max-requests 30
+grounded docs probe --embedder openrouter_text_embedding_3_small --max-requests 30
 
 # A reranker on top (Jina; needs JINA_API_KEY; about 65 requests, paced)
-va docs probe --embedder gemini_embedding_2_768 --reranker jina_reranker_v3_5 --max-requests 80
+grounded docs probe --embedder gemini_embedding_2_768 --reranker jina_reranker_v3_5 --max-requests 80
 
 # On this computer's CPU, no key and no daemon. Install the optional extra first (once):
 #   pip install -e ".[local]"
 # The first run of each model may download its files (the command prints a notice first).
-va docs probe --embedder local_bge_small_en_v15
-va docs probe --embedder local_bge_base_en_v15      # larger and slower
+grounded docs probe --embedder local_bge_small_en_v15
+grounded docs probe --embedder local_bge_base_en_v15      # larger and slower
 ```
 
 Add `--fusion-study` to any probe to also score a fixed grid of fusion settings (RRF constant,
@@ -214,7 +214,7 @@ the default and a bootstrap interval. It selects nothing: run it with at least t
 look for changes that agree before anyone changes a default.
 
 ```powershell
-va docs probe --embedder gemini_embedding_2_768 --fusion-study --max-requests 30
+grounded docs probe --embedder gemini_embedding_2_768 --fusion-study --max-requests 30
 ```
 
 The report also has a "Questions with no answer" table: how well the top search score separates
@@ -238,9 +238,9 @@ against the unreranked method with a bootstrap interval. A hosted reranker (Jina
 default hybrid, to save requests.
 
 ```powershell
-va docs probe --embedder local_bge_small_en_v15 --reranker local_minilm_l6_cross_encoder
-va docs probe --embedder gemini_embedding_2_768 --reranker local_minilm_l6_cross_encoder
-va docs probe --embedder gemini_embedding_2_768 --reranker local_bge_reranker_base   # larger, slower
+grounded docs probe --embedder local_bge_small_en_v15 --reranker local_minilm_l6_cross_encoder
+grounded docs probe --embedder gemini_embedding_2_768 --reranker local_minilm_l6_cross_encoder
+grounded docs probe --embedder gemini_embedding_2_768 --reranker local_bge_reranker_base   # larger, slower
 ```
 
 ### Held-out document questions (once per embedder)
@@ -252,8 +252,8 @@ pre-registered candidates and no other setting, scores them on the 12 held-out d
 and refuses a second run for the same embedder (`data/heldout_ledger.jsonl`).
 
 ```powershell
-va docs heldout --candidates A,B,baseline --embedder gemini_embedding_2_768
-va docs heldout --candidates A,B,baseline --embedder local_bge_small_en_v15
+grounded docs heldout --candidates A,B,baseline --embedder gemini_embedding_2_768
+grounded docs heldout --candidates A,B,baseline --embedder local_bge_small_en_v15
 ```
 
 If the first run fails before scoring (for example a missing key), nothing is recorded and you can
@@ -262,7 +262,7 @@ candidate and which questions differ. It applies no decision rule.
 
 ## 7. Router and injection probe (slice 2e)
 
-Needs the warehouse loaded, the synthetic corpus ingested **as public** (`va docs ingest ...
+Needs the warehouse loaded, the synthetic corpus ingested **as public** (`grounded docs ingest ...
 --sensitivity public`, the same step as section 6), and one hosted key in this window only. It runs
 the 12 dev router questions and the 5 injection questions (one per hostile document) through the
 whole route-and-answer path against ONE model, public data and public documents only, retrieval by
@@ -270,9 +270,9 @@ keyword, top 3 passages. Nothing is recorded as a cassette and nothing is commit
 
 ```powershell
 # cheapest: only the route call for the 12 router questions (12 requests)
-va route probe --provider groq --model <MODEL ID> --route-only --max-requests 20
+grounded route probe --provider groq --model <MODEL ID> --route-only --max-requests 20
 # full: route, plan, compose and the injection set; at most 60 requests
-va route probe --provider groq --model <MODEL ID> --max-requests 60
+grounded route probe --provider groq --model <MODEL ID> --max-requests 60
 ```
 
 It stops on the first 401/403 (exit 3), when the provider is unavailable (exit 4), when the request
@@ -288,10 +288,10 @@ The first run (Groq gpt-oss-20b) showed route replies failing schema validation 
 both routes, with no way to see why. The report now keeps, for every step whose reply did not
 validate, the reply cut at 300 characters and the field-level errors, and for every non-2xx HTTP
 response the status and redacted body, per question. `--record` writes cassettes next to the report
-(public data and public documents only; same key scan and check as `va live probe`):
+(public data and public documents only; same key scan and check as `grounded live probe`):
 
 ```powershell
-va route probe --provider groq --model <MODEL ID> --route-only --max-requests 20 --record
+grounded route probe --provider groq --model <MODEL ID> --route-only --max-requests 20 --record
 ```
 
 The route prompt is now `route.v2`: the four exact reply shapes, "reason only with abstain", and
@@ -333,10 +333,10 @@ One live run, public documents only, recorded in cassettes. Do not run it twice:
 (`data\binder_model_ledger.jsonl`) refuses a second generation. Needs the ADR committed first.
 
 ```powershell
-va docs binder-model-labels --provider groq --model <GPT-OSS ID> --seed-run data\live_runs\20261121T064538Z_groq_<model>\report.json
+grounded docs binder-model-labels --provider groq --model <GPT-OSS ID> --seed-run data\live_runs\20261121T064538Z_groq_<model>\report.json
 git add eval\binder_model_labels\labels.yaml
 git commit -m "Binder: model-written labels (one Groq run)"
-va docs binder-model-dev
+grounded docs binder-model-dev
 ```
 
 It sends 8 requests of 10 sentences (about 80 sentences) and waits for the token bucket between them
@@ -347,7 +347,7 @@ from its cassettes in `data\\binder_model_labels_work` without asking for those 
 file is committed and unchanged:
 
 ```powershell
-va docs binder-model-locked --candidates current,S2,SL
+grounded docs binder-model-locked --candidates current,S2,SL
 ```
 
 which refuses unless ADR-0013 and the labels file are committed and unchanged, and runs once. No
@@ -357,7 +357,7 @@ default changes either way.
 
 Groq's free plan for `openai/gpt-oss-20b` has a rolling cap of 200000 tokens per day (assumptions
 row 53, n=1). The provider does not say what is left, so every live command that makes model calls
-(`va live probe`, `va route probe` including `--compare-reasoning`, `va docs binder-model-labels`)
+(`grounded live probe`, `grounded route probe` including `--compare-reasoning`, `grounded docs binder-model-labels`)
 starts by printing, from our own reports:
 
 ```

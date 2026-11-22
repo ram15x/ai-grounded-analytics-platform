@@ -2,7 +2,7 @@
 
     python eval/compare_gold.py --values eval/gold/values.json --out docs/GOLD_DIFFS.md
 
-Needs VA_READONLY_DATABASE_URL (the warehouse loaded with `va load`). This is the ONLY eval file
+Needs GA_READONLY_DATABASE_URL (the warehouse from `grounded load`). This is the ONLY eval file
 that imports the product code; the gold computation itself (eval/gold/) never does.
 
 It never changes a metric definition. A difference is classified as:
@@ -23,11 +23,11 @@ from pathlib import Path
 
 import yaml
 
-from verified_analyst.compiler import MetricQuery, compile_query
-from verified_analyst.config import readonly_database_url
-from verified_analyst.guard import execute_guarded
-from verified_analyst.restate import restate
-from verified_analyst.semantic import load_semantic_layer
+from grounded_analytics.compiler import MetricQuery, compile_query
+from grounded_analytics.config import readonly_database_url
+from grounded_analytics.guard import execute_guarded
+from grounded_analytics.restate import restate
+from grounded_analytics.semantic import load_semantic_layer
 
 ROOT = Path(__file__).parent
 SYNTHETIC_FILES = {"mini_retail.csv"}

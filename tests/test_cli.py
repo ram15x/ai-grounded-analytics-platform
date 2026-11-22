@@ -1,4 +1,4 @@
-"""`va verify` on the hand-written sample answers in examples/ (needs the warehouse fixture)."""
+"""`grounded verify` on the hand-written sample answers in examples/ (needs the warehouse)."""
 
 import json
 from decimal import Decimal
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.cli import build_parser, main, run_verify
+from grounded_analytics.cli import build_parser, main, run_verify
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
@@ -60,7 +60,7 @@ def test_example_verdicts(warehouse, name):
 
 @pytest.mark.db
 def test_exit_codes_and_json_output(warehouse, monkeypatch, capsys):
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", warehouse.readonly_url)
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", warehouse.readonly_url)
     assert main(["verify", str(EXAMPLES / "01_verified.json"), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "verified"
     known_limit = str(EXAMPLES / "11_known_limit_share_of_global_total.json")
@@ -70,7 +70,7 @@ def test_exit_codes_and_json_output(warehouse, monkeypatch, capsys):
 
 
 def test_invalid_answer_file_is_a_clean_error(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "host=localhost")
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", "host=localhost")
     bad = tmp_path / "bad.json"
     bad.write_text('{"prose": "x", "claims": [{"id": 1}]}')
     assert main(["verify", str(bad)]) == 2
@@ -80,14 +80,14 @@ def test_invalid_answer_file_is_a_clean_error(tmp_path, monkeypatch, capsys):
 def test_a_malformed_answer_file_never_opens_a_database_connection(tmp_path, monkeypatch, capsys):
     """Validation comes before any connection. On Windows a connect to `localhost` once hung this
     test for 130 s because the file was only checked after the catalogue query."""
-    import verified_analyst.cli as cli
+    import grounded_analytics.cli as cli
 
     def no_connection(*a, **k):
         raise AssertionError("opened a database connection for an invalid answer file")
 
     monkeypatch.setattr(cli, "catalogue", no_connection)
     monkeypatch.setattr(cli, "execute_guarded", no_connection)
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", "host=127.0.0.1 port=1 user=x dbname=y")
     for name, text in {
         "plain.json": '{"prose": "x", "claims": [{"id": 1}]}',
         "template.json": '{"template": "x {a}", "claims": [{"id": 1}]}',
@@ -100,7 +100,7 @@ def test_a_malformed_answer_file_never_opens_a_database_connection(tmp_path, mon
 
 @pytest.mark.db
 def test_profile_db_reports_duplicates_effect(warehouse):
-    from verified_analyst.cli import profile_db  # noqa: PLC0415
+    from grounded_analytics.cli import profile_db  # noqa: PLC0415
 
     out = profile_db(warehouse.readonly_url)
     assert set(out["all_rows"]) == set(out["excluding_exact_duplicates"])
@@ -159,8 +159,8 @@ def test_the_binder_default_change_moves_no_verdict_of_the_shipped_samples(wareh
     running all of them under the old rule (`current`) and under the shipped default."""
     import functools
 
-    from verified_analyst import verifier
-    from verified_analyst.documents.binding import CURRENT, DEFAULT, check_binding
+    from grounded_analytics import verifier
+    from grounded_analytics.documents.binding import CURRENT, DEFAULT, check_binding
 
     def run_all(cfg):
         monkeypatch.setattr(verifier, "check_binding", functools.partial(check_binding, cfg=cfg))

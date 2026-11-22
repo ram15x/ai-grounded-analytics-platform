@@ -4,8 +4,8 @@ import random
 
 import pytest
 
-from verified_analyst.documents.chunker import MIN_MAX_CHARS, chunk_text
-from verified_analyst.documents.store import DocumentError, normalize_text
+from grounded_analytics.documents.chunker import MIN_MAX_CHARS, chunk_text
+from grounded_analytics.documents.store import DocumentError, normalize_text
 
 PARA = "Customers may return items within 28 days. Refunds take 5 working days. "
 

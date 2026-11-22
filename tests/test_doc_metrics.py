@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.documents.metrics import (
+from grounded_analytics.documents.metrics import (
     Evidence,
     Question,
     Retrieved,
@@ -15,7 +15,7 @@ from verified_analyst.documents.metrics import (
     score_question,
     unreachable_anchors,
 )
-from verified_analyst.documents.store import make_passage_id, parse_passage_id, sha256_hex
+from grounded_analytics.documents.store import make_passage_id, parse_passage_id, sha256_hex
 
 Q = Question("q", "lookup", "?", (Evidence("a", "28 days"),))
 

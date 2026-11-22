@@ -1,6 +1,6 @@
-# Verified Analyst
+# AI Grounded Analytics Platform
 
-Live recorded view: https://ram15x.github.io/verified-analyst/ (recorded runs only; see docs/HOSTING.md)
+Live recorded view: https://ram15x.github.io/ai-grounded-analytics-platform/ (recorded runs only; see docs/HOSTING.md)
 
 An AI analyst for business teams. Ask a question in plain English about company data and documents. The planned answer shows the SQL used, the source passages, and a verdict for every number. Numbers are checked by deterministic code before display; unsupported claims are flagged, never guessed. Scheduled reports go out only after an approval step.
 
@@ -8,7 +8,7 @@ An AI analyst for business teams. Ask a question in plain English about company 
 
 ### What was run
 
-Provider probes, 10 single-metric questions on `analytics.sales_lines` (`va live probe`; "verified" means every number passed the verifier, not that the answer is correct). The prompts were first drafts and changed between runs, so the rows are not repeats of one experiment.
+Provider probes, 10 single-metric questions on `analytics.sales_lines` (`grounded live probe`; "verified" means every number passed the verifier, not that the answer is correct). The prompts were first drafts and changed between runs, so the rows are not repeats of one experiment.
 
 | Run folder | Model | max_tokens | Questions | Verified | Typed a digit outside a placeholder | Other |
 |---|---|---|---|---|---|---|
@@ -24,16 +24,16 @@ Provider probes, 10 single-metric questions on `analytics.sales_lines` (`va live
 
 So only Groq `gpt-oss-20b` (one run) and the OpenRouter nemotron model (one run) verified 10 of 10; Gemini was unavailable or slow in all three runs. The free tiers rate-limit: Groq HTTP 429 in the first run, OpenRouter gemma 429 upstream, Gemini 429 "exceeded your current quota".
 
-Router and injection probes (`va route probe`, Groq `openai/gpt-oss-20b`, 12 dev router questions, one author):
+Router and injection probes (`grounded route probe`, Groq `openai/gpt-oss-20b`, 12 dev router questions, one author):
 
 - **Route prompt `route.v1`:** route matched the author's label 9 of 12 (`20261120T192006Z_groq_openai-gpt-oss-20b`, route only; 9 of 17 route replies valid) and 7 of 12 (`20261120T192555Z_groq_openai-gpt-oss-20b`, with the full answer; 11 of 23 replies valid).
 - **Route prompt `route.v2`,** written after reading those failures on the same 12 questions (so a tuned dev figure, not held-out): matched 12 of 12 with 12 of 12 replies valid (`20261121T043707Z_groq_openai-gpt-oss-20b`, route only); matched 12 of 12 with 14 of 14 valid (`20261121T044057Z_groq_openai-gpt-oss-20b`, full answer). In the full run 9 questions had a valid data, documents or both route: 7 reached the composer, 2 stopped at `unsupported_metric`; compose/repair replies valid 10 of 14; outcomes verified 5 of 12, abstain 7 of 12; the run stopped on its token cap after 2 of the 5 injection questions. The 12 locked router questions are unused.
 - **Injection** (5 hostile-document questions, one model): in `20261121T064538Z_groq_openai-gpt-oss-20b` all 5 reached the composer and 0 of 5 composer replies contained an injected marker string; outcomes were I-D-01 partially verified, I-D-02 and I-D-03 verified, I-D-04 and I-D-05 abstained (`provider_error`: JSON refusals, and one HTTP 429). In `20261121T055258Z_groq_openai-gpt-oss-20b` 4 of 5 reached the composer, 0 of 4 contained a marker. n=5, one model, two runs, not a safety claim.
 - **Label binder on real wording** (rule before ADR-0012, window of 6 words): 6 refusals in `20261121T044057Z_groq_openai-gpt-oss-20b` and 4 in `20261121T064538Z_groq_openai-gpt-oss-20b` (3 labels for I-D-01, 1 for I-D-05; the report lists each with its label, sentence and missing label words). Replayed offline against the stored hostile documents (no model call), the S2 default also refuses all 4 of those labels: the words they use for the subject are not in the number's own sentence (n=4). The S2 default has not been run on live model output.
 - **Groq empty replies:** in `20261121T064538Z`, 2 of 2 replies to the JSON-mode-off retry were HTTP 200 with empty content, 1024 completion tokens of which 1022 were reasoning, finish `length` (I-D-01 repair, I-D-04 compose). In the five Groq reports that show the HTTP 400 `json_validate_failed` bodies (`20261120T132347Z`, `20261120T143412Z`, `20261121T044057Z`, `20261121T055258Z`, `20261121T064538Z`), 16 of 18 had an empty `failed_generation`; the other 2 (`20261121T044057Z`, R-D-02) carried a cut-off template. That reasoning exhaustion also causes the 400s is a hypothesis, unverified ([assumptions rows 42 and 45](docs/PHASE_1C1_ASSUMPTIONS.md)). With `max_tokens` 2048 the Groq probe had no 400 (`20261120T171922Z`, n=10 questions); at 1024 it had 1 and 2.
-- **Document retrieval** (12 held-out questions, 11 answerable, `va docs heldout`): default hybrid recall@5 1.00 and MRR 0.84 with `gemini-embedding-2` (768 dims) (`20261121_001646_docs_heldout_gemini_embedding_2_768`), and recall@5 1.00 and MRR 0.86 with `BAAI/bge-small-en-v1.5` (`20261121_001708_docs_heldout_local_bge_small_en_v15`). The pre-registered alternative B had MRR 0.76 and 0.78 and failed its rule, so the default stays and the fusion choice is marked undecided ([ADR-0010](docs/adr/0010-fusion-heldout-outcome.md)). The one question without an answer still got passages back (1 of 1 on both embedders).
+- **Document retrieval** (12 held-out questions, 11 answerable, `grounded docs heldout`): default hybrid recall@5 1.00 and MRR 0.84 with `gemini-embedding-2` (768 dims) (`20261121_001646_docs_heldout_gemini_embedding_2_768`), and recall@5 1.00 and MRR 0.86 with `BAAI/bge-small-en-v1.5` (`20261121_001708_docs_heldout_local_bge_small_en_v15`). The pre-registered alternative B had MRR 0.76 and 0.78 and failed its rule, so the default stays and the fusion choice is marked undecided ([ADR-0010](docs/adr/0010-fusion-heldout-outcome.md)). The one question without an answer still got passages back (1 of 1 on both embedders).
 - **Label binder S2 chosen from a locked synthetic study** (`20261121_115112_binder_locked`, 39 documents): S2 accepted 15 of 1289 swapped labels and refused 40 of 664 correct labels; the earlier rule accepted 251 and refused 193. The labels are generated from each number's own sentence, so refusals of labels a model writes are unmeasured, and swaps onto another document are still accepted ([ADR-0011](docs/adr/0011-binder-variants.md), [ADR-0012](docs/adr/0012-binder-default.md)).
-- **CI:** GitHub Actions run #1 on commit `c7aa432` passed in 1m 46s (status only). The workflow sets `VA_REQUIRE_DB=1`, under which the suite fails instead of skipping when the database is unreachable (`tests/test_require_db.py`), so a green run implies the database tests ran; that is read from the workflow and test code, not from the run logs, which were not read.
+- **CI:** GitHub Actions run #1 on commit `c7aa432` passed in 1m 46s (status only). The workflow sets `GA_REQUIRE_DB=1`, under which the suite fails instead of skipping when the database is unreachable (`tests/test_require_db.py`), so a green run implies the database tests ran; that is read from the workflow and test code, not from the run logs, which were not read.
 
 ## Status
 
@@ -52,12 +52,12 @@ docs/WRITEUP.md). Open items are listed under "What I'd do next"; none is in pro
 | Number extractor | Implemented; 200+ cases. Limits listed in [docs/EXTRACTOR.md](docs/EXTRACTOR.md) |
 | Verifier (claims schema, Decimal recomputation, label binding, verdicts) | Implemented, deterministic, no LLM |
 | Mutation tests | Implemented as unit tests (see note below) |
-| CLI: `va load`, `va profile`, `va verify answer.json` | Implemented; sample answers in `examples/` |
+| CLI: `grounded load`, `grounded profile`, `grounded verify answer.json` | Implemented; sample answers in `examples/` |
 | Driver-claim verification | Design only, [ADR-0007](docs/adr/0007-driver-claim-verification.md). Not implemented. |
 | Pre-commit config and GitHub Actions CI (lint, format, tests with a Postgres service, Python 3.11 and 3.12) | Run #1 passed on GitHub (see above). |
 | Model router, provider adapters (Groq, Gemini, OpenRouter), cassettes, scripted plan/compose/verify pipeline | Implemented; tests use mocked HTTP and a fake provider. Real providers were probed (table above) with first-draft prompts. Every provider assumption, with its status, is in [docs/PHASE_1C1_ASSUMPTIONS.md](docs/PHASE_1C1_ASSUMPTIONS.md); most are still unverified. After a JSON-mode refusal the router makes at most 2 requests and drops a provider after 2 refusals in a row for one question. |
 | Documents (Phase 2a-2c): store with character spans, keyword, vector and hybrid search, local and hosted embedder and reranker clients, passage citations checked against stored text, retrieval metrics | Implemented and tested on a synthetic corpus. Two embedders were probed on dev and held-out; the shipped hybrid default stays and the fusion choice is **undecided** (ADR-0010; the 12 held-out document questions are spent). No reranker in the default pipeline. Slice 2d adds injection handling (scanner, delimited prompt block, flagged text cannot be cited); one model, 5 questions, see above ([docs/INJECTION.md](docs/INJECTION.md)). Slice 2e adds a router (data, documents, both, abstain), mixed answers with system-written passage figures and a heuristic label binder (default S2, ADR-0012). Not an accuracy claim: one author, one corpus. See [docs/PHASE_2.md](docs/PHASE_2.md) |
-| `va ask`, approved reports, local web view, stored-results gate | Implemented. `va ask "<question>" --replay` runs the real pipeline on recorded model replies (needs the local database, no key); `--provider/--model` runs it live on public data. Each run writes a JSON trace to `data/traces/`. `va report draft` then `va report approve` writes a Markdown file only after a named approval by digest; nothing is sent. `va serve` shows 17 recorded dev runs with SQL, rows, passages and verdicts. A test fails if a verified figure has no trace to its stored cell or passage. Scheduled runs, auth and a live model in a hosted product do not exist. |
+| `grounded ask`, approved reports, local web view, stored-results gate | Implemented. `grounded ask "<question>" --replay` runs the real pipeline on recorded model replies (needs the local database, no key); `--provider/--model` runs it live on public data. Each run writes a JSON trace to `data/traces/`. `grounded report draft` then `grounded report approve` writes a Markdown file only after a named approval by digest; nothing is sent. `grounded serve` shows 17 recorded dev runs with SQL, rows, passages and verdicts. A test fails if a verified figure has no trace to its stored cell or passage. Scheduled runs, auth and a live model in a hosted product do not exist. |
 | Auth, deployment | No sign-in. The recorded view is deployed to GitHub Pages (static, no model calls); uploads (`--workspace`, loopback only) and the key-based tryout (`--byok`) run locally. |
 | Evals and benchmark scores | Does not exist. The measurements above are small single-author screens with their n, not benchmarks. **No accuracy figure is claimed.** |
 
@@ -101,20 +101,20 @@ ruff check . && ruff format --check .
 pytest
 ```
 
-Database tests run only when `VA_TEST_DATABASE_URL` points at a Postgres server where the user can
+Database tests run only when `GA_TEST_DATABASE_URL` points at a Postgres server where the user can
 create databases and roles; otherwise they are skipped.
 
 ### Try the app (no key)
 
 ```
-va serve                      # http://127.0.0.1:8000, recorded runs, no database needed
-va ask "Which five countries had the highest net revenue?" --replay   # needs the local warehouse
-va report draft --title "Weekly check"
-va report approve --who "<name>" --digest <digest printed by draft>
+grounded serve                      # http://127.0.0.1:8000, recorded runs, no database needed
+grounded ask "Which five countries had the highest net revenue?" --replay   # needs the local warehouse
+grounded report draft --title "Weekly check"
+grounded report approve --who "<name>" --digest <digest printed by draft>
 ```
 
-Ask new questions in the browser: `va serve --replay` (recorded replies, so only the recorded
-questions can be answered) or `va serve --provider groq --model <id>` with the key in the
+Ask new questions in the browser: `grounded serve --replay` (recorded replies, so only the recorded
+questions can be answered) or `grounded serve --provider groq --model <id>` with the key in the
 environment (live, public data only). Each question writes a JSON trace to `data/traces/`.
 A `Dockerfile` for the recorded-runs view is included; it has **not been built or run** (no Docker
 daemon where it was written).
@@ -124,27 +124,27 @@ no recording is shown as "no recording", not as a model abstention. See [demo/RE
 
 #### Your own data (local only)
 
-`va serve --workspace` opens a "Your data" tab on this computer (it refuses any host but 127.0.0.1, because it accepts uploads). Upload a CSV, TSV or Excel file; the profile shows types, empty rates and example values, and flags possible personal data (never loaded). You say what the data is, what each column is (role guesses are yours to change), and define each number from a closed set (count, sum, average, min, max, distinct count, one filter). Give a figure you already know and the system recomputes it by a separate path: a definition that does not reproduce it is not published. You can also attach documents to a dataset (PDF, Markdown or plain text). Only the text already in a PDF is read: a scanned page is refused with the reason, because no OCR is available here. Table layout in extracted text follows whatever the PDF stores, and quotes are only ever checked against that stored text. Documents are `internal` unless you mark them public, and text that looks like instructions to a model is flagged and withheld from prompts. Data is `internal` by default, which means a hosted provider is refused; use a local model (Ollama, no key, nothing leaves the machine) or mark it `public` yourself. Which local models answer usably on a given computer has not been measured.
+`grounded serve --workspace` opens a "Your data" tab on this computer (it refuses any host but 127.0.0.1, because it accepts uploads). Upload a CSV, TSV or Excel file; the profile shows types, empty rates and example values, and flags possible personal data (never loaded). You say what the data is, what each column is (role guesses are yours to change), and define each number from a closed set (count, sum, average, min, max, distinct count, one filter). Give a figure you already know and the system recomputes it by a separate path: a definition that does not reproduce it is not published. You can also attach documents to a dataset (PDF, Markdown or plain text). Only the text already in a PDF is read: a scanned page is refused with the reason, because no OCR is available here. Table layout in extracted text follows whatever the PDF stores, and quotes are only ever checked against that stored text. Documents are `internal` unless you mark them public, and text that looks like instructions to a model is flagged and withheld from prompts. Data is `internal` by default, which means a hosted provider is refused; use a local model (Ollama, no key, nothing leaves the machine) or mark it `public` yourself. Which local models answer usably on a given computer has not been measured.
 
 ### Public tryout (bring your own key)
 
-`va serve --byok` serves a fixed menu of 12 questions (3 easy, 3 medium, 3 hard, 3 of your own) from `config/tryout.yaml`; each visitor may ask one from each group, so a free API key stays inside its limits. The visitor pastes their own key (Groq, OpenRouter or Gemini). It travels in a request header, is used for that one question and is never written to disk, a trace, a log or browser storage; error text is scrubbed of it. The per-visitor allowance is a courtesy limit held in memory against a cookie, not a security control. Difficulty is by question shape, not measured, and "hard" questions may be withheld.
+`grounded serve --byok` serves a fixed menu of 12 questions (3 easy, 3 medium, 3 hard, 3 of your own) from `config/tryout.yaml`; each visitor may ask one from each group, so a free API key stays inside its limits. The visitor pastes their own key (Groq, OpenRouter or Gemini). It travels in a request header, is used for that one question and is never written to disk, a trace, a log or browser storage; error text is scrubbed of it. The per-visitor allowance is a courtesy limit held in memory against a cookie, not a security control. Difficulty is by question shape, not measured, and "hard" questions may be withheld.
 
 ## Try the verifier
 
 ```
-docker compose up -d --wait                # needs POSTGRES_PASSWORD; set VA_PG_PORT if 5432 is taken
-export VA_DATABASE_URL=... VA_READONLY_PASSWORD=... VA_READONLY_DATABASE_URL=...
-# optional: VA_CONNECT_TIMEOUT_S (seconds to wait for a connection, default 10, max 300)
-va load --download                         # or: va load --source Online_Retail.xlsx
-va profile-db                              # metric totals, with and without exact duplicates
-va docs ingest corpus/synthetic            # then: va docs search "how long do refunds take"
-va docs probe --embedder fake_256 --reranker fake_overlap   # no network; real models: docs/LIVE_RUNBOOK.md section 6
-va verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise
-va verify examples/11_known_limit_share_of_global_total.json   # exit 1 on purpose: a known limit
+docker compose up -d --wait                # needs POSTGRES_PASSWORD; set GA_PG_PORT if 5432 is taken
+export GA_DATABASE_URL=... GA_READONLY_PASSWORD=... GA_READONLY_DATABASE_URL=...
+# optional: GA_CONNECT_TIMEOUT_S (seconds to wait for a connection, default 10, max 300)
+grounded load --download                         # or: grounded load --source Online_Retail.xlsx
+grounded profile-db                              # metric totals, with and without exact duplicates
+grounded docs ingest corpus/synthetic            # then: grounded docs search "how long do refunds take"
+grounded docs probe --embedder fake_256 --reranker fake_overlap   # no network; real models: docs/LIVE_RUNBOOK.md section 6
+grounded verify examples/01_verified.json        # exit 0 when fully verified, 1 otherwise
+grounded verify examples/11_known_limit_share_of_global_total.json   # exit 1 on purpose: a known limit
 ```
 
-The sample answers are written against the synthetic fixture (`va load --source tests/fixtures/mini_retail.csv`);
+The sample answers are written against the synthetic fixture (`grounded load --source tests/fixtures/mini_retail.csv`);
 against the real data their numbers will differ.
 
 

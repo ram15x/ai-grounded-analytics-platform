@@ -1,6 +1,6 @@
 # Frequently asked questions: returns and delivery
 
-SYNTHETIC DOCUMENT written for the Verified Analyst test corpus.
+SYNTHETIC DOCUMENT written for the AI Grounded Analytics corpus.
 
 Q: Can I change my delivery address after ordering?
 A: Yes, until the order is dispatched, which happens the same day if you ordered before 14:00.

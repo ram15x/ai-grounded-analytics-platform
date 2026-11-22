@@ -5,7 +5,7 @@ Status: Accepted. The shipped default is **unchanged**. The choice of fusion set
 
 ## What was run
 
-`va docs heldout --candidates A,B,baseline` once per embedder, from ADR-0009 as committed, on the
+`grounded docs heldout --candidates A,B,baseline` once per embedder, from ADR-0009 as committed, on the
 12 held-out document questions (11 answerable, 1 with no answer). Reports are in
 `data\live_runs\20261121_001646_docs_heldout_gemini_embedding_2_768` and
 `data\live_runs\20261121_001708_docs_heldout_local_bge_small_en_v15`. The figures below are copied
@@ -62,7 +62,7 @@ code. Recheck on harder public data.
 
 They have now informed a decision, so they cannot be used to choose between settings again. A new,
 larger held-out set, ideally on real public documents and written without sight of the old one, is
-needed for any further document-retrieval decision. `va docs heldout` now refuses to run (the
+needed for any further document-retrieval decision. `grounded docs heldout` now refuses to run (the
 constant `SPENT_BY` in `documents/heldout_run.py` names this ADR). The file itself is not edited.
 
 ## Next

@@ -1,4 +1,4 @@
-"""`va docs heldout`: the ADR gate, the three fixed candidates, and the once-per-embedder ledger."""
+"""`grounded docs heldout`: the ADR gate, three fixed candidates, the once-per-embedder ledger."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from verified_analyst.cli import build_parser, main
-from verified_analyst.documents import heldout_run as hr
-from verified_analyst.documents.settings import EmbedderSettings, RetrievalSettings
-from verified_analyst.documents.store import DocumentError
+from grounded_analytics.cli import build_parser, main
+from grounded_analytics.documents import heldout_run as hr
+from grounded_analytics.documents.settings import EmbedderSettings, RetrievalSettings
+from grounded_analytics.documents.store import DocumentError
 
 ROOT = Path(__file__).parent.parent
 ADR_REL = "docs/adr/0009-document-retrieval-fusion.md"
@@ -110,8 +110,8 @@ def test_the_command_has_no_way_to_pass_other_settings():
 
 
 def test_cli_refuses_other_candidates_before_touching_anything(monkeypatch, capsys):
-    monkeypatch.setenv("VA_DATABASE_URL", "postgresql://x/y")
-    monkeypatch.setenv("VA_READONLY_DATABASE_URL", "postgresql://x/y")
+    monkeypatch.setenv("GA_DATABASE_URL", "postgresql://x/y")
+    monkeypatch.setenv("GA_READONLY_DATABASE_URL", "postgresql://x/y")
     assert main(["docs", "heldout", "--candidates", "A,B", "--embedder", "fake_256"]) == 2
     assert "only the three" in capsys.readouterr().err
 
@@ -146,7 +146,7 @@ def test_scores_only_the_three_candidates_once_per_embedder(vector_db, repo, tmp
             adr_path=adr(repo), root=repo, ledger_path=ledger, **kw,
         )  # fmt: skip
 
-    import verified_analyst.documents.heldout_run as mod
+    import grounded_analytics.documents.heldout_run as mod
 
     # the default role may not exist on this server; grant to the fixture's role instead
     orig = mod._reader_role

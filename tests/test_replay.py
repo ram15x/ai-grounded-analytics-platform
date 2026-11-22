@@ -25,3 +25,12 @@ def test_shipped_recordings_load_and_hold_no_key_like_text():
     assert len(p.recordings) == 43
     blob = f.read_text(encoding="utf-8")
     assert "gsk_" not in blob and "AIza" not in blob
+
+
+def test_renamed_corpus_header_keeps_recorded_keys():
+    from grounded_analytics.llm.replay import CORPUS_NAME, RECORDED_CORPUS_NAME
+
+    assert len(CORPUS_NAME) == len(RECORDED_CORPUS_NAME)  # stored character spans stay valid
+    now = (("user", f"SYNTHETIC DOCUMENT written for the {CORPUS_NAME}."),)
+    then = (("user", f"SYNTHETIC DOCUMENT written for the {RECORDED_CORPUS_NAME}."),)
+    assert request_key("compose", now) == request_key("compose", then)

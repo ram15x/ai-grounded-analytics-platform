@@ -24,6 +24,10 @@ def test_vercel_handler_serves_the_tryout_page_and_menu():
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "AI Grounded Analytics Platform" in page
         menu = json.loads(urllib.request.urlopen(base + "/api/tryout").read())
+        # Vercel's rewrite delivers /api/index/<original path>; both spellings must reach the app
+        assert urllib.request.urlopen(base + "/api/index/").read().decode() == page
+        again = json.loads(urllib.request.urlopen(base + "/api/index/api/tryout").read())
+        assert again == menu
         assert sum(len(v) for v in menu["questions"].values()) == 9 and menu["own_slots"] == 3
     finally:
         srv.shutdown()
@@ -32,7 +36,7 @@ def test_vercel_handler_serves_the_tryout_page_and_menu():
 def test_vercel_config_routes_everything_to_the_handler():
     cfg = json.loads((ROOT / "vercel.json").read_text())
     assert cfg["functions"]["api/index.py"]["maxDuration"] <= 300  # the free plan's ceiling
-    assert cfg["rewrites"] == [{"source": "/(.*)", "destination": "/api/index"}]
+    assert cfg["rewrites"] == [{"source": "/(.*)", "destination": "/api/index/$1"}]
     req = (ROOT / "requirements.txt").read_text()
     for dep in ("pandas", "psycopg", "sqlglot", "pydantic", "pyyaml", "pypdf", "openpyxl"):
         assert dep in req

@@ -19,6 +19,7 @@ from grounded_analytics.cli import _byok_ask, _byok_models  # noqa: E402
 from grounded_analytics.tryout import load_config  # noqa: E402
 from grounded_analytics.web.app import configure  # noqa: E402
 
+PREFIX = "/api/index"
 CFG = load_config()
 CACHE = os.environ.get("GA_TRYOUT_CACHE", "/tmp/tryout_cache")  # noqa: S108
 
@@ -30,4 +31,22 @@ _Base = configure(
 
 
 class handler(_Base):  # noqa: N801 - Vercel looks for a top-level class named `handler`
-    """The class Vercel's Python runtime serves."""
+    """The class Vercel's Python runtime serves.
+
+    The rewrite in vercel.json delivers every request as /api/index/<original path>; the app's
+    routes expect the original path, so the prefix is stripped before dispatch.
+    """
+
+    def _strip(self) -> None:
+        if self.path.startswith(PREFIX):
+            self.path = self.path[len(PREFIX) :] or "/"
+            if not self.path.startswith("/"):
+                self.path = "/" + self.path
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._strip()
+        super().do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._strip()
+        super().do_POST()

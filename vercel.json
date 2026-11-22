@@ -6,5 +6,5 @@
       "excludeFiles": "{tests/**,data/**,corpus/**,docs/**,examples/**}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index/$1" }]
 }

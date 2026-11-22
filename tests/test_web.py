@@ -96,3 +96,16 @@ def test_fonts_are_served_locally_and_the_page_loads_nothing_from_another_site()
 def test_page_has_no_canned_sample_questions_for_uploaded_data():
     page = app.PAGE.read_text("utf-8")
     assert 'id="sugg"' not in page and "examples[0]" not in page
+
+
+def test_build_static_writes_a_page_that_works_under_a_subpath(tmp_path):
+    import argparse
+
+    from verified_analyst import cli
+
+    out = tmp_path / "site"
+    rc = cli.cmd_serve(argparse.Namespace(build_static=str(out)))
+    page = (out / "index.html").read_text("utf-8")
+    assert rc == 0 and "url(fonts/" in page and "url(/fonts/" not in page
+    assert (out / "fonts" / "public-sans.woff2").read_bytes()[:4] == b"wOF2"
+    assert (out / ".nojekyll").exists()

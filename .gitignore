@@ -22,3 +22,4 @@ docs/_scratch/
 # held-out gold values are never committed
 heldout_values*.json
 **/heldout_values*.json
+_site/

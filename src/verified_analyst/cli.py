@@ -1298,13 +1298,20 @@ def cmd_dataset_load(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from .web.app import load_payload, serve, static_page
+    from .web.app import FONTS, load_payload, serve, static_page
 
     if args.build_static:
         out = Path(args.build_static)
         out.mkdir(parents=True, exist_ok=True)
         (out / "index.html").write_text(static_page(load_payload()), encoding="utf-8")
-        print(f"wrote {out / 'index.html'}")
+        fonts = Path(__file__).parent / "web" / "fonts"
+        (out / "fonts").mkdir(exist_ok=True)
+        for url, name in FONTS.items():
+            (out / "fonts" / Path(url).name).write_bytes((fonts / name).read_bytes())
+        for lic in fonts.glob("LICENSE-*.txt"):
+            (out / "fonts" / lic.name).write_bytes(lic.read_bytes())
+        (out / ".nojekyll").write_text("", encoding="utf-8")
+        print(f"wrote {out / 'index.html'} and {out / 'fonts'}")
         return 0
     if getattr(args, "workspace", False):
         from .datasets.workspace import Workspace  # noqa: PLC0415

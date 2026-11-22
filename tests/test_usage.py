@@ -178,3 +178,12 @@ def test_the_three_live_commands_take_force():
 
     src = Path(cli.__file__).read_text("utf-8")
     assert src.count('"--force"') >= 3 and src.count("usage.start(") == 3
+
+
+def test_a_resumed_run_with_a_budget_but_no_average_prints_instead_of_crashing():
+    tally = usage.Tally("groq", "m", total=10)
+    est = usage.Estimate(None, 0, 3, 3000, "from the batches still to ask")
+    lines = usage.usage_lines(tally, 200000, "measured", est, 12000)
+    assert (
+        "about 3000 tokens (from the batches still to ask); a run is capped at 12000" in lines[-1]
+    )

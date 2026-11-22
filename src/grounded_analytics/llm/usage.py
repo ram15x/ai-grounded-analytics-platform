@@ -228,6 +228,11 @@ def usage_lines(tally: Tally, cap: int | None, source: str, est: Estimate | None
                 f"token budget for this run: no estimate ({est.note})"
                 + (f"; the run's own token cap is {ceiling}" if ceiling else "")
             )
+        elif est.per_question is None:  # a resumed run: its budget is known, no average is
+            lines.append(
+                f"token budget for this run: about {est.run_tokens} tokens ({est.note})"
+                + (f"; a run is capped at {ceiling}" if ceiling else "")
+            )
         else:
             lines.append(
                 f"token budget for this run: about {est.run_tokens} tokens = "

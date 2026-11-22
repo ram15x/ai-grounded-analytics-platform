@@ -1050,6 +1050,40 @@ def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, k
     return json.loads(redact(json.dumps(d, default=str), env))
 
 
+def _ws_suggest(ws, token: str, man: dict, provider: str, model: str | None, key: str) -> dict:
+    """One model call that drafts metric definitions for a staged table (datasets.suggest).
+    Hosted providers only for a table marked public; nothing is stored; the key is used once."""
+    from .datasets import suggest as sg  # noqa: PLC0415
+    from .llm.live import redact  # noqa: PLC0415
+    from .llm.providers import build_one  # noqa: PLC0415
+    from .llm.settings import load_router_settings  # noqa: PLC0415
+    from .llm.types import PUBLIC, LLMRequest  # noqa: PLC0415
+
+    base = load_router_settings()
+    if provider not in base.providers or base.providers[provider].kind == "ollama":
+        return {"error": "choose Groq, OpenRouter or Gemini for suggestions"}
+    if (man.get("visibility") or "internal") != "public":
+        return {"error": "This table is marked internal, so its column names and example values "
+                "are not sent to a hosted model. Mark it public first, or write the numbers "
+                "yourself."}  # fmt: skip
+    cfg = base.providers[provider]
+    model = model or cfg.models.get("default", "")
+    env = {cfg.env_key: key}
+    _, prof = ws._read(token)  # noqa: SLF001
+    text, usable = sg.context(prof, man)
+    req = LLMRequest(
+        task="suggest", messages=(("system", sg.SYSTEM), ("user", text)), json_mode=True,
+        max_tokens=2048, max_tokens_fixed=True, sensitivity=PUBLIC, prompt_id=sg.PROMPT_ID,
+    )  # fmt: skip
+    try:
+        resp = build_one(base, provider, env=env).complete(req, model, cfg.timeout_s)
+        out = sg.check(resp.text, prof, man, usable)
+    except (ConfigError, LLMError, sg.SuggestError) as exc:
+        return {"error": redact(str(exc), env)}
+    out["tokens_used"] = resp.prompt_tokens + resp.completion_tokens
+    return json.loads(redact(json.dumps(out, default=str), env))
+
+
 def _byok_models(provider: str, key: str, model: str | None = None) -> dict:
     from .llm.live import (  # noqa: PLC0415
         has_remaining_tokens,
@@ -1340,6 +1374,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             args.host,
             workspace=ws,
             ws_ask_fn=lambda d, q, p, m, k: _ws_ask(ws, d, q, p, m, k),
+            ws_suggest_fn=lambda t, man, p, m, k: _ws_suggest(ws, t, man, p, m, k),
             models_fn=_byok_models,
             tryout_cfg=None,
         )

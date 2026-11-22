@@ -222,6 +222,9 @@ input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
 
 
 
+.sugbox{margin-top:14px;padding:12px 14px;border:1px dashed var(--rule2);border-radius:var(--r);background:var(--accent-bg);font-size:13.5px;color:var(--ink2)}
+.sugbox b{color:var(--ink)}
+.sugtag{font:600 11px var(--sans);color:var(--accent2);border:1px solid rgba(55,214,192,.45);border-radius:999px;padding:1px 8px;align-self:center}
 /* ---- colour and hover layer ---- */
 select.fld option{background:#121A2B;color:#E8EEF8}
 .sheet{background:linear-gradient(180deg,#152038,#111A2C);border-color:var(--rule2);box-shadow:0 30px 70px rgba(0,0,0,.5),0 0 60px rgba(110,125,255,.10)}
@@ -599,7 +602,7 @@ function dataView(){
     const allc=Object.entries(W.cols).filter(([n,c])=>c.role!=='ignore').map(([n])=>n);
     h+=`<div class="pane"><h3>3. Numbers you want answered</h3><p class="note" style="margin-top:0">Each is a count, sum, average, minimum, maximum or distinct count with at most one filter, or a ratio of two of those numbers (for example churned divided by all). Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
       W.metrics.map((m,i)=>`<div class="sec" style="border-top:1px solid var(--rule);padding-top:12px"><div class="row">
-        <input class="fld" data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
+        ${m.suggested?'<span class="sugtag" title="Drafted by a model: check it, give a figure you know, then approve">suggested</span>':''}<input class="fld" data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
         <select class="fld" data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option value="${a}" ${m.aggregate===a?'selected':''}>${a==='ratio'?'ratio of two numbers':a}</option>`).join('')}</select>
         ${m.aggregate==='ratio'?ratioPick(m,i):`${m.aggregate==='count'?'<span class="note">rows</span>':`<select class="fld" data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
         <span class="note">where</span><select class="fld" data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input class="fld" data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">`}
@@ -607,7 +610,11 @@ function dataView(){
         <input class="fld" data-m="${i}" data-f="decimals" type="number" min="0" max="8" value="${esc(m.decimals)}" style="width:64px" title="decimal places" aria-label="decimal places">
       </div><div class="row"><input class="fld" data-m="${i}" data-f="description" placeholder="what it means" value="${esc(m.description)}" style="flex:1;min-width:200px">
         <input class="fld" data-m="${i}" data-f="known" placeholder="a figure you know" value="${esc(m.known)}" size="16"><label class="note"><input type="checkbox" data-m="${i}" data-f="approve" ${m.approve?'checked':''}> approve</label><button class="btn text" data-del="${i}">remove</button></div></div>`).join('')+
-      `<button class="btn" id="addm">Add a number</button></div>`;
+      `<div class="row"><button class="btn" id="addm">Add a number</button></div>
+      <div class="sugbox"><b>Or let a model suggest numbers.</b> It sees column names, types and up to three example values, never your rows, and never personal or ignored columns. Suggestions arrive unapproved: you still give a figure you know and approve each one. Only for a table marked Public.
+       <div class="row"><select class="fld" id="sprov">${[['groq','Groq'],['openrouter','OpenRouter'],['gemini','Google Gemini']].map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${v}</option>`).join('')}</select>
+       <input class="fld key" id="skey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}"><input class="fld" id="smodel" placeholder="Model id" value="${esc(W.model)}" size="18">
+       <button class="btn" id="sgo">Suggest numbers</button></div><p class="note" id="smsg" role="status">${esc(W.sugMsg||'')}</p></div></div>`;
     h+=`<div class="row"><button class="btn" id="chk">Check</button><button class="btn main-btn" id="load">Load and reconcile</button><button class="btn text" id="cancel">Start over</button> <span class="note" id="wmsg">${esc(W.msg)}</span></div>`;
     if(W.result) h+=`<div class="pane" style="margin-top:12px">${W.result}</div>`;
   }
@@ -654,6 +661,21 @@ function wireData(){
     n.oninput=n.onchange=e=>{ m[f]=n.type==='checkbox'?n.checked:n.value; if(f==='aggregate'){ if(m.aggregate==='ratio'){ m.unit='ratio'; m.decimals=4; } dataView(); } }; });
   $('app').querySelectorAll('[data-del]').forEach(n=>n.onclick=()=>{ W.metrics.splice(+n.dataset.del,1); dataView(); });
   if($('addm')) $('addm').onclick=()=>{ W.metrics.push({name:'',aggregate:'count',column:'',filterCol:'',filterVal:'',unit:'count',decimals:0,description:'',known:'',approve:false}); dataView(); };
+  if($('sprov')){ $('sprov').onchange=e=>{W.prov=e.target.value;}; $('skey').oninput=e=>{W.key=e.target.value;}; $('smodel').oninput=e=>{W.model=e.target.value;};
+    $('sgo').onclick=async()=>{
+      if(W.meta.visibility!=='public'){ $('smsg').textContent='Set "Who may see this data" to Public first, or write the numbers yourself.'; return; }
+      if(!W.key){ $('smsg').textContent='Paste your API key first.'; return; }
+      if(W.prov!=='groq'&&!W.model){ $('smsg').textContent='Give a model id for this provider.'; return; }
+      $('sgo').disabled=true; $('smsg').textContent='Asking the model…';
+      try{
+        const r=await wsPost('/api/ws/suggest',JSON.stringify({token:W.stage.token,manifest:manifestFromForm(),provider:W.prov,model:W.model}),{'Content-Type':'application/json','X-Provider-Key':W.key});
+        if(!r.ok||r.d.error){ W.sugMsg=r.d.error||'The suggestion request failed.'; }
+        else { (r.d.suggestions||[]).forEach(x=>W.metrics.push(x));
+          const n=(r.d.suggestions||[]).length, dr=r.d.dropped||[];
+          W.sugMsg=`${n} suggestion${n===1?'':'s'} added, none approved.`+(dr.length?` ${dr.length} dropped because they broke a rule: ${dr.slice(0,4).join('; ')}${dr.length>4?'…':''}`:'')+(r.d.tokens_used?` Used ${r.d.tokens_used.toLocaleString()} tokens.`:''); }
+      }catch(e){ W.sugMsg='Could not reach the server.'; }
+      dataView(); };
+  }
   if($('cancel')) $('cancel').onclick=()=>{ W.stage=null; W.result=null; W.msg=''; wsLoadList().then(dataView); };
   if($('chk')) $('chk').onclick=()=>wsRun('/api/ws/check');
   if($('load')) $('load').onclick=()=>wsRun('/api/ws/load');

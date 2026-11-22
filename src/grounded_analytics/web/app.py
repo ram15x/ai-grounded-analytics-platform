@@ -55,6 +55,7 @@ class _Handler(BaseHTTPRequestHandler):
     models_fn = None  # callable(provider, key) -> dict
     workspace = None  # datasets.workspace.Workspace, local "Your data" mode only
     ws_ask_fn = None  # callable(dataset, question, provider, model, key) -> dict
+    ws_suggest_fn = None  # callable(token, manifest, provider, model, key) -> dict
 
     def _visitor(self) -> tuple[str, bool]:
         """The visitor id from the cookie, or a new one. A random id with no meaning of its own."""
@@ -258,6 +259,14 @@ class _Handler(BaseHTTPRequestHandler):
                 out = ws.load(
                     str(b.get("token", "")), b.get("manifest") or {}, bool(b.get("overwrite"))
                 )
+            elif self.path == "/api/ws/suggest" and self.ws_suggest_fn is not None:
+                b = self._json_body()
+                with self.lock:
+                    out = self.ws_suggest_fn(
+                        str(b.get("token", "")), b.get("manifest") or {},
+                        str(b.get("provider", "")),
+                        str(b.get("model", "") or "").strip()[:120] or None, self._key(),
+                    )  # fmt: skip
             elif self.path == "/api/ws/ask":
                 b = self._json_body(8192)
                 q = str(b.get("question", "")).strip()
@@ -326,6 +335,7 @@ def serve(
     tryout_cfg: dict | None = None,
     workspace=None,
     ws_ask_fn=None,
+    ws_suggest_fn=None,
 ) -> None:
     from ..tryout import Allowance, public_view  # noqa: PLC0415
 
@@ -333,6 +343,7 @@ def serve(
     _Handler.ask_fn, _Handler.mode = (staticmethod(ask_fn) if ask_fn else None), mode
     if workspace is not None:
         _Handler.workspace, _Handler.ws_ask_fn = workspace, staticmethod(ws_ask_fn)
+        _Handler.ws_suggest_fn = staticmethod(ws_suggest_fn) if ws_suggest_fn else None
         _Handler.models_fn = staticmethod(models_fn) if models_fn else None
         _Handler.mode = "workspace"
     if tryout_cfg is not None and byok_fn is not None:

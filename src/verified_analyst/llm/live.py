@@ -408,7 +408,9 @@ def configured_ids(settings: RouterSettings, name: str) -> dict[str, str]:
     }
 
 
-HEADROOM_MAX_TOKENS = 16
+HEADROOM_MAX_TOKENS = (
+    16  # a reasoning model still spent 93 tokens in total (measured, Groq gpt-oss-20b)
+)
 
 
 def has_remaining_tokens(rate: Mapping[str, str]) -> bool:

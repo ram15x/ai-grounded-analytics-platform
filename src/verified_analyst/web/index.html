@@ -465,7 +465,7 @@ function tryRender(){
    <div class="row"><select class="fld" id="prov" aria-label="Provider">${Object.entries(c.providers).map(([k,v])=>`<option value="${k}" ${k===T.provider?'selected':''}>${esc(v.label)}</option>`).join('')}</select>
    <input class="fld key" id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key" value="${esc(T.key)}" aria-label="API key">
    ${P.model?'':`<input class="fld" id="model" placeholder="Model id" value="${esc(T.model)}" aria-label="Model id"><button type="button" class="btn text" id="lm">List models</button>`}
-   <button type="button" class="btn text" id="ck">Check my key (uses about 20 tokens)</button></div>
+   <button type="button" class="btn text" id="ck">Check my key (uses about 100 tokens)</button></div>
    <p class="note" style="margin:0">${esc(P.key_hint||'')} ${esc(P.note||'')}</p><p class="room" id="mlist">${T.room}</p>
    ${tier('easy','Easy')}${tier('medium','Medium')}${tier('hard','Hard: data and documents together; may be withheld')}
    <div class="tier"><h4>Your own question<span class="left ${rem.own?'':'zero'}">${rem.own} of ${c.per_visitor.own} left</span></h4><div class="row"><input class="fld" id="own" style="flex:1;font:18px var(--serif)" maxlength="${c.own_max_chars}" placeholder="Ask something about the sales data or the documents" ${rem.own?'':'disabled'}><button type="button" class="btn main-btn" id="ownbtn" style="margin:0" ${rem.own?'':'disabled'}>Ask</button></div></div></div>`;
@@ -575,7 +575,7 @@ function askPanel(){
   return docs+`<h2>Ask about ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede flagtxt" style="font-weight:500">This data is internal, so a hosted provider is refused. Use the local model, or reload the data as Public if it is safe to send to your provider.</p>':''}
    <div class="pane"><div class="row"><select class="fld" id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v)}</option>`).join('')}</select>
    ${local?'':`<input class="fld key" id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}">`}<input class="fld" id="amodel" placeholder="Model id${local?' you have pulled in Ollama':''}" value="${esc(W.model)}">
-   ${local?'':'<button class="btn text" id="ackey">Check my key (uses about 20 tokens)</button>'}</div>
+   ${local?'':'<button class="btn text" id="ackey">Check my key (uses about 100 tokens)</button>'}</div>
    <p class="room" id="aroom">${W.room}</p>
    <div class="row"><input class="fld" id="aq" style="flex:1;font:20px var(--serif)" maxlength="300" placeholder="Ask anything about this data"><button class="btn main-btn" style="margin:0" id="ago">Ask</button></div><span class="note" id="amsg"></span>
    <p class="note" style="margin-bottom:0">You can ask as many questions as your key allows. The page reads your key's remaining tokens from the provider (nothing is stored) and stops before a question that would not fit.</p></div>`;

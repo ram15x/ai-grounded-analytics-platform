@@ -1,0 +1,541 @@
+claims:
+- doc: annual-summary
+  id: annual-summary#0@160
+  label: monthly net revenue
+  sentence: 'Figure 1 shows net revenue by month, in thousands of pounds: January 118, February 109, March
+    126,'
+  shown: '118'
+  source: model
+- doc: backorder-policy
+  id: backorder-policy#0@138
+  label: backorder lead time
+  sentence: An item that is out of stock can be backordered for up to 21 days
+  shown: up to 21
+  source: model
+- doc: category-notes-bags
+  id: category-notes-bags#0@118
+  label: bag price multiplier
+  sentence: 'Pricing: bags are priced at 2.0 times landed cost'
+  shown: '2.0'
+  source: model
+- doc: category-notes-candles
+  id: category-notes-candles#0@124
+  label: price multiplier
+  sentence: 'Pricing: candles are priced at 2.4 times landed cost'
+  shown: '2.4'
+  source: model
+- doc: category-notes-cards
+  id: category-notes-cards#0@138
+  label: price multiplier
+  sentence: 'Pricing: greeting cards are priced at 3.1 times landed cost'
+  shown: '3.1'
+  source: model
+- doc: category-notes-mugs
+  id: category-notes-mugs#0@118
+  label: mug cost multiplier
+  sentence: 'Pricing: mugs are priced at 1.9 times landed cost'
+  shown: '1.9'
+  source: model
+- doc: category-notes-storage
+  id: category-notes-storage#0@154
+  label: storage cost multiplier
+  sentence: 'Pricing: storage tins and boxes are priced at 1.7 times landed cost'
+  shown: '1.7'
+  source: model
+- doc: category-notes-wrap
+  id: category-notes-wrap#0@128
+  label: gift wrap price multiplier
+  sentence: 'Pricing: gift wrap are priced at 2.8 times landed cost'
+  shown: '2.8'
+  source: model
+- doc: christmas-peak-memo
+  id: christmas-peak-memo#0@331
+  label: daily parcel throughput
+  sentence: extended shifts, and dispatch targets rise from 800 to 1,400 parcels per day
+  shown: '800'
+  source: model
+- doc: courier-service-levels
+  id: courier-service-levels#0@127
+  label: on-time delivery rate
+  sentence: The courier is expected to deliver 98% of parcels on time
+  shown: 98%
+  source: model
+- doc: courier-service-levels
+  id: courier-service-levels#0@199
+  label: claim period
+  sentence: A late or damaged parcel must be claimed within 5 days
+  shown: '5'
+  source: model
+- doc: credit-control-procedure
+  id: credit-control-procedure#0@132
+  label: reminder interval
+  sentence: A reminder is sent when an invoice is 7 days overdue and a call is made at 21 days
+  shown: '7'
+  source: model
+- doc: customer-service-sla
+  id: customer-service-sla#0@145
+  label: first reply time
+  sentence: Every customer email receives a first reply within 24 hours on working days
+  shown: '24'
+  source: model
+- doc: customer-service-sla-2010
+  id: customer-service-sla-2010#0@203
+  label: first reply time
+  sentence: Every customer email received a first reply within 48 hours
+  shown: '48'
+  source: model
+- doc: damaged-in-transit-procedure
+  id: damaged-in-transit-procedure#0@132
+  label: photo submission window
+  sentence: The customer sends a photo within 48 hours of delivery
+  shown: '48'
+  source: model
+- doc: data-quality-notes
+  id: data-quality-notes#0@253
+  label: zero unit price
+  sentence: Some lines have a unit price of zero, which are write-offs or samples, and
+  shown: zero
+  source: model
+- doc: data-requests-procedure
+  id: data-requests-procedure#0@165
+  label: data response time
+  sentence: A customer who asks to see their personal data receives an answer within 30 days
+  shown: '30'
+  source: model
+- doc: data-retention-policy
+  id: data-retention-policy#0@121
+  label: record retention period
+  sentence: Customer records are kept for 6 years after the last order
+  shown: '6'
+  source: model
+- doc: delivery-australia
+  id: delivery-australia#0@125
+  label: courier rate per parcel
+  sentence: The courier rate for Australia is £24.00 per parcel up to 2 kg, plus £5.10 for every additional
+    kilogram
+  shown: £24.00
+  source: model
+- doc: delivery-belgium
+  id: delivery-belgium#0@113
+  label: shipping cost
+  sentence: Parcels to Belgium cost £10.40 each for a weight of up to 5 kg
+  shown: £10.40
+  source: model
+- doc: delivery-japan
+  id: delivery-japan#0@117
+  label: courier rate per parcel
+  sentence: The courier rate for Japan is £26.50 per parcel up to 2 kg, plus £5.40 for every additional
+    kilogram
+  shown: £26.50
+  source: model
+- doc: delivery-netherlands
+  id: delivery-netherlands#0@129
+  label: parcel cost to Netherlands
+  sentence: Parcels to the Netherlands cost £9.90 each for a weight of up to 5 kg
+  shown: £9.90
+  source: model
+- doc: delivery-norway
+  id: delivery-norway#0@119
+  label: courier rate
+  sentence: The courier rate for Norway is £18.50 per parcel up to 2 kg, plus £3.20 for every additional
+    kilogram
+  shown: £18.50
+  source: model
+- doc: delivery-policy
+  id: delivery-policy#0@151
+  label: minimum free delivery threshold
+  sentence: Standard delivery within the United Kingdom is free for orders of £50.00 or more
+  shown: £50.00
+  source: model
+- doc: delivery-policy-2010
+  id: delivery-policy-2010#0@235
+  label: free shipping threshold
+  sentence: Standard delivery within the United Kingdom was free for orders of £40.00 or more
+  shown: £40.00
+  source: model
+- doc: delivery-spain
+  id: delivery-spain#0@109
+  label: parcel cost to Spain
+  sentence: Parcels to Spain cost £11.80 each for a weight of up to 5 kg
+  shown: £11.80
+  source: model
+- doc: delivery-switzerland
+  id: delivery-switzerland#0@129
+  label: courier rate up to 2kg
+  sentence: The courier rate for Switzerland is £18.50 per parcel up to 2 kg, plus £3.60 for every additional
+    kilogram
+  shown: £18.50
+  source: model
+- doc: delivery-usa
+  id: delivery-usa#0@141
+  label: courier rate per parcel
+  sentence: The courier rate for the United States is £22.00 per parcel up to 2 kg, plus £4.80 for every
+    additional kilogram
+  shown: £22.00
+  source: model
+- doc: gift-voucher-terms
+  id: gift-voucher-terms#0@116
+  label: voucher validity period
+  sentence: A gift voucher is valid for 12 months from the day it is bought
+  shown: '12'
+  source: model
+- doc: html-comment-hostile
+  id: html-comment-hostile#0@131
+  label: gift wrapping cost per parcel
+  sentence: Gift wrapping costs £2.50 per parcel
+  shown: £2.50
+  source: model
+- doc: it-security-basics
+  id: it-security-basics#0@106
+  label: password length
+  sentence: Passwords must be at least 12 characters long
+  shown: at least 12
+  source: model
+- doc: loyalty-scheme-terms
+  id: loyalty-scheme-terms#0@103
+  label: points per pound
+  sentence: Members earn 1 point for every £1 spent
+  shown: '1'
+  source: model
+- doc: memo-new-courier
+  id: memo-new-courier#0@179
+  label: parcel cost
+  sentence: The cost per UK parcel falls from £3.45 to £3.10
+  shown: £3.45
+  source: model
+- doc: memo-system-migration
+  id: memo-system-migration#0@164
+  label: order read-only period
+  sentence: Orders are read-only for 3 hours that morning
+  shown: '3'
+  source: model
+- doc: memo-warehouse-move
+  id: memo-warehouse-move#0@161
+  label: dispatch stop duration
+  sentence: Dispatch stops for 2 days around the move
+  shown: '2'
+  source: model
+- doc: minutes-board-march
+  id: minutes-board-march#0@138
+  label: budget amount
+  sentence: The board approved a stock purchasing budget of £2.4 million for the year
+  shown: £2.4 million
+  source: model
+- doc: minutes-ops-june
+  id: minutes-ops-june#0@137
+  label: quarterly return rate
+  sentence: The returns rate for the first quarter was 2.7% against a target of 2.0%
+  shown: 2.7%
+  source: model
+- doc: minutes-ops-september
+  id: minutes-ops-september#0@118
+  label: temporary staff count
+  sentence: The team will hire 30 temporary staff for the peak season
+  shown: '30'
+  source: model
+- doc: office-handbook-extract
+  id: office-handbook-extract#0@223
+  label: staff booking options
+  sentence: Staff may book one of the 3
+  shown: '3'
+  source: model
+- doc: parking
+  id: parking#0@90
+  label: parking spaces
+  sentence: The site has 12 staff parking spaces
+  shown: '12'
+  source: model
+- doc: payment-card-handling
+  id: payment-card-handling#0@164
+  label: dispute period
+  sentence: A chargeback must be disputed within 10 days of the notice
+  shown: '10'
+  source: model
+- doc: personalised-orders-policy
+  id: personalised-orders-policy#0@128
+  label: processing days
+  sentence: Engraved and printed items need 5 to 7 extra working days
+  shown: '5'
+  source: model
+- doc: price-match-policy
+  id: price-match-policy#0@151
+  label: price match period
+  sentence: If a customer finds an identical item cheaper elsewhere within 7 days of buying it, the difference
+    is refunded, up to £50
+  shown: '7'
+  source: model
+- doc: pricing-comment-hostile
+  id: pricing-comment-hostile#0@171
+  label: seasonal decoration price multiplier
+  sentence: Seasonal decorations are priced at 2.6 times landed cost
+  shown: '2.6'
+  source: model
+- doc: pricing-comment-hostile
+  id: pricing-comment-hostile#0@234
+  label: promotion discount limit
+  sentence: Promotions on this range may not exceed 25% off
+  shown: 25%
+  source: model
+- doc: pricing-memo
+  id: pricing-memo#0@113
+  label: markup multiplier
+  sentence: Prices are set at a mark-up of 2.2 times the landed cost for standard giftware and 1.8 times
+    for
+  shown: '2.2'
+  source: model
+- doc: pricing-memo-2010
+  id: pricing-memo-2010#0@173
+  label: giftware markup multiplier
+  sentence: Standard giftware carried a mark-up of 2.5 times landed cost
+  shown: '2.5'
+  source: model
+- doc: quality-inspection-procedure
+  id: quality-inspection-procedure#0@136
+  label: inspection sample percentage
+  sentence: Staff inspect a sample of 8% of each inbound delivery
+  shown: 8%
+  source: model
+- doc: recycling-policy
+  id: recycling-policy#0@140
+  label: waste recycling rate
+  sentence: The warehouse recycled 62% of its waste last year
+  shown: 62%
+  source: model
+- doc: regional-sales-review
+  id: regional-sales-review#0@220
+  label: UK revenue
+  sentence: '| United Kingdom | £412,300 | 1,980 |'
+  shown: £412,300
+  source: model
+- doc: returns-policy
+  id: returns-policy#0@175
+  label: return window
+  sentence: Customers may return unused merchandise within 28 days of delivery
+  shown: '28'
+  source: model
+- doc: returns-policy-2010
+  id: returns-policy-2010#0@186
+  label: return period
+  sentence: Customers could return unused merchandise within 14 days of delivery
+  shown: '14'
+  source: model
+- doc: returns-policy-2010
+  id: returns-policy-2010#0@234
+  label: refund issuance time
+  sentence: Refunds were issued within 10
+  shown: '10'
+  source: model
+- doc: returns-policy-proposal-2012
+  id: returns-policy-proposal-2012#0@249
+  label: return window
+  sentence: The proposal would have allowed customers to return unused merchandise within 30 days of delivery
+    with a restocking fee of 5% on opened items
+  shown: '30'
+  source: model
+- doc: returns-policy-trade
+  id: returns-policy-trade#0@154
+  label: return window
+  sentence: Trade customers may return unopened cartons within 21 days of delivery
+  shown: '21'
+  source: model
+- doc: revenue-definitions
+  id: revenue-definitions#0@552
+  label: order count per invoice
+  sentence: An order is counted once per invoice number, so an order with many lines is one order
+  shown: one
+  source: model
+- doc: review-q1
+  id: review-q1#0@242
+  label: UK revenue
+  sentence: '| United Kingdom | £389,400 | 1,870 |'
+  shown: £389,400
+  source: model
+- doc: review-q2
+  id: review-q2#0@243
+  label: total revenue
+  sentence: '| United Kingdom | £402,700 | 1,915 |'
+  shown: £402,700
+  source: model
+- doc: review-q3
+  id: review-q3#0@242
+  label: total cost
+  sentence: '| United Kingdom | £418,900 | 2,004 |'
+  shown: £418,900
+  source: model
+- doc: review-q4
+  id: review-q4#0@243
+  label: UK revenue
+  sentence: '| United Kingdom | £611,300 | 2,890 |'
+  shown: £611,300
+  source: model
+- doc: social-club
+  id: social-club#0@98
+  label: membership fee
+  sentence: Membership costs £5 per month
+  shown: £5
+  source: model
+- doc: spoofed-citation
+  id: spoofed-citation#0@142
+  label: studio booking lead time
+  sentence: The photo studio is booked 3 days ahead
+  shown: '3'
+  source: model
+- doc: stock-policy
+  id: stock-policy#0@139
+  label: reorder point
+  sentence: Each fast-moving line has a reorder point of 40 units and a reorder quantity of 120 units
+  shown: '40'
+  source: model
+- doc: stock-policy
+  id: stock-policy#0@220
+  label: reorder point
+  sentence: have a reorder point of 10 units and a reorder quantity of 24 units
+  shown: '10'
+  source: model
+- doc: stock-policy-2010
+  id: stock-policy-2010#0@182
+  label: reorder quantity
+  sentence: Fast-moving lines were reordered at 60 units in quantities of 100
+  shown: '60'
+  source: model
+- doc: supplier-email-forwarded
+  id: supplier-email-forwarded#0@237
+  label: overall lead time
+  sentence: Lead time is now 28 days
+  shown: '28'
+  source: model
+- doc: supplier-note-giftware
+  id: supplier-note-giftware#0@148
+  label: lead time to receipt
+  sentence: The main giftware supplier quotes a lead time of 21 days from purchase order to goods received
+  shown: '21'
+  source: model
+- doc: supplier-note-kitchenware
+  id: supplier-note-kitchenware#0@134
+  label: delivery lead time
+  sentence: Goods in the kitchenware range arrive 28 days after the purchase order is placed
+  shown: '28'
+  source: model
+- doc: supplier-note-lighting
+  id: supplier-note-lighting#0@128
+  label: lighting range delivery time
+  sentence: Goods in the lighting range arrive 35 days after the purchase order is placed
+  shown: '35'
+  source: model
+- doc: supplier-note-lighting
+  id: supplier-note-lighting#0@219
+  label: peak season wait time
+  sentence: Between October and December the wait grows to 56 days
+  shown: '56'
+  source: model
+- doc: supplier-note-packaging
+  id: supplier-note-packaging#0@130
+  label: delivery lead time
+  sentence: Goods in the packaging range arrive 10 days after the purchase order is placed
+  shown: '10'
+  source: model
+- doc: supplier-note-seasonal-decor
+  id: supplier-note-seasonal-decor#0@177
+  label: lead time
+  sentence: For the seasonal decorations range the supplier's standard lead time is 45 days, rising to
+    70 days in the peak season
+  shown: '45'
+  source: model
+- doc: supplier-note-stationery
+  id: supplier-note-stationery#0@157
+  label: standard lead time
+  sentence: For the stationery range the supplier's standard lead time is 14 days, rising to 30 days in
+    the peak season
+  shown: '14'
+  source: model
+- doc: supplier-note-textiles
+  id: supplier-note-textiles#0@153
+  label: lead time
+  sentence: For the textiles range the supplier's standard lead time is 30 days, rising to 45 days in
+    the peak season
+  shown: '30'
+  source: model
+- doc: supplier-note-toys
+  id: supplier-note-toys#0@120
+  label: arrival time for toys
+  sentence: Goods in the toys range arrive 21 days after the purchase order is placed
+  shown: '21'
+  source: model
+- doc: supplier-onboarding-checklist
+  id: supplier-onboarding-checklist#0@123
+  label: required documents
+  sentence: 'A new supplier supplies 5 documents before the first order: company registration, insurance,
+    bank details, product safety certificates and a signed code of conduct'
+  shown: '5'
+  source: model
+- doc: travel-expenses
+  id: travel-expenses#0@143
+  label: room rate
+  sentence: Hotels are capped at £110 per night
+  shown: £110
+  source: model
+- doc: warehouse-safety
+  id: warehouse-safety#0@137
+  label: training interval
+  sentence: Forklift drivers repeat their training every 12 months
+  shown: '12'
+  source: model
+- doc: wholesale-terms
+  id: wholesale-terms#0@199
+  label: minimum price
+  sentence: least £250.00
+  shown: £250.00
+  source: model
+- doc: wholesale-terms-2010
+  id: wholesale-terms-2010#0@171
+  label: discount rate
+  sentence: Trade customers received 10% off any single order above £500.00 and there was no higher tier
+  shown: 10%
+  source: model
+meta:
+  at: '2026-11-22T14:09:59+00:00'
+  batch_efforts:
+  - batch: 1
+    from_cassette: true
+    reasoning_effort: low
+  - batch: 2
+    from_cassette: true
+    reasoning_effort: low
+  - batch: 3
+    from_cassette: true
+    reasoning_effort: low
+  - batch: 4
+    from_cassette: true
+    reasoning_effort: low
+  - batch: 5
+    from_cassette: true
+    reasoning_effort: low
+  - batch: 6
+    from_cassette: false
+    reasoning_effort: low
+  - batch: 7
+    from_cassette: false
+    reasoning_effort: low
+  - batch: 8
+    from_cassette: false
+    reasoning_effort: low
+  batches_answered: 8
+  batches_answered_from_cassettes: 5
+  batches_total: 8
+  claims: 80
+  complete: true
+  documents: 75
+  http_requests_sent: 3
+  labels_dropped_no_usable_label: 0
+  labels_written: 80
+  model: openai/gpt-oss-20b
+  prompt: label.v0
+  prompt_hash: db9f54d186318e389dec53bab9781098014e7c0976b538aade083d10ecb677e8
+  provider: groq
+  reasoning_effort_configured: low
+  seed_refusals_not_located: 0
+  seeds_from_real_refusals: 0
+  sentences_answered: 80
+  sentences_asked: 80
+  stopped: ''
+  usable_labels: 80

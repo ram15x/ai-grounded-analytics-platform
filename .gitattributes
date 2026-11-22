@@ -1,0 +1,3 @@
+# Files whose sha256 is recorded by a one-shot evaluation keep LF line endings on every OS.
+eval/binder_model_labels/*.yaml text eol=lf
+docs/adr/*.md text eol=lf

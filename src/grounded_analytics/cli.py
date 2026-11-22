@@ -786,6 +786,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="plan.v2 adds the filter shape to the prompt (dev comparison only)",
     )
     e2.add_argument("--only", metavar="IDS", help="dev only: comma-separated question ids to run")
+    e2.add_argument(
+        "--pause-s",
+        type=float,
+        default=0.0,
+        help="seconds to wait between questions (free plans: about 45 keeps Groq's 8000 "
+        "tokens per minute)",
+    )
     e2.add_argument("--out-dir", default="data/e2e_runs")
     e2.add_argument("--replay", nargs="?", const="demo/recordings.jsonl", metavar="FILE")
     e2.add_argument("--provider")
@@ -1140,6 +1147,7 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
     """Dev: dev.yaml, gold from t1. Locked: see e2e_locked, gold from t2, one shot."""
     import json as _json  # noqa: PLC0415
     import sys as _sys  # noqa: PLC0415
+    import time  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
     import yaml  # noqa: PLC0415
@@ -1190,6 +1198,10 @@ def cmd_eval_e2e(args: argparse.Namespace) -> int:
             )
         else:
             entry = {"kind": "scalar", "value": str(t1.GOLD_FUNCTIONS[q["gold_fn"]](df))}
+        if getattr(args, "pause_s", 0) and q is not qs[0]:
+            # each question gets a fresh router (so its per-minute pacing starts empty): a pause
+            # keeps a free plan's tokens-per-minute limit from turning questions into no_reply
+            time.sleep(args.pause_s)
         d = _ask_one(q["question"], q["id"], setup, args.plan_prompt).as_dict()
         d["id"] = q["id"]
         if d["reason"] == "provider_error" and args.replay:

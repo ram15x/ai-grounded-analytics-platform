@@ -259,7 +259,7 @@ def write_labels(path: Path, gen: Generated, meta: dict[str, Any]) -> str:
     doc = {"meta": meta, "claims": sorted(gen.claims, key=lambda c: (c["doc"], c["id"]))}
     text = yaml.safe_dump(doc, sort_keys=True, allow_unicode=True, width=100)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")  # the same bytes on every OS
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 

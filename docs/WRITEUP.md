@@ -24,8 +24,7 @@ the reader: no figure is shown unless it matches the warehouse or a stored passa
   unsupported metric), 5 with no stored reply. **No accuracy figure is claimed.** n is 17 and one
   author wrote the questions.
 - Injection: 5 questions, one model, 0 obeyed. Not a safety claim.
-- Not yet run: the model-written label test for the document-number binder (built, pre-registered in
-  ADR-0013, blocked on free-plan quota).
+- Model-written label test (ADR-0013): run 2026-11-22, 80 of 80 labels; results in docs/RESULTS.md.
 
 ## Bring your own data (built, lightly tested)
 The system is no longer tied to one dataset. `grounded serve --workspace` (local only) takes a CSV, TSV or
@@ -61,5 +60,6 @@ the build if a verified figure has no trace to its stored cell or passage.
 Verification shows a figure matches its source, not that the source answers the question. The free
 Groq plan caps tokens per day (200,000, measured once), which limits live runs. Only the recorded
 view is deployed (GitHub Pages, static, no model calls); uploads and the key-based tryout run
-locally. Single user, no sign-in. Not run: the locked held-out eval, real-world PDFs, the Docker
-image build.
+locally. Single user, no sign-in. Not run: real-world PDFs, the Docker image build.
+The held-out eval was run once: 8 of 15 correct, 2 shown as verified but wrong (both traced to verifier gaps, fixed afterwards, not re-scored); see
+docs/RESULTS.md.

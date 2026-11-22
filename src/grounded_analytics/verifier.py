@@ -8,8 +8,10 @@ displayed value within its displayed precision.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal, DivisionByZero, InvalidOperation
 from typing import Any
 
@@ -246,6 +248,7 @@ class Verifier:
                 self._parameter(item, prov)
                 return v(VERIFIED, "sql_parameter")
             if isinstance(prov, RowCountRef):
+                self._row_count_label(claim, prov)
                 expected = Decimal(len(self._query(prov.query_id).rows))
                 self._compare(item, claim, expected, UNSUPPORTED, derived=False)
                 return v(VERIFIED, "row_count", expected)
@@ -256,6 +259,7 @@ class Verifier:
                 self._context(item, prov, cell, metric)
                 return v(VERIFIED, note, expected)
             assert isinstance(prov, DerivedRef)
+            self._change_order(item, prov)
             expected = self._derive(prov, prose_values)
             self._compare(item, claim, expected, DERIVATION_MISMATCH, derived=True)
             return v(VERIFIED_DERIVED, prov.op, expected)
@@ -283,6 +287,10 @@ class Verifier:
     ) -> None:
         shown = item.value
         assert shown is not None
+        if item.direction and shown < 0:
+            # "increased by -23.5%": the word and the sign disagree, so the sentence has no single
+            # reading to verify (found by the locked end-to-end run, H-T3-01)
+            raise _Fail(fail, "direction_word_with_negative_number")
         if item.direction in CONFLICTING_DIRECTIONS and shown >= 0:
             if expected == 0 or (expected > 0) != (item.direction == "up"):
                 raise _Fail(fail, "direction_mismatch", f"expected {expected}")
@@ -297,6 +305,58 @@ class Verifier:
             good = diff <= tol
         if not good:
             raise _Fail(fail, "value_mismatch", f"expected {expected}, shown {shown}")
+
+    # ---- which way a change runs, and what a row count may stand for
+
+    def _change_order(self, item: ExtractedNumber, ref: DerivedRef) -> None:
+        """A percent change between two cells must run from its base to the other value. The
+        model chooses the argument order, so the order is checked, not trusted: between two
+        periods it must run from the earlier to the later; otherwise the sentence must name the
+        base after "from", "than", "on", "compared with/to", "versus" or "over". Anything else is
+        refused (withheld), never guessed. Found by the locked end-to-end run (H-T3-01): a change
+        computed backwards matched its own (wrong) figure."""
+        if ref.op != "percent_change" or len(ref.args) != 2:
+            return
+        a, b = ref.args
+        if not (isinstance(a, CellRef) and isinstance(b, CellRef)):
+            return
+        keys = [k for k in a.row_key if k in b.row_key and not _same(a.row_key[k], b.row_key[k])]
+        if len(keys) != 1:
+            if a.row_key == b.row_key:
+                return  # two metrics of one row: no period or group order to check
+            raise _Fail(DERIVATION_MISMATCH, "change_base_unclear")
+        base, other = a.row_key[keys[0]], b.row_key[keys[0]]
+        da, db = _as_date(base), _as_date(other)
+        if da and db:
+            if da > db:
+                raise _Fail(
+                    DERIVATION_MISMATCH, "change_runs_backwards", f"{other} is earlier than {base}"
+                )
+            return
+        s, e = sentence_span(self._prose, item.start, item.end)
+        sent = self._prose[s:e].lower()
+        i = sent.find(str(base).lower())
+        before = sent[max(0, i - 32) : i] if i >= 0 else ""
+        if i < 0 or not _BASE_WORDS.search(before):
+            raise _Fail(
+                DERIVATION_MISMATCH,
+                "change_base_unclear",
+                f"the base is {base}; name it after 'from'",
+            )
+
+    def _row_count_label(self, claim: Claim, ref: RowCountRef) -> None:
+        """A row count is a count of rows: it cannot stand for a measured value. Found by the
+        locked end-to-end run (H-T3-02): a query with no rows was reported as net revenue of 0."""
+        q = self._query(ref.query_id)
+        label = norm_term(claim.label)
+        numeric = {
+            c for i, c in enumerate(q.columns)
+            if q.rows and all(_is_number(r[i]) for r in q.rows)
+        }  # fmt: skip
+        # with no rows there is nothing to tell measures from groups by: every column counts
+        named = [c for c in q.columns if (not q.rows or c in numeric) and norm_term(c) in label]
+        if named:
+            raise _Fail(UNSUPPORTED, "row_count_shown_as_a_measure", named[0])
 
     # ---- cells and label binding
 
@@ -511,6 +571,33 @@ class Verifier:
                 except InvalidOperation:
                     continue
         raise _Fail(UNSUPPORTED, "not_a_sql_literal")
+
+
+_BASE_WORDS = re.compile(r"\b(from|than|on|compared (with|to)|versus|vs\.?|over)\s+(the\s+)?$")
+
+
+def _as_date(v: Any) -> date | None:
+    if isinstance(v, date):
+        return v
+    m = re.fullmatch(r"(\d{4})-(\d{2})(?:-(\d{2}))?", str(v).strip())
+    if not m:
+        return None
+    try:
+        return date(int(m[1]), int(m[2]), int(m[3] or 1))
+    except ValueError:
+        return None
+
+
+def _is_number(v: Any) -> bool:
+    if isinstance(v, bool) or v is None:
+        return False
+    if isinstance(v, int | float | Decimal):
+        return True
+    try:
+        to_decimal(v)
+        return not _as_date(v)
+    except ValueError:
+        return False
 
 
 def _same(cell: Any, wanted: Any) -> bool:

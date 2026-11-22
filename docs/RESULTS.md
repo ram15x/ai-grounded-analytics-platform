@@ -4,6 +4,67 @@ Everything measured on this project, with its n. These are small, single-author 
 benchmarks: one author wrote the questions, the semantic layer and the synthetic documents.
 **No accuracy figure is claimed.** Run folders are under `data/live_runs/` (git-ignored).
 
+## End-to-end evaluation (2026-11-22, groq `openai/gpt-oss-20b`)
+
+Scored from what a reader would see (ADR-0014): **correct** (verified, gold figure shown),
+**verified_wrong** (shown as verified, gold figure missing: the failure this product exists to
+prevent), **withheld** (abstained), **no_reply** (no usable model reply). Questions and gold values
+are author-written; one model; small n. **Not an accuracy claim.**
+
+### Dev set (15 questions; may be run repeatedly)
+
+| Run | Plan prompt | Correct | Verified wrong | Withheld | No reply |
+|---|---|---|---|---|---|
+| `20261121T144216Z` | plan.v1 | 10 | 0 | 2 | 3 |
+| `20261122T141403Z` | plan.v2 | 9 | 0 | 4 | 2 |
+
+With `plan.v2`, the 4 withheld questions are the 4 marked not expressible with the approved metrics
+(withholding is the right answer), and both no-replies were HTTP 429 (8,000 tokens per minute).
+Every expressible question that got a reply was correct (9 of 9).
+
+### Locked held-out set (15 questions, run once, `20261122T143125Z`)
+
+Settings fixed before the run in ADR-0014: `plan.v2`, `--pause-s 45`.
+
+| Correct | Verified wrong | Withheld | No reply | Correct among answered (Wilson 95%) |
+|---|---|---|---|---|
+| 8 | **2** | 5 | 0 | 8/15 (30.1% to 75.2%) |
+
+Both verified-wrong answers were investigated (ADR-0014 requires it):
+
+- **H-T3-01**, percent change in gross revenue from October to November 2011. The data shows an
+  increase of 30.7% (1,154,979.30 to 1,509,496.33). The answer said "increased by -23.5%". The
+  model passed the two months to the percent-change check in reverse order, and the verifier
+  trusted that order, so the backwards figure matched itself. The word "increased" before a
+  negative number was not checked either.
+- **H-T3-02**, December 2010 against December 2011 net revenue. The plan filtered `month = Dec 2010
+  AND month = Dec 2011`, which no row can satisfy; the query returned nothing, and the answer
+  reported "net revenue ... 0 rows", which the verifier accepted as a row count.
+
+Fixed after the run, each with a regression test (`tests/test_template.py`): a percent change
+between periods must run from the earlier to the later, and between groups the base must be named
+("from", "than", "on", "compared with"); a direction word before a negative number is refused; a row
+count cannot be shown as a measured value; the compiler rejects one column filtered to two
+different values. **The locked score above was produced by the code before these fixes and is not
+re-scored**: the held-out questions are spent for this model, and re-running them after a fix would
+no longer be a held-out measurement.
+
+### Model-written labels for document numbers (ADR-0013)
+
+80 of 80 labels written by `openai/gpt-oss-20b` (labels file sha256 `71583e31`). False reject =
+a correct label refused; false accept = a label swapped onto another number accepted.
+
+| Variant | Dev: false reject | Dev: false accept | Locked: false reject | Locked: false accept |
+|---|---|---|---|---|
+| current | 10 of 38 | 6 of 68 | 15 of 42 (23.0% to 50.8%) | 5 of 76 (2.8% to 14.5%) |
+| S2 (default) | 5 of 38 | 4 of 68 | 16 of 42 (25.0% to 53.2%) | 1 of 76 (0.2% to 7.1%) |
+| SL | 5 of 38 | 4 of 68 | 15 of 42 (23.0% to 50.8%) | 1 of 76 (0.2% to 7.1%) |
+
+Reading: on the locked half S2 and SL accept far fewer swapped labels than `current`, at about the
+same false-reject rate. That false-reject rate is high: roughly one correct label in three is
+refused, which shows up as withheld document answers. Per ADR-0013 no default changes on this
+result alone. Locked report: `data/live_runs/20261122_194905_binder_model_locked`.
+
 ## Provider and pipeline runs
 
 Provider probes, 10 single-metric questions on `analytics.sales_lines` (`grounded live probe`; "verified" means every number passed the verifier, not that the answer is correct). The prompts were first drafts and changed between runs, so the rows are not repeats of one experiment.

@@ -602,7 +602,7 @@ def _digit_candidate(text: str, m: re.Match[str], claims: _Claims) -> _Cand | No
         ambiguity = "lowercase_m_or_b_suffix"
     qual, qlen = _qualifier(text[:start])
     pre = text[: start - qlen] if qual else text[:start]
-    direction = _direction(pre) if sign == 1 else None
+    direction = _direction(pre)  # also before a negative number: the verifier refuses that
     s0 = start - qlen if qual else start
     value = mant * scale * sign
     item = ExtractedNumber(

@@ -143,6 +143,15 @@ def compile_query(layer: SemanticLayer, query: MetricQuery | dict) -> CompiledQu
         for name in q.metrics:
             if d not in layer.metrics[name].allowed_dimensions:
                 raise CompileError(f"metric {name} cannot be grouped by {d}")
+    eqs: dict[str, Any] = {}
+    for f in q.filters:
+        if f.op == "eq":
+            if f.dimension in eqs and str(eqs[f.dimension]) != str(f.value):
+                raise CompileError(
+                    f"{f.dimension} cannot equal both {eqs[f.dimension]!r} and {f.value!r}; "
+                    "use one filter with op 'in' for several values"
+                )
+            eqs[f.dimension] = f.value
     columns = [*q.dimensions, *q.metrics]
     for ob in q.order_by:
         if ob.by not in columns:

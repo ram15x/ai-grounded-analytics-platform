@@ -156,6 +156,7 @@ def _locked_kw(tmp_path, labels, d, **over):
 
 
 def test_locked_run_needs_the_adr_and_labels_committed_and_runs_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(bm, "SPENT_BY", None)  # the gate is tested on invented input
     monkeypatch.setattr(bm, "MIN_CLAIMS", 5)  # the invented corpus is small
     d = corpus(tmp_path, 4)
     gen = bm.generate_labels(fake_labeler(), bm.select_sentences(d, hostile=[], target=100))
@@ -185,7 +186,8 @@ def _copy(src: Path, tmp_path: Path) -> Path:
     return dst
 
 
-def test_locked_run_refuses_when_the_adr_differs_from_the_code(tmp_path):
+def test_locked_run_refuses_when_the_adr_differs_from_the_code(tmp_path, monkeypatch):
+    monkeypatch.setattr(bm, "SPENT_BY", None)  # the gate is tested on invented input
     d = corpus(tmp_path)
     labels = tmp_path / "labels.yaml"
     bm.write_labels(labels, bm.generate_labels(fake_labeler(), bm.select_sentences(d, [], 100)), {})
@@ -196,9 +198,9 @@ def test_locked_run_refuses_when_the_adr_differs_from_the_code(tmp_path):
         bm.run_locked(**_locked_kw(tmp_path, labels, d, root=tmp_path, adr_path=adr))
 
 
-def test_the_real_locked_half_is_not_scorable_before_the_labels_are_committed(tmp_path):
-    # the repository has no labels file yet: the gate refuses rather than scoring anything
-    with pytest.raises(DocumentError, match="missing|not been committed|changed since"):
+def test_the_real_locked_half_cannot_be_scored_again(tmp_path):
+    # it was scored once (2026-11-22); every copy of the code now refuses a second scoring
+    with pytest.raises(DocumentError, match="spent"):
         bm.run_locked(candidates_arg="current,S2,SL", ledger=tmp_path / "l.jsonl")
     assert not (tmp_path / "l.jsonl").exists()
 
@@ -292,7 +294,8 @@ def test_the_request_cap_also_leaves_the_generation_unspent_and_resumable(tmp_pa
     assert out["meta"]["batches_answered"] == 2 and out["meta"]["stopped"]
 
 
-def test_locked_refuses_with_the_count_when_fewer_than_40_labels_are_usable(tmp_path):
+def test_locked_refuses_with_the_count_when_fewer_than_40_labels_are_usable(tmp_path, monkeypatch):
+    monkeypatch.setattr(bm, "SPENT_BY", None)  # the gate is tested on invented input
     d = corpus(tmp_path, 4)
     gen = bm.generate_labels(fake_labeler(), bm.select_sentences(d, hostile=[], target=100))
     labels = tmp_path / "labels.yaml"

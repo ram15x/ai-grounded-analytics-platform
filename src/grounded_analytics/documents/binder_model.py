@@ -49,7 +49,7 @@ LABELS_PATH = ROOT / "eval" / "binder_model_labels" / "labels.yaml"
 LEDGER_PATH = ROOT / "data" / "binder_model_ledger.jsonl"
 WORK_DIR = ROOT / "data" / "binder_model_labels_work"  # cassettes of the one generation
 # Set to the ADR that used the locked half once it has been scored; nothing else may use it.
-SPENT_BY: str | None = None
+SPENT_BY: str | None = "docs/RESULTS.md (scored once, 2026-11-22, report 20261122_194905)"
 TARGET_CLAIMS = 80
 MIN_CLAIMS = 40
 BATCH = 10

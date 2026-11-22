@@ -138,8 +138,12 @@ CI runs lint and the full suite on Python 3.11 and 3.12 against Postgres with pg
 ## Results and limitations
 
 What has been measured, each with its sample size, is in [docs/RESULTS.md](docs/RESULTS.md).
-Highlights: 30 of 30 adversarial wrong answers were refused, and a real upload-to-answer run on
-Groq `openai/gpt-oss-20b` returned a verified answer. **No accuracy figure is claimed.**
+Held-out evaluation (15 unseen questions, run once, Groq `openai/gpt-oss-20b`): 8 correct,
+5 withheld, and **2 shown as verified but wrong**. Both were traced to verifier gaps (a percent change
+taken in reverse order; a row count reported as revenue), fixed and covered by regression tests; the
+held-out score is reported as measured, not re-scored after the fix. On the dev set, every
+answerable question that got a reply was correct (9 of 9). **No accuracy figure is claimed:** one
+author wrote the questions, one model, small n.
 
 Limitations:
 
@@ -147,7 +151,8 @@ Limitations:
 - Document answers prove a number appears in a passage, not that the passage was read correctly.
 - No sign-in and no multi-user separation. Uploads run only on your own computer.
 - Scanned PDFs are refused (no OCR). Real-world PDF layouts are untested.
-- The locked held-out evaluation has not been run.
+- About one correct document label in three is refused by the label check (measured on model-written
+  labels), so some document answers are withheld that need not be.
 
 ## Documentation
 

@@ -251,3 +251,78 @@ def test_report_serialises():
     r = run("France net revenue was {a}.", [A])
     d = r.as_dict()
     assert d["status"] == "verified" and d["placeholders"][0]["shown_value"] == "1111.11"
+
+
+# ---- found by the locked end-to-end run (2026-11-22): both were shown as verified, both wrong -----
+
+JAN = cell("qm", "net_revenue", month="2011-01-01")
+FEB = cell("qm", "net_revenue", month="2011-02-01")
+
+
+def change(a, b):
+    return {"kind": "derived", "op": "percent_change", "args": [a, b]}
+
+
+def test_a_percent_change_between_periods_must_run_from_the_earlier_one():
+    ok = run(
+        "Net revenue changed by {a} from January 2011 to February 2011.",
+        [claim("a", change(JAN, FEB), "net revenue change", "percent")],
+    )
+    assert ok.status == "verified" and ok.rendered.endswith(
+        "by 2.0% from January 2011 to February 2011."
+    )
+    # H-T3-01: the arguments in the wrong order give a figure that matches itself
+    bad = run(
+        "Net revenue changed by {a} from January 2011 to February 2011.",
+        [claim("a", change(FEB, JAN), "net revenue change", "percent")],
+    )
+    assert bad.status != "verified" and "change_runs_backwards" in reasons(bad)
+
+
+def test_a_direction_word_before_a_negative_number_is_refused():
+    # base named correctly, so only the sign check can refuse it: (1111.11 - 2222.22) / 2222.22
+    bad = run(
+        "France's net revenue increased by {a} compared with Germany.",
+        [claim("a", change(GE, FR), "net revenue difference", "percent")],
+    )
+    assert bad.rendered.startswith("France's net revenue increased by -50.0%")
+    assert bad.status != "verified" and "direction_word_with_negative_number" in reasons(bad)
+
+
+def test_a_percent_change_between_groups_needs_its_base_named():
+    ok = run(
+        "Germany's net revenue was {a} higher than France.",
+        [claim("a", change(FR, GE), "net revenue difference", "percent")],
+    )
+    assert ok.status == "verified"
+    bad = run(
+        "France's net revenue was {a} higher than Germany.",
+        [claim("a", change(FR, GE), "net revenue difference", "percent")],
+    )
+    assert bad.status != "verified" and "change_base_unclear" in reasons(bad)
+
+
+def test_a_row_count_cannot_stand_for_a_measure():
+    from adversarial_cases import _q
+
+    empty = _q("qz", ["net_revenue"], ["month"], [])
+    qs = {**QS, "qz": empty}
+    # H-T3-02: a query with no rows reported as "net revenue ... was 0"
+    bad = run(
+        "Net revenue in December 2010 was {a}.",
+        [claim("a", {"kind": "row_count", "query_id": "qz"}, "net revenue", "count")],
+        qs,
+    )
+    assert bad.status != "verified" and "row_count_shown_as_a_measure" in reasons(bad)
+
+
+def test_a_plan_cannot_ask_for_one_column_to_equal_two_values():
+    from grounded_analytics.compiler import CompileError, compile_query
+
+    with pytest.raises(CompileError, match="cannot equal both"):
+        compile_query(
+            LAYER,
+            {"metrics": ["net_revenue"], "dimensions": ["month"],
+             "filters": [{"dimension": "month", "op": "eq", "value": "2010-12-01"},
+                         {"dimension": "month", "op": "eq", "value": "2011-12-01"}]},
+        )  # fmt: skip

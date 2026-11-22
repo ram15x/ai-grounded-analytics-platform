@@ -12,12 +12,24 @@ The recorded view is live at https://ram15x.github.io/ai-grounded-analytics-plat
 - Build and deploy are separate jobs: deploying in the same job as the upload raced the artifact
   listing and failed with "Found 0 artifact(s)" (observed twice).
 
+The tryout (`grounded serve --byok`) is live at https://ai-grounded-analytics-platform.vercel.app/
+(Vercel Hobby plus Neon free Postgres, no card on either).
+
+- `api/index.py` is the Vercel entry. `vercel.json` rewrites every path to `/api/index/<path>`;
+  the handler strips that prefix. Vercel's Python runtime only detects a top-level `class handler`,
+  so it is a class, not a variable assigned from a call.
+- The warehouse and the public documents live in Neon. The site connects as the read-only role
+  `ga_readonly`, set as `GA_READONLY_DATABASE_URL` in the Vercel project settings. The admin login
+  is used only from the machine that loads the data.
+- The visitor's key travels with each question and is not stored. The reply cache is `/tmp`, which
+  is empty on a cold start, so a menu question needs the visitor's key unless it is still warm.
+- Checked live on 2026-11-22: "How many orders were placed?" returned 19,960, tied to the query result.
+
 ## What is not deployed, and why
 
 | Mode | Why it runs locally only |
 |---|---|
 | `grounded serve --workspace` (uploads) | No sign-in or per-user separation, so it refuses any host but 127.0.0.1. Hosting it would expose uploaded data. |
-| `grounded serve --byok` (visitor's own key) | Needs Postgres with the warehouse loaded and a long-running server. The free hosts checked either asked for a card (Render's Blueprint flow) or expire free Postgres after 30 days. |
 
 ## Checked, not used
 

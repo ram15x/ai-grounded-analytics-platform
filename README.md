@@ -8,7 +8,8 @@ Ask business questions in plain English over your data and documents. Every numb
 is checked against the database or a stored passage before it is shown. If a number cannot be
 traced to its source, the answer is withheld.
 
-**[Live demo](https://ram15x.github.io/ai-grounded-analytics-platform/)** (recorded answers, no sign-up)
+**[Live demo](https://ram15x.github.io/ai-grounded-analytics-platform/)** (recorded answers, no sign-up) ·
+**[Try it with your own key](https://ai-grounded-analytics-platform.vercel.app/)** (live database, free Groq key)
 
 ![An answer with every figure tied to its source](docs/assets/answer.png)
 

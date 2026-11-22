@@ -549,7 +549,7 @@ async function tryInit(){
 
 /* ---------- your data (local only) ---------- */
 const W = {docs:[], docMsg:'', docSens:'internal', stage:null, cols:{}, meta:{description:'',grain:'',currency:'',visibility:'internal',name:''}, metrics:[], msg:'', result:null, datasets:[], ds:null, prov:'groq', key:'', model:'', busy:false, est:null, room:''};
-const AGG = ['sum','count','count_distinct','avg','min','max'];
+const AGG = ['sum','count','count_distinct','avg','min','max','ratio'];
 async function wsPost(path, body, headers){
   const r = await fetch(path,{method:'POST',headers:headers||{'Content-Type':'application/json'},body:body});
   return {ok:r.ok, d:await r.json()};
@@ -561,10 +561,11 @@ function manifestFromForm(){
   Object.entries(W.cols).forEach(([n,c])=>{ const o={role:c.role}; if(c.label) o.label=c.label; if(c.role==='dimension'&&c.enumerable) o.enumerable=true;
     if(c.role==='date'&&c.date_order) o.date_order=c.date_order; if(c.sensitivity==='personal') o.sensitivity='personal'; cols[n]=o; });
   const metrics={};
-  W.metrics.forEach(m=>{ if(!m.name) return; const o={status:m.approve?'approved':'draft', description:m.description||m.name, aggregate:m.aggregate,
+  W.metrics.forEach(m=>{ if(!m.name) return; const o={status:m.approve?'approved':'draft', description:m.description||m.name,
     unit:m.unit==='currency'?'currency:'+(W.meta.currency||'XXX'):m.unit, decimals:+m.decimals||0};
-    if(m.aggregate!=='count') o.column=m.column;
-    if(m.filterCol&&m.filterVal!=='') o.where=[{column:m.filterCol,op:'eq',value:m.filterVal}];
+    if(m.aggregate==='ratio'){ o.numerator=m.numerator; o.denominator=m.denominator; }
+    else { o.aggregate=m.aggregate; if(m.aggregate!=='count') o.column=m.column;
+      if(m.filterCol&&m.filterVal!=='') o.where=[{column:m.filterCol,op:'eq',value:m.filterVal}]; }
     if(m.known!=='') o.known=[{value:String(m.known)}];
     metrics[m.name]=o; });
   return {name:W.meta.name, description:W.meta.description, grain:W.meta.grain, currency:W.meta.currency, visibility:W.meta.visibility, columns:cols, metrics, exclusions:[], glossary:{}, examples:[]};
@@ -592,12 +593,12 @@ function dataView(){
         <td><select class="fld" data-role="${esc(c.name)}">${['date','dimension','identifier','measure','ignore'].map(r=>`<option ${w.role===r?'selected':''}>${r}</option>`).join('')}</select>${w.role==='dimension'?`<br><label class="note"><input type="checkbox" data-enum="${esc(c.name)}" ${w.enumerable?'checked':''}> small closed set</label>`:''}${w.role==='date'&&(c.issues||[]).some(i=>/day|month|order|ambig/i.test(i))?`<br><select class="fld" data-dord="${esc(c.name)}"><option value="">order?</option><option value="dmy" ${w.date_order==='dmy'?'selected':''}>day first</option><option value="mdy" ${w.date_order==='mdy'?'selected':''}>month first</option></select>`:''}${w.sensitivity==='personal'?'<br><span class="flagtxt">personal: not loaded</span>':''}</td>
         <td><input class="fld" data-label="${esc(c.name)}" value="${esc(w.label||'')}" size="16"></td></tr>`; }).join('')+`</table></div></div>`;
     const allc=Object.entries(W.cols).filter(([n,c])=>c.role!=='ignore').map(([n])=>n);
-    h+=`<div class="pane"><h3>3. Numbers you want answered</h3><p class="note" style="margin-top:0">Each is a count, sum, average, minimum, maximum or distinct count, with at most one filter. Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
+    h+=`<div class="pane"><h3>3. Numbers you want answered</h3><p class="note" style="margin-top:0">Each is a count, sum, average, minimum, maximum or distinct count with at most one filter, or a ratio of two of those numbers (for example churned divided by all). Give a figure you know from your own report so the system can check the definition before it is approved. A number approved without one is flagged as unchecked.</p>`+
       W.metrics.map((m,i)=>`<div class="sec" style="border-top:1px solid var(--rule);padding-top:12px"><div class="row">
         <input class="fld" data-m="${i}" data-f="name" placeholder="name (e.g. mrr)" value="${esc(m.name)}" size="14">
-        <select class="fld" data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option ${m.aggregate===a?'selected':''}>${a}</option>`).join('')}</select>
-        ${m.aggregate==='count'?'<span class="note">rows</span>':`<select class="fld" data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
-        <span class="note">where</span><select class="fld" data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input class="fld" data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">
+        <select class="fld" data-m="${i}" data-f="aggregate">${AGG.map(a=>`<option value="${a}" ${m.aggregate===a?'selected':''}>${a==='ratio'?'ratio of two numbers':a}</option>`).join('')}</select>
+        ${m.aggregate==='ratio'?ratioPick(m,i):`${m.aggregate==='count'?'<span class="note">rows</span>':`<select class="fld" data-m="${i}" data-f="column">${allc.map(c=>`<option ${m.column===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`}
+        <span class="note">where</span><select class="fld" data-m="${i}" data-f="filterCol"><option value="">(no filter)</option>${allc.map(c=>`<option ${m.filterCol===c?'selected':''}>${esc(c)}</option>`).join('')}</select> = <input class="fld" data-m="${i}" data-f="filterVal" value="${esc(m.filterVal)}" size="10">`}
         <select class="fld" data-m="${i}" data-f="unit"><option value="count" ${m.unit==='count'?'selected':''}>a count</option><option value="currency" ${m.unit==='currency'?'selected':''}>money</option><option value="ratio" ${m.unit==='ratio'?'selected':''}>a plain number</option></select>
         <input class="fld" data-m="${i}" data-f="decimals" type="number" min="0" max="8" value="${esc(m.decimals)}" style="width:64px" title="decimal places" aria-label="decimal places">
       </div><div class="row"><input class="fld" data-m="${i}" data-f="description" placeholder="what it means" value="${esc(m.description)}" style="flex:1;min-width:200px">
@@ -607,6 +608,12 @@ function dataView(){
     if(W.result) h+=`<div class="pane" style="margin-top:12px">${W.result}</div>`;
   }
   $('app').innerHTML=h; wireData();
+}
+function ratioPick(m,i){
+  const others=W.metrics.filter((x,j)=>j!==i&&x.name&&x.aggregate!=='ratio').map(x=>x.name);
+  if(!others.length) return '<span class="note">add the two numbers it divides first</span>';
+  const pick=(f,label)=>`<select class="fld" data-m="${i}" data-f="${f}" aria-label="${label}"><option value="">${label}</option>${others.map(n=>`<option ${m[f]===n?'selected':''}>${esc(n)}</option>`).join('')}</select>`;
+  return pick('numerator','top number')+'<span class="note">divided by</span>'+pick('denominator','bottom number');
 }
 function askPanel(){
   const P={groq:'Groq',openrouter:'OpenRouter',gemini:'Google Gemini',ollama:'Local model (Ollama): nothing leaves this computer'};
@@ -640,7 +647,7 @@ function wireData(){
   $('app').querySelectorAll('[data-dord]').forEach(n=>n.onchange=e=>W.cols[n.dataset.dord].date_order=e.target.value||undefined);
   $('app').querySelectorAll('[data-label]').forEach(n=>n.oninput=e=>W.cols[n.dataset.label].label=e.target.value);
   $('app').querySelectorAll('[data-m]').forEach(n=>{ const m=W.metrics[+n.dataset.m], f=n.dataset.f;
-    n.oninput=n.onchange=e=>{ m[f]=n.type==='checkbox'?n.checked:n.value; if(f==='aggregate') dataView(); }; });
+    n.oninput=n.onchange=e=>{ m[f]=n.type==='checkbox'?n.checked:n.value; if(f==='aggregate'){ if(m.aggregate==='ratio'){ m.unit='ratio'; m.decimals=4; } dataView(); } }; });
   $('app').querySelectorAll('[data-del]').forEach(n=>n.onclick=()=>{ W.metrics.splice(+n.dataset.del,1); dataView(); });
   if($('addm')) $('addm').onclick=()=>{ W.metrics.push({name:'',aggregate:'count',column:'',filterCol:'',filterVal:'',unit:'count',decimals:0,description:'',known:'',approve:false}); dataView(); };
   if($('cancel')) $('cancel').onclick=()=>{ W.stage=null; W.result=null; W.msg=''; wsLoadList().then(dataView); };
@@ -663,7 +670,7 @@ async function wsRoom(){
   catch(e){ if($('aroom')) $('aroom').textContent='Could not reach the server.'; return null; }
 }
 async function wsRun(path){
-  W.metrics.forEach(m=>{ if(m.aggregate!=='count'&&!m.column){ const first=Object.entries(W.cols).find(([n,c])=>c.role==='measure'); m.column=first?first[0]:''; } });
+  W.metrics.forEach(m=>{ if(m.aggregate!=='count'&&m.aggregate!=='ratio'&&!m.column){ const first=Object.entries(W.cols).find(([n,c])=>c.role==='measure'); m.column=first?first[0]:''; } });
   W.msg='Working…'; $('wmsg').textContent=W.msg;
   const body=JSON.stringify({token:W.stage.token, manifest:manifestFromForm(), overwrite:W.overwrite||false});
   const r=await wsPost(path,body);

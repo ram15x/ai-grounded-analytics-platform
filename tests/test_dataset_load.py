@@ -96,3 +96,16 @@ def test_values_that_do_not_fit_are_refused_not_nulled(scratch):
         assert (
             str(c.execute("SELECT MIN(order_date) FROM ds_shop.data").fetchone()[0]) == "2024-01-03"
         )
+
+
+def test_a_ratio_known_figure_is_reconciled_from_its_two_parts(scratch):
+    admin, ro, role = scratch
+    m = manifest()
+    L.load_dataset(DF, PROFILE, m, admin, role)
+    # aov = paid revenue 30.5 / 3 orders = 10.1666..., shown with the ratio's own decimals
+    m.metrics["aov"].known = [M.Known.model_validate({"value": "10.17"})]
+    res = [r for r in L.reconcile(m, PROFILE, ro) if r["metric"] == "aov"]
+    assert res[0]["ok"] is True and res[0]["got"] == "10.1667"
+    m.metrics["aov"].known = [M.Known.model_validate({"value": "10.20"})]  # outside half a cent
+    with pytest.raises(M.ManifestError, match="does not reproduce"):
+        L.check_reconciliation(L.reconcile(m, PROFILE, ro))

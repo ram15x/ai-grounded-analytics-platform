@@ -139,15 +139,26 @@ def reconcile(m: Manifest, profile: DatasetProfile, url: str) -> list[dict[str, 
     with psycopg.connect(url, **connect_kwargs(url)) as conn:
         for name, spec in m.metrics.items():
             for k in spec.known:
-                if not spec.aggregate:
-                    results.append({"metric": name, "ok": None, "note": "ratio: not reconciled"})
-                    continue
-                expr = metric_expr(spec, types, excl)
                 where = " AND ".join(condition_sql(c, types) for c in k.where)
-                q = f"SELECT {expr} FROM {m.relation} AS l" + (f" WHERE {where}" if where else "")
-                got = conn.execute(q).fetchone()[0]
+                tail = f" FROM {m.relation} AS l" + (f" WHERE {where}" if where else "")
                 want, tol = Decimal(k.value), Decimal(k.tolerance)
-                ok = got is not None and abs(Decimal(str(got)) - want) <= tol
+                if spec.aggregate:
+                    got = conn.execute(f"SELECT {metric_expr(spec, types, excl)}{tail}").fetchone()[
+                        0
+                    ]
+                    got = None if got is None else Decimal(str(got))
+                else:
+                    # a ratio: both parts recomputed by this separate path, then divided and
+                    # compared at the ratio's own decimal places (half a unit in the last place)
+                    num, den = m.metrics[spec.numerator], m.metrics[spec.denominator]
+                    n_expr, d_expr = metric_expr(num, types, excl), metric_expr(den, types, excl)
+                    n, d = conn.execute(f"SELECT {n_expr}, {d_expr}{tail}").fetchone()
+                    got = None if n is None or d in (None, 0) else Decimal(str(n)) / Decimal(str(d))
+                    if "tolerance" not in k.model_fields_set:  # the default is for amounts
+                        tol = Decimal(1).scaleb(-spec.decimals) / 2
+                ok = got is not None and abs(got - want) <= tol
+                if got is not None and not spec.aggregate:  # a ratio: two places past its own
+                    got = got.quantize(Decimal(1).scaleb(-(spec.decimals + 2)))
                 shown = None if got is None else str(got)
                 results.append({"metric": name, "expected": k.value, "got": shown,
                                 "ok": ok, "note": k.note})  # fmt: skip

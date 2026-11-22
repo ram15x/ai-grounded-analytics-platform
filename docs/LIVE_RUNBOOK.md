@@ -8,7 +8,7 @@ committed by these commands, and no cassette is committed until you have reviewe
 ## 0. Once: get the code and check it
 
 ```powershell
-cd C:\Users\ramna\OneDrive\Desktop\Projects\ai-grounded-analytics-platform
+cd <path to>\ai-grounded-analytics-platform
 Get-ChildItem ..\p4 -Filter *.patch | Sort-Object Name | ForEach-Object { git am $_.FullName }
 git log --oneline | Measure-Object -Line
 python -m pytest -q

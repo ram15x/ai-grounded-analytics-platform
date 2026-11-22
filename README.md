@@ -151,9 +151,10 @@ Limitations:
 - A tied figure matches its source. That does not prove the metric was the right one to ask for.
 - Document answers prove a number appears in a passage, not that the passage was read correctly.
 - No sign-in and no multi-user separation. Uploads run only on your own computer.
-- Scanned PDFs are refused (no OCR). Real-world PDF layouts are untested.
-- About one correct document label in three is refused by the label check (measured on model-written
-  labels), so some document answers are withheld that need not be.
+- Scanned PDFs are refused (no OCR). Page citations were checked on one real public PDF (a 15-page
+  research paper); other layouts, and tables inside PDFs, are untested.
+- The label check refused 16 of 42 correct model-written labels on the locked half (38%, 95% interval
+  25% to 53%), so some document answers are withheld that need not be.
 
 ## Documentation
 

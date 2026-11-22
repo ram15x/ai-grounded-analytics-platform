@@ -22,8 +22,12 @@ from grounded_analytics.web.app import configure  # noqa: E402
 CFG = load_config()
 CACHE = os.environ.get("GA_TRYOUT_CACHE", "/tmp/tryout_cache")  # noqa: S108
 
-handler = configure(
+_Base = configure(
     byok_fn=lambda q, p, m, k, tier: _byok_ask(q, p, m, k, tier, CACHE),
     models_fn=_byok_models,
     tryout_cfg=CFG,
 )
+
+
+class handler(_Base):  # noqa: N801 - Vercel looks for a top-level class named `handler`
+    """The class Vercel's Python runtime serves."""

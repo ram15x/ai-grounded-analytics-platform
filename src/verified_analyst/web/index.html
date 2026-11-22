@@ -262,8 +262,10 @@ const REASON = {
   unverified:'The drafted answer contained figures that did not match the data.', plan_failed:'No valid query could be planned.',
   no_passage:'No retrievable passage held a figure.', budget:'The token budget for this question ran out.',
   sensitivity:'This data is not cleared for a hosted model.',
+  out_of_scope:'The model judged this question to be about something this data has no approved number for, so it stopped instead of guessing. If the number you want is a real column, add it under Your data with Add a number, approve it, then ask again.',
   no_recording:'This demo replays recorded model replies, and none was recorded for this question. The system did not abstain; there is no stored reply.'
 };
+const whyText = x => { const t = v => typeof v === 'string' ? v : ''; return t(x.error) || REASON[x.reason] || t(x.abstain_detail) || 'The answer could not be tied to the data, so it was withheld.'; };
 const vs = x => (x.verification && x.verification.verification && x.verification.verification.verdicts) || [];
 const num = s => parseFloat(String(s).replace(/[^\d.\-]/g,''));
 const good = v => v.verdict && v.verdict.startsWith('VERIFIED');
@@ -344,7 +346,7 @@ function sheet(x){
   if(x.outcome!=='verified' && x.outcome!=='partially_verified'){
     const norec = x.outcome==='not_recorded';
     return `<article class="sheet" id="sheet"><header class="sheet-h"><p class="qline">${esc(x.question)}</p><span class="stamp ${norec?'':'flag'}">${norec?'No recorded reply':'Withheld'}</span></header>
-      <div class="sheet-b" style="grid-template-columns:1fr"><div class="main"><h3 class="wtitle">${norec?'Nothing to show':'No answer, on purpose'}</h3><p class="why">${esc((x.error&&x.error)||REASON[x.reason]||x.abstain_detail||'The answer could not be tied to the data, so it was withheld.')}</p></div></div></article>`;
+      <div class="sheet-b" style="grid-template-columns:1fr"><div class="main"><h3 class="wtitle">${norec?'Nothing to show':'No answer, on purpose'}</h3><p class="why">${esc(whyText(x))}</p></div></div></article>`;
   }
   const t = x.rendered; let out = '', pos = 0;
   sorted.forEach((v,i)=>{

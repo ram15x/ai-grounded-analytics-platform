@@ -188,7 +188,7 @@ Each phase ends in something that works and can be demoed alone.
 | 2 | Document ingestion, hybrid RAG with reranker, router agent, citations with spans, injection handling | Mixed questions answered with passage citations; retrieval metrics reported; injection tests pass. |
 | 3 | Multi-agent orchestration in LangGraph, job queue, auth, approvals, n8n scheduled reports | A scheduled report is generated, held for approval, released by an approver, and delivered. |
 | 4 | Full eval suite, CI gates with cassettes, observability (traces, cost, latency), failure-analysis reports | CI blocks regressions; first published eval table with reproducible command. |
-| 5 | Deployment to free hosting, web UI with citations and trace view, demo video, architecture write-up | Public demo URL with documented cold-start behaviour. |
+| 5 | Deployment to free hosting, web UI with citations and trace view, architecture write-up | Public demo URL with documented cold-start behaviour. |
 
 ## 8. Recommended runtime setup (provisional)
 

@@ -37,3 +37,15 @@ question asked; free-plan quota may leave `no_reply` rows, which are reported as
 question file. They now allow exactly one more module, `src/grounded_analytics/e2e_locked.py`, which
 holds only the path. The locked file is read by one command, `grounded eval e2e --split locked
 --confirm-locked`, which refuses a second run per model. This mirrors `grounded docs heldout`.
+
+## Settings for the first locked run (written before it, after the dev runs only)
+
+- Model: groq `openai/gpt-oss-20b`. Plan prompt: `plan.v2`.
+- Why `plan.v2`: on the 15 dev questions (run `20261122T141403Z`), it answered 13, with 9 correct,
+  0 verified_wrong, 4 withheld (all four are the questions marked not expressible) and 2 no_reply
+  (HTTP 429, tokens per minute). Every expressible question that got a reply was correct (9 of 9).
+  With `plan.v1`, T1-11 was withheld twice and answered correctly once with `plan.v2` (n=1).
+- `--pause-s 45` between questions, because each question builds a fresh router and the 8000
+  tokens-per-minute limit otherwise turns questions into no_reply. This changes no prompt, model or
+  scoring.
+- Nothing above may be changed and re-scored on the locked set after its results are read.

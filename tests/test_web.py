@@ -27,10 +27,8 @@ def _server(ask_fn=None):
 
     from grounded_analytics.web import app
 
-    app._Handler.payload = app.load_payload()
-    app._Handler.ask_fn = staticmethod(ask_fn) if ask_fn else None
-    app._Handler.mode = "replay" if ask_fn else "static"
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), app._Handler)
+    handler = app.configure(ask_fn, "replay" if ask_fn else "static")  # a clean handler each time
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
 

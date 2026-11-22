@@ -723,7 +723,7 @@ async function wsAsk(){
 
 /* ---------- shell ---------- */
 function setTab(t){ S.tab=t; ['ask','ex','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t));
-  $('form').hidden = S.ws || (S.stat && t==='ask'); document.querySelector('.keys').hidden = $('form').hidden;
+  $('form').hidden = S.ws || (S.stat && t==='ask'); document.querySelector('.keys').hidden = $('form').hidden || S.mode==='byok';
   ({ask:S.stat?setupView:askView,ex:exView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
@@ -747,7 +747,7 @@ function init(data){
 const MODES = {static:'Recorded model replies; checks run now', replay:'Recorded model replies; checks run now', live:'Live model; checks run now', byok:'Your key, used once', workspace:'Your data, on this computer'};
 if(EMBED){ S.stat=true; S.ws=false; $('sub').textContent=STATIC_SUB; init(EMBED); } else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
   S.can=c.can_ask; S.mode=c.mode; S.ws=!!c.workspace; S.stat=!c.workspace&&(!c.mode||c.mode==='static'); $('mode').textContent=MODES[c.mode]||MODES.static; if(c.mode==='byok') S.ledger=false;
-  if(c.mode==='byok') tryInit();
+  if(c.mode==='byok'){ tryInit(); document.querySelector('.keys').hidden = true; }
   if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; S.ledger=false; d={items:[],note:''}; $('title').textContent='Your data'; $('sub').textContent='Upload a table, say what its columns and numbers mean, and the system checks your definitions against figures you already know. Answers are then tied to your data, or withheld.'; }
   if(S.stat){ $('sub').textContent=STATIC_SUB; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});

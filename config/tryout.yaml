@@ -24,7 +24,7 @@ questions:
   medium:
     - What was the average order value?
     - What share of gross revenue was cancelled?
-    - What was net revenue from customers we can identify?
+    - What was average revenue per customer?
   hard:
     - What was total gross revenue, and how many days do customers have to return unused goods?
     - Which country placed the most orders, and what flat courier charge applies to small UK orders?

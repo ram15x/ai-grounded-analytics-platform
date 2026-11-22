@@ -337,8 +337,33 @@ def serve(
     ws_ask_fn=None,
     ws_suggest_fn=None,
 ) -> None:
+    configure(ask_fn, mode, byok_fn=byok_fn, models_fn=models_fn, tryout_cfg=tryout_cfg,
+              workspace=workspace, ws_ask_fn=ws_ask_fn, ws_suggest_fn=ws_suggest_fn)  # fmt: skip
+    srv = ThreadingHTTPServer((host, port), _Handler)
+    print(f"http://{host}:{port}  (Ctrl+C to stop)")
+    with contextlib.suppress(KeyboardInterrupt):
+        srv.serve_forever()
+
+
+def configure(
+    ask_fn=None,
+    mode: str = "static",
+    *,
+    byok_fn=None,
+    models_fn=None,
+    tryout_cfg: dict | None = None,
+    workspace=None,
+    ws_ask_fn=None,
+    ws_suggest_fn=None,
+) -> type[BaseHTTPRequestHandler]:
+    """Set up the request handler without starting a server: `serve` runs it locally, and a
+    serverless host (api/index.py) imports it as its handler."""
     from ..tryout import Allowance, public_view  # noqa: PLC0415
 
+    # start from a clean handler: no mode carries settings over from an earlier configure()
+    for attr in ("tryout", "allowance", "byok_fn", "models_fn", "workspace", "ws_ask_fn",
+                 "ws_suggest_fn"):  # fmt: skip
+        setattr(_Handler, attr, None)
     _Handler.payload = load_payload()
     _Handler.ask_fn, _Handler.mode = (staticmethod(ask_fn) if ask_fn else None), mode
     if workspace is not None:
@@ -351,7 +376,4 @@ def serve(
         _Handler.byok_fn = staticmethod(byok_fn)
         _Handler.models_fn = staticmethod(models_fn) if models_fn else None
         _Handler.mode = "byok"
-    srv = ThreadingHTTPServer((host, port), _Handler)
-    print(f"http://{host}:{port}  (Ctrl+C to stop)")
-    with contextlib.suppress(KeyboardInterrupt):
-        srv.serve_forever()
+    return _Handler

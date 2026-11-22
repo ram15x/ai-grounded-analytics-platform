@@ -1,0 +1,8 @@
+# Runtime dependencies for the hosted tryout (Vercel installs these). Same as pyproject.toml.
+pandas>=2.2
+openpyxl>=3.1
+psycopg[binary]>=3.2
+sqlglot>=25
+pydantic>=2.7
+pyyaml>=6
+pypdf>=5

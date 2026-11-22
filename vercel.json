@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "{src/**,config/**,semantic/**,demo/**}",
+      "excludeFiles": "{tests/**,data/**,corpus/**,docs/**,examples/**}"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+}

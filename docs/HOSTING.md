@@ -23,7 +23,13 @@ Free-tier terms, from Render's docs when I read them today (they change; check b
 - Free instance hours: 750 per month per workspace.
 - The filesystem is ephemeral. That is fine here: this mode writes nothing.
 
-Steps (yours; I can't sign up or submit forms for you):
+Card check: when I tried "New Blueprint Instance" on a fresh Render account, it asked for a
+credit card to "verify your identity" (the dialog said a temporary $1 authorization, not a
+charge). I did not enter one. I have not checked whether creating a plain free Web Service
+instead of a Blueprint skips this. If you don't want to add a card, that is the thing to try,
+or use another host.
+
+Steps (yours; card and password entry stay with you):
 1. `git pull`, then check `render.yaml` at the repo root.
 2. In Render: New, Blueprint, pick the `verified-analyst` GitHub repo, apply.
 3. Wait for the build, open the URL, confirm the recorded run opens.

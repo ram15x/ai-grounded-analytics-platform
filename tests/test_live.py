@@ -1057,3 +1057,42 @@ def test_live_probe_sends_reasoning_effort_to_gpt_oss_and_the_flag_overrides_con
     )  # fmt: skip
     assert out["report"]["header"]["reasoning_effort_sent"] == "medium"
     assert {r["body"].get("reasoning_effort") for r in m2.requests} == {"medium"}
+
+
+class Poster:
+    def __init__(self, resp):
+        self.resp, self.calls = resp, []
+
+    def __call__(self, url, headers, body, timeout):
+        self.calls.append({"url": url, "headers": dict(headers), "body": json.loads(body)})
+        return self.resp
+
+
+def test_measure_headroom_reads_limit_headers_from_one_tiny_chat_call():
+    s = cfg()
+    s.providers["groq"].models["default"] = "openai/gpt-oss-20b"
+    reply = {"choices": [{"message": {"content": "OK"}}], "usage": {"total_tokens": 28}}
+    post = Poster(
+        jbody(reply, headers={"X-RateLimit-Remaining-Tokens": "7500", "Content-Type": "x"})
+    )
+    r = live.measure_headroom(s, "groq", None, KEYS, transport=post)
+    assert r["rate_headers"] == {"x-ratelimit-remaining-tokens": "7500"}
+    assert r["tokens_spent"] == 28 and r["http_status"] == 200 and r["error"] is None
+    sent = post.calls[0]["body"]
+    assert sent["max_tokens"] == live.HEADROOM_MAX_TOKENS and len(post.calls) == 1
+    assert "Reply with the word OK." in json.dumps(sent)
+    assert KEYS["GROQ_API_KEY"] not in json.dumps(r)
+
+
+def test_measure_headroom_reports_a_rejected_call_without_the_key():
+    s = cfg()
+    post = Poster(jbody({"error": {"message": "nope"}}, code=401))
+    r = live.measure_headroom(s, "groq", "m", KEYS, transport=post)
+    assert r["http_status"] == 401 and r["error"] and KEYS["GROQ_API_KEY"] not in json.dumps(r)
+
+
+def test_measure_headroom_needs_a_key_and_a_model():
+    s = cfg()
+    assert live.measure_headroom(s, "groq", "m", {})["error"] == "no key"
+    s.providers["openrouter"].models.pop("default", None)
+    assert "model" in live.measure_headroom(s, "openrouter", None, KEYS)["error"]

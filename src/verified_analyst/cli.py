@@ -1046,13 +1046,23 @@ def _ws_ask(ws, dataset: str, question: str, provider: str, model: str | None, k
     return json.loads(redact(json.dumps(d, default=str), env))
 
 
-def _byok_models(provider: str, key: str) -> dict:
-    from .llm.live import list_provider_models, redact  # noqa: PLC0415
+def _byok_models(provider: str, key: str, model: str | None = None) -> dict:
+    from .llm.live import (  # noqa: PLC0415
+        has_remaining_tokens,
+        list_provider_models,
+        measure_headroom,
+        redact,
+    )
     from .llm.settings import load_router_settings  # noqa: PLC0415
 
     base = load_router_settings()
     env = {base.providers[provider].env_key: key}
     res = list_provider_models(base, provider, env)
+    if res.get("http_status") == 200 and not has_remaining_tokens(res["rate_headers"]):
+        # the free list call did not carry the limits: spend a few tokens to read them
+        probe = measure_headroom(base, provider, model, env)
+        res["rate_headers"].update(probe["rate_headers"])
+        res["headroom_probe"] = {k: v for k, v in probe.items() if k != "rate_headers"}
     return json.loads(redact(json.dumps(res, default=str), env))
 
 

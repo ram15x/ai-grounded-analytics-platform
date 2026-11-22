@@ -178,14 +178,20 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _models_any(self) -> None:
         try:
-            provider = str(self._json_body(1024).get("provider", ""))
+            body = self._json_body(1024)
+            provider = str(body.get("provider", ""))
+            model = str(body.get("model") or "")[:200]
         except (ValueError, TypeError):
             return self._send(400, b'{"error":"bad request"}', "application/json")
         key = self._key()
         if not provider or not key:
             return self._send(400, b'{"error":"provider and key needed"}', "application/json")
         try:
-            out = self.models_fn(provider, key)
+            out = (
+                self.models_fn(provider, key, model=model)
+                if model
+                else self.models_fn(provider, key)
+            )
         except Exception as exc:  # noqa: BLE001
             msg = {"error": type(exc).__name__}
             return self._send(500, json.dumps(msg).encode(), "application/json")
@@ -194,14 +200,20 @@ class _Handler(BaseHTTPRequestHandler):
     def _models(self) -> None:
         try:
             n = int(self.headers.get("Content-Length", "0"))
-            provider = str(json.loads(self.rfile.read(min(n, 1024)) or b"{}").get("provider", ""))
+            body = json.loads(self.rfile.read(min(n, 1024)) or b"{}")
+            provider = str(body.get("provider", ""))
+            model = str(body.get("model") or "")[:200]
         except (ValueError, TypeError, AttributeError):
             return self._send(400, b'{"error":"bad request"}', "application/json")
         key = self._key()
         if provider not in self.tryout["providers"] or not key:
             return self._send(400, b'{"error":"provider and key needed"}', "application/json")
         try:
-            out = self.models_fn(provider, key)
+            out = (
+                self.models_fn(provider, key, model=model)
+                if model
+                else self.models_fn(provider, key)
+            )
         except Exception as exc:  # noqa: BLE001
             return self._send(
                 500, json.dumps({"error": type(exc).__name__}).encode(), "application/json"

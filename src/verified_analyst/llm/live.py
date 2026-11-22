@@ -408,6 +408,68 @@ def configured_ids(settings: RouterSettings, name: str) -> dict[str, str]:
     }
 
 
+HEADROOM_MAX_TOKENS = 16
+
+
+def has_remaining_tokens(rate: Mapping[str, str]) -> bool:
+    return any("remaining" in k and "token" in k for k in rate)
+
+
+def measure_headroom(
+    settings: RouterSettings,
+    name: str,
+    model: str | None,
+    env: Mapping[str, str],
+    transport: Transport | None = None,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """One tiny real chat call so the provider's rate-limit headers can be read.
+
+    Why: a provider's model-list call is free but (observed on Groq, 2026-11-22) carries no
+    rate-limit headers; they come on chat calls. This sends a 16-token-capped request ("Reply
+    with the word OK.", no dataset content, tagged public) and returns only the limit-related
+    headers and how many tokens the call used. The key is never returned. Whether other
+    providers send such headers on chat calls is not verified here."""
+    cfg = settings.providers[name]
+    out: dict[str, Any] = {
+        "http_status": None, "error": None, "rate_headers": {}, "tokens_spent": None, "model": None,
+    }  # fmt: skip
+    key = env.get(cfg.env_key or "")
+    if not key:
+        out["error"] = "no key"
+        return out
+    model = model or cfg.models.get("default")
+    out["model"] = model
+    if not model:
+        out["error"] = "name a model first"
+        return out
+    adapter = build_one(settings, name, env=env, transport=transport or urllib_transport)
+    req = LLMRequest(
+        task="probe", messages=(("user", "Reply with the word OK."),), json_mode=False,
+        max_tokens=HEADROOM_MAX_TOKENS, max_tokens_fixed=True, sensitivity=PUBLIC,
+    )  # fmt: skip
+    try:
+        body = json.dumps(adapter._body(req, model)).encode("utf-8")  # noqa: SLF001
+        resp = adapter.transport(adapter._url(model), adapter._headers(key), body, timeout)  # noqa: SLF001
+    except TransportTimeout:
+        out["error"] = "timeout"
+        return out
+    except TransportError as exc:
+        out["error"] = f"network: {exc}"
+        return out
+    out["http_status"] = resp.status
+    out["rate_headers"] = rate_headers(resp.headers)
+    if resp.status != 200:
+        out["error"] = _error_text(resp)
+        return out
+    try:
+        used = json.loads(resp.body.decode("utf-8")).get("usage", {})
+        out["tokens_spent"] = used.get("total_tokens")
+    except (ValueError, AttributeError):
+        pass
+    return out
+
+
 def list_provider_models(
     settings: RouterSettings,
     name: str,

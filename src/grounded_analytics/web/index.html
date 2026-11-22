@@ -431,10 +431,10 @@ function exView(){
 }
 
 /* ---------- the workbench on the static copy: the real steps, switched off, with how to turn them on ---------- */
-const RUN = 'git clone https://github.com/ram15x/ai-grounded-analytics-platform\ncd ai-grounded-analytics-platform\npip install -e .          # Python 3.11 or newer\n\nva serve --workspace       # upload your own data (this computer only)\nva serve --byok            # the public tryout: a visitor pastes their own key';
+const RUN = 'git clone https://github.com/ram15x/ai-grounded-analytics-platform\ncd ai-grounded-analytics-platform\npip install -e .          # Python 3.11 or newer\n\ngrounded serve --workspace # upload your own data (this computer only)\ngrounded serve --byok      # the public tryout: a visitor pastes their own key';
 function setupView(){
   const off = '<span class="lock">Needs the app running</span>';
-  $('app').innerHTML = `<p class="exban"><b>This page is a copy with recorded answers, so the steps below are switched off.</b> They work when you run the app yourself; the commands are at the bottom.</p>
+  $('app').innerHTML = `${S.mode==='byok' ? '<p class="exban"><b>Uploads are switched off on this public site.</b> Anyone could open them, and there is no sign-in to keep one person’s data apart from another’s. Asking with your own key works in the Workbench tab; everything below works when you run the app on your computer, with the commands at the bottom.</p>' : '<p class="exban"><b>This page is a copy with recorded answers, so the steps below are switched off.</b> They work when you run the app yourself; the commands are at the bottom.</p>'}
   <div class="steps">
    <section class="pane step"><h3><span class="sn">1</span>Connect a model ${off}</h3>
     <div class="row"><select class="fld" disabled aria-label="Provider"><option>Groq</option><option>OpenRouter</option><option>Gemini</option><option>Ollama, on your computer</option></select></div>
@@ -452,7 +452,7 @@ function setupView(){
   <pre class="cmd" id="runcmd">${esc(RUN)}</pre><button class="btn" id="copyrun">Copy commands</button> <span class="note" id="copiedrun" role="status"></span>
   <h2>Or look at recorded examples</h2><p class="lede">Real answers from an earlier run, with every figure tied back to its source.</p><button class="btn main-btn" id="goex">Open the examples</button>`;
   $('copyrun').onclick=async()=>{ try{ await navigator.clipboard.writeText(RUN); $('copiedrun').textContent='Copied.'; }catch(e){ $('copiedrun').textContent='Copy failed; select the text above.'; } };
-  $('goex').onclick=()=>{ choose(S.pick||0); window.scrollTo({top:0,behavior:'smooth'}); };
+  $('goex').onclick=()=>{ if(S.items.length) choose(S.pick||0); else setTab('ex'); window.scrollTo({top:0,behavior:'smooth'}); };
 }
 
 /* ---------- ask view ---------- */
@@ -724,7 +724,7 @@ async function wsAsk(){
 /* ---------- shell ---------- */
 function setTab(t){ S.tab=t; ['ask','ex','ev','data'].forEach(k=>$('t-'+k).setAttribute('aria-selected',k===t));
   $('form').hidden = S.ws || (S.stat && t==='ask'); document.querySelector('.keys').hidden = $('form').hidden || S.mode==='byok';
-  ({ask:S.stat?setupView:askView,ex:exView,ev:trustView,data:()=>wsLoadList().then(dataView)})[t](); }
+  ({ask:S.stat?setupView:askView,ex:exView,ev:trustView,data:()=>S.ws?wsLoadList().then(dataView):setupView()})[t](); }
 function match(text){
   const t=text.trim().toLowerCase(); if(!t) return -1;
   let i=S.items.findIndex(x=>x.question.toLowerCase()===t); if(i>=0) return i;
@@ -747,7 +747,7 @@ function init(data){
 const MODES = {static:'Recorded model replies; checks run now', replay:'Recorded model replies; checks run now', live:'Live model; checks run now', byok:'Your key, used once', workspace:'Your data, on this computer'};
 if(EMBED){ S.stat=true; S.ws=false; $('sub').textContent=STATIC_SUB; init(EMBED); } else Promise.all([fetch('/api/results').then(r=>r.json()), fetch('/api/config').then(r=>r.json()).catch(()=>({mode:'static',can_ask:false}))]).then(([d,c])=>{
   S.can=c.can_ask; S.mode=c.mode; S.ws=!!c.workspace; S.stat=!c.workspace&&(!c.mode||c.mode==='static'); $('mode').textContent=MODES[c.mode]||MODES.static; if(c.mode==='byok') S.ledger=false;
-  if(c.mode==='byok'){ tryInit(); document.querySelector('.keys').hidden = true; }
+  if(c.mode==='byok'){ tryInit(); document.querySelector('.keys').hidden = true; $('t-data').hidden=false; }
   if(c.workspace){ $('t-data').hidden=false; $('form').hidden=true; S.ledger=false; d={items:[],note:''}; $('title').textContent='Your data'; $('sub').textContent='Upload a table, say what its columns and numbers mean, and the system checks your definitions against figures you already know. Answers are then tied to your data, or withheld.'; }
   if(S.stat){ $('sub').textContent=STATIC_SUB; }
   init(d); }).catch(()=>{$('app').textContent='Could not load results.';});

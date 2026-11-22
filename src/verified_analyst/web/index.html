@@ -217,6 +217,9 @@ select.fld option{color:#0E1A2B}
 .lock{margin-left:auto;font:600 12px var(--sans);color:#7A5200;background:#FFF1D6;border:1px solid #F2D49A;border-radius:999px;padding:2px 10px}
 .drop{display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;text-align:center;padding:30px 16px;margin:6px 0 12px;border:2px dashed #B9C1D6;border-radius:14px;color:#5B6778;background:repeating-linear-gradient(135deg,#F5F7FB,#F5F7FB 10px,#EFF2F8 10px,#EFF2F8 20px)}
 .drop b{color:#0E1A2B}
+.drop.live{cursor:pointer;transition:border-color .2s,background .2s,transform .18s,box-shadow .2s}
+.drop.live:hover,.drop.live.over{border-color:var(--brand);background:#EEF1FF;transform:translateY(-2px);box-shadow:0 14px 34px rgba(91,108,255,.25)}
+.drop.live:focus-within{outline:2px solid var(--brand);outline-offset:3px}
 .pane input:disabled,.pane select:disabled,.pane .btn:disabled{opacity:.55;cursor:not-allowed}
 .pane .note b{color:#0E1A2B}
 .lead.away{display:none}
@@ -526,7 +529,7 @@ function dataView(){
   let h='<h2 style="margin-top:0">Your data</h2>';
   if(!W.stage){
     h+=`<p class="lede">Upload a CSV, TSV or Excel file (up to 25 MB). It is read on this computer only. You will see what the file looks like, say what it means, and define each number from a closed set of options. Any definition that does not reproduce a figure you give it is refused.</p>
-    <div class="pane"><input type="file" id="file" accept=".csv,.tsv,.xlsx"> <span class="note" id="upmsg">${esc(W.msg)}</span></div>`;
+    <div class="pane"><label class="drop live" id="dz" for="file"><b>Drop a CSV, TSV or Excel file here</b><span>or click to choose one. Up to 25 MB. It stays on this computer.</span><input type="file" id="file" accept=".csv,.tsv,.xlsx" hidden></label><p class="note" id="upmsg" role="status">${esc(W.msg)}</p></div>`;
     h+=`<h2>Loaded datasets</h2>`+(W.datasets.length?W.datasets.map(d=>`<div class="pane"><h3>${esc(d.name)} <span class="${d.visibility==='public'?'okt':'flagtxt'}" style="font:600 14px var(--sans)">${esc(d.visibility)}</span></h3><p style="margin:0 0 6px">${esc(d.description)}</p><span class="note">Approved numbers: ${esc(d.metrics.join(', ')||'none')}</span><br><button class="btn" data-ask="${esc(d.name)}">Ask about this data</button></div>`).join(''):'<p class="note">None yet.</p>');
     if(W.ds) h+=askPanel();
   } else {
@@ -566,7 +569,7 @@ function askPanel(){
   const d=W.datasets.find(x=>x.name===W.ds), local=W.prov==='ollama';
   const docs=`<div class="pane"><h3>Documents for this data</h3><p class="note" style="margin-top:0">Add a PDF, Markdown or text file (policies, contracts, notes). Questions can then quote figures from it, and each quote is checked against the stored text. Only text already in the file is read: a scanned page needs OCR, which is not available here.</p>
     ${W.docs.length?'<ul class="note" style="font-size:15px">'+W.docs.map(d=>`<li>${esc(d.title)} <span class="note">(${d.chunks} passages, ${esc(d.sensitivity)})</span></li>`).join('')+'</ul>':'<p class="note">No documents yet.</p>'}
-    <div class="row"><input type="file" id="docfile" accept=".pdf,.md,.txt"><select class="fld" id="docsens"><option value="internal" ${W.docSens==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.docSens==='public'?'selected':''}>Public: passages may go to your provider</option></select></div><span class="note" id="docmsg">${esc(W.docMsg)}</span></div>`;
+    <div class="row"><label class="btn" for="docfile" tabindex="0">Choose a document</label><input type="file" id="docfile" accept=".pdf,.md,.txt" hidden><select class="fld" id="docsens"><option value="internal" ${W.docSens==='internal'?'selected':''}>Internal: never sent to a hosted model</option><option value="public" ${W.docSens==='public'?'selected':''}>Public: passages may go to your provider</option></select></div><span class="note" id="docmsg">${esc(W.docMsg)}</span></div>`;
   return docs+`<h2>Ask about ${esc(W.ds)}</h2>${d&&d.visibility!=='public'?'<p class="lede flagtxt" style="font-weight:500">This data is internal, so a hosted provider is refused. Use the local model, or reload the data as Public if it is safe to send to your provider.</p>':''}
    <div class="pane"><div class="row"><select class="fld" id="aprov">${Object.entries(P).map(([k,v])=>`<option value="${k}" ${k===W.prov?'selected':''}>${esc(v)}</option>`).join('')}</select>
    ${local?'':`<input class="fld key" id="akey" type="password" autocomplete="off" placeholder="Your API key (used once, never stored)" value="${esc(W.key)}">`}<input class="fld" id="amodel" placeholder="Model id${local?' you have pulled in Ollama':''}" value="${esc(W.model)}">
@@ -576,11 +579,15 @@ function askPanel(){
    <p class="note" style="margin-bottom:0">You can ask as many questions as your key allows. The page reads your key's remaining tokens from the provider (nothing is stored) and stops before a question that would not fit.</p></div>`;
 }
 function wireData(){
-  if($('file')) $('file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('upmsg').textContent='Reading…';
+  const upload=async f=>{ if(!f) return; $('upmsg').textContent='Reading…';
     const r=await wsPost('/api/ws/upload',f,{'X-Filename':f.name});
     if(!r.ok){ $('upmsg').textContent=r.d.error||'Upload failed.'; return; }
     W.stage=r.d; const sk=r.d.skeleton; W.cols={}; Object.entries(sk.columns).forEach(([n,c])=>W.cols[n]={...c});
     W.meta={name:sk.name,description:'',grain:'',currency:'',visibility:'internal'}; W.metrics=[]; W.result=null; W.msg=''; dataView(); };
+  if($('file')){ $('file').onchange=e=>upload(e.target.files[0]);
+    const dz=$('dz'); ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add('over'); }));
+    ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.remove('over'); }));
+    dz.addEventListener('drop',e=>upload(e.dataTransfer.files[0])); }
   const bind=(id,fn)=>{ if($(id)) $(id).oninput=fn; };
   bind('m-name',e=>W.meta.name=e.target.value); bind('m-desc',e=>W.meta.description=e.target.value); bind('m-grain',e=>W.meta.grain=e.target.value); bind('m-cur',e=>W.meta.currency=e.target.value);
   if($('m-vis')) $('m-vis').onchange=e=>W.meta.visibility=e.target.value;
